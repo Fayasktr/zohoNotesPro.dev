@@ -1,0 +1,13 @@
+{
+  "id": "ntbk-1767592075815",
+  "title": "Third Note",
+  "cells": [
+    {
+      "id": "cell-w427nj8wg",
+      "type": "code",
+      "content": "console.log(\"Third Note Code\")",
+      "output": null
+    }
+  ],
+  "tags": []
+}

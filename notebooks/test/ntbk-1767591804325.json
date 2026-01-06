@@ -1,0 +1,20 @@
+{
+  "id": "ntbk-1767591804325",
+  "title": "Second Note",
+  "cells": [
+    {
+      "id": "cell-ga5ro92qy",
+      "type": "code",
+      "content": "console.log(\"Notebook 2\")",
+      "output": {
+        "id": "9db2af37-c9d1-4cba-95e6-3da3a3d9f1b5",
+        "success": true,
+        "result": "1",
+        "logs": [
+          "Notebook 2"
+        ]
+      }
+    }
+  ],
+  "tags": []
+}

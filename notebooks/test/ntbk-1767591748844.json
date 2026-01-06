@@ -1,0 +1,26 @@
+{
+  "id": "ntbk-1767591748844",
+  "title": "My First Note",
+  "cells": [
+    {
+      "id": "cell-buiya4apm",
+      "type": "code",
+      "content": "console.log(\"Notebook 1\")",
+      "output": {
+        "id": "30d2e57b-8d4e-495d-951c-18ceb9d9f19c",
+        "success": true,
+        "result": "1",
+        "logs": [
+          "Notebook 1"
+        ]
+      }
+    },
+    {
+      "id": "cell-5s76uqse2",
+      "type": "code",
+      "content": "",
+      "output": null
+    }
+  ],
+  "tags": []
+}
