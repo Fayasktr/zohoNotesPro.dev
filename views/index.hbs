@@ -21,7 +21,7 @@
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="logo">
-                Zoho Notes <span>Antigravity</span>
+                Zoho Notes <span></span>
             </div>
 
             <button class="btn-new" id="btn-new-folder">
@@ -42,8 +42,14 @@
                 <div class="notebook-list" id="notebook-list">
                     <!-- Dynamic notebooks here -->
                 </div>
-                <div class="nav-item">
+                <div class="nav-item" id="nav-starred">
                     <i data-lucide="star"></i> Starred
+                </div>
+                <div class="notebook-list collapsed" id="starred-list" style="margin-bottom: 0;">
+                    <!-- Starred notebooks here -->
+                </div>
+                <div class="nav-item" id="nav-starred-cells">
+                    <i data-lucide="star" style="fill: #ffcc00; color: #ffcc00;"></i> Starred Notes
                 </div>
                 <div class="nav-item">
                     <i data-lucide="tag"></i> Tags
@@ -60,19 +66,25 @@
                 <div class="nav-item">
                     <i data-lucide="settings"></i> Settings
                 </div>
+                <div style="margin-top: auto; margin-left: 20%; font-size: 12px; color: var(--text-dim);">
+                    ©Fayas kp
+                </div>
             </div>
         </aside>
 
         <!-- Main Content -->
         <main class="main-content">
             <div class="notebook-container">
-                <header class="notebook-header">
+                <header class="notebook-header" style="display: flex; align-items: center; gap: 15px;">
+                    <button id="btn-star" class="btn-icon" title="Star Notebook"
+                        style="font-size: 24px; color: var(--text-dim);">
+                        <i data-lucide="star"></i>
+                    </button>
                     <input type="text" class="notebook-title" id="notebook-title" value="Untitled Notebook"
-                        placeholder="Enter title...">
+                        placeholder="Enter title..." style="flex: 1; margin-bottom: 0;">
                     <div style="display: flex; gap: 10px;">
                         <span class="nav-item"
                             style="padding: 4px 10px; font-size: 12px; height: auto;">#javascript</span>
-                        <span class="nav-item" style="padding: 4px 10px; font-size: 12px; height: auto;">#node</span>
                     </div>
                 </header>
 

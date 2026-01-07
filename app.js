@@ -15,6 +15,7 @@ mongoose.connect('mongodb://localhost:27017/zoho')
 const noteSchema = new mongoose.Schema({
     id: { type: String, required: true, unique: true },
     title: { type: String, default: 'Untitled' },
+    isStarred: { type: Boolean, default: false },
     content: { type: mongoose.Schema.Types.Mixed, default: {} },
     folder: { type: String, default: 'root' },
     updatedAt: { type: Date, default: Date.now }
@@ -49,7 +50,7 @@ app.post('/api/execute', async (req, res) => {
 // API: List Notebooks (from MongoDB)
 app.get('/api/notebooks', async (req, res) => {
     try {
-        const notes = await Note.find({}, 'id title folder');
+        const notes = await Note.find({}, 'id title folder isStarred');
         res.json(notes);
     } catch (err) {
         res.status(500).json({ error: 'Failed to list notebooks', details: err.message });
@@ -77,6 +78,7 @@ app.post('/api/notebooks', async (req, res) => {
         const updateData = {
             id: notebookData.id,
             title: notebookData.title || 'Untitled',
+            isStarred: !!notebookData.isStarred,
             content: notebookData,
             folder: notebookData.folder || 'root',
             updatedAt: new Date()

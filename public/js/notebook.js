@@ -58,12 +58,20 @@ class NotebookApp {
             this.createFolder();
         });
 
+        document.getElementById('btn-star').addEventListener('click', () => this.toggleStar());
+
+        document.getElementById('nav-starred').addEventListener('click', () => {
+            document.getElementById('starred-list').classList.toggle('collapsed');
+        });
+
         const titleInput = document.getElementById('notebook-title');
         titleInput.addEventListener('input', (e) => {
             this.notebook.title = e.target.value;
             this.updateCurrentNotebookItemUI();
             this._autoSave();
         });
+
+        document.getElementById('nav-starred-cells').addEventListener('click', () => this.loadStarredNotes());
 
         // Event Delegation for Sidebar
         document.getElementById('notebook-list').addEventListener('click', (e) => {
@@ -115,6 +123,8 @@ class NotebookApp {
                 this.moveCell(cellId, -1);
             } else if (e.target.closest('.move-down')) {
                 this.moveCell(cellId, 1);
+            } else if (e.target.closest('.btn-star-cell')) {
+                this.toggleCellStar(cellId);
             }
         });
 
@@ -148,17 +158,60 @@ class NotebookApp {
         }
     }
 
+    async toggleStar() {
+        this.notebook.isStarred = !this.notebook.isStarred;
+        this.updateStarUI();
+        await this.saveToBackend();
+        await this.refreshNotebookList();
+    }
+
+    updateStarUI() {
+        const btn = document.getElementById('btn-star');
+        if (this.notebook.isStarred) {
+            btn.style.color = '#ffcc00';
+            btn.querySelector('i').setAttribute('data-lucide', 'star-off');
+            btn.innerHTML = '<i data-lucide="star" style="fill: #ffcc00;"></i>';
+        } else {
+            btn.style.color = 'var(--text-dim)';
+            btn.innerHTML = '<i data-lucide="star"></i>';
+        }
+        lucide.createIcons();
+    }
+
     renderNotebookList(notebooks) {
         const listContainer = document.getElementById('notebook-list');
+        const starredContainer = document.getElementById('starred-list');
         listContainer.innerHTML = '';
+        starredContainer.innerHTML = '';
 
         const groups = {};
+        const starred = notebooks.filter(nb => nb.isStarred);
+
         notebooks.forEach(nb => {
             const folder = nb.folder || 'root';
             if (!groups[folder]) groups[folder] = [];
             groups[folder].push(nb);
         });
 
+        const renderItem = (nb, container) => {
+            const item = document.createElement('div');
+            item.className = `notebook-item ${nb.id === this.notebook.id ? 'active' : ''}`;
+            item.setAttribute('data-id', nb.id);
+            item.innerHTML = `
+                <i data-lucide="${nb.id === this.notebook.id ? 'edit-3' : (nb.isStarred ? 'star' : 'file-code')}" 
+                   style="width: 14px; ${nb.isStarred ? 'color: #ffcc00; fill: #ffcc00;' : ''}"></i> 
+                <span style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${nb.title}</span>
+                <button class="btn-icon-sm delete-notebook-btn" title="Delete Notebook">
+                    <i data-lucide="trash-2"></i>
+                </button>
+            `;
+            container.appendChild(item);
+        };
+
+        // Render Starred List
+        starred.forEach(nb => renderItem(nb, starredContainer));
+
+        // Render Main List with Folders
         Object.keys(groups).sort().forEach(folder => {
             if (folder !== 'root') {
                 const folderHeader = document.createElement('div');
@@ -177,19 +230,7 @@ class NotebookApp {
             const folderContent = document.createElement('div');
             folderContent.className = folder === 'root' ? '' : 'folder-content';
 
-            groups[folder].forEach(nb => {
-                const item = document.createElement('div');
-                item.className = `notebook-item ${nb.id === this.notebook.id ? 'active' : ''}`;
-                item.setAttribute('data-id', nb.id);
-                item.innerHTML = `
-                    <i data-lucide="${nb.id === this.notebook.id ? 'edit-3' : 'file-code'}" style="width: 14px;"></i> 
-                    <span style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${nb.title}</span>
-                    <button class="btn-icon-sm delete-notebook-btn" title="Delete Notebook">
-                        <i data-lucide="trash-2"></i>
-                    </button>
-                `;
-                folderContent.appendChild(item);
-            });
+            groups[folder].forEach(nb => renderItem(nb, folderContent));
             listContainer.appendChild(folderContent);
         });
         lucide.createIcons();
@@ -212,10 +253,12 @@ class NotebookApp {
         this.notebook = {
             id: id,
             title: title || 'Untitled File',
+            isStarred: false,
             folder: folderName,
             cells: [],
             tags: []
         };
+        this.updateStarUI();
         document.getElementById('cells-list').innerHTML = '';
         document.getElementById('notebook-title').value = this.notebook.title;
 
@@ -233,6 +276,8 @@ class NotebookApp {
 
             this.disposeEditors();
             this.notebook = data;
+
+            this.updateStarUI();
 
             document.getElementById('cells-list').innerHTML = '';
             document.getElementById('notebook-title').value = this.notebook.title;
@@ -270,6 +315,7 @@ class NotebookApp {
             id: cellId,
             type: type,
             title: '',
+            isStarred: false,
             content: content,
             output: null
         };
@@ -294,8 +340,11 @@ class NotebookApp {
                     <button class="btn-reorder move-down" title="Move Down"><i data-lucide="chevron-down" style="width:12px;"></i></button>
                 </div>
                 <input type="text" class="cell-title-input" placeholder="Set note label..." value="${cell.title || ''}">
-                <div style="flex: 1; text-align: right; margin-right: 15px; font-size: 10px; opacity: 0.5;">${cell.type.toUpperCase()}</div>
+                <div style="text-align: right; margin-right: 15px; font-size: 10px; opacity: 0.5;">${cell.type.toUpperCase()}</div>
                 <div class="cell-actions">
+                    <button class="btn-icon btn-star-cell" title="Star Note">
+                        <i data-lucide="star" ${cell.isStarred ? 'style="fill: #ffcc00; color: #ffcc00;"' : ''}></i>
+                    </button>
                     ${!isMark ? `<button class="btn-run" id="run-${cell.id}">Run</button>` : ''}
                     <button class="btn-icon delete-cell" title="Delete Note"><i data-lucide="trash-2"></i></button>
                 </div>
@@ -465,6 +514,24 @@ class NotebookApp {
         }
     }
 
+    toggleCellStar(cellId) {
+        const cell = this.notebook.cells.find(c => c.id === cellId);
+        if (cell) {
+            cell.isStarred = !cell.isStarred;
+            const btn = document.querySelector(`#container-${cellId} .btn-star-cell i`);
+            if (btn) {
+                if (cell.isStarred) {
+                    btn.style.fill = '#ffcc00';
+                    btn.style.color = '#ffcc00';
+                } else {
+                    btn.style.fill = 'none';
+                    btn.style.color = 'var(--text-dim)';
+                }
+            }
+            this._autoSave();
+        }
+    }
+
     deleteCell(cellId) {
         if (!confirm('Delete this note?')) return;
         this.notebook.cells = this.notebook.cells.filter(c => c.id !== cellId);
@@ -511,6 +578,82 @@ class NotebookApp {
             console.error('Save failed', e);
             statusEl.innerText = 'Offline';
         }
+    }
+    async loadStarredNotes() {
+        try {
+            const res = await fetch('/api/notebooks');
+            const notebooks = await res.json();
+            const starredCells = [];
+
+            // Fetch full content for all notebooks to find starred cells
+            // Better would be a backend endpoint, but we can do it client-side for now
+            // since notebooks are small usually.
+            await Promise.all(notebooks.map(async (nb) => {
+                const fullRes = await fetch(`/api/notebooks/${nb.id}`);
+                const fullNb = await fullRes.json();
+                const cells = fullNb.cells || [];
+                cells.forEach(cell => {
+                    if (cell.isStarred) {
+                        starredCells.push({ ...cell, notebookTitle: fullNb.title, notebookId: fullNb.id });
+                    }
+                });
+            }));
+
+            this.renderStarredView(starredCells);
+        } catch (e) {
+            console.error('Failed to load starred notes', e);
+        }
+    }
+
+    renderStarredView(cells) {
+        this.disposeEditors();
+        document.getElementById('cells-list').innerHTML = `
+            <div style="margin-bottom: 20px; padding: 10px; border-bottom: 1px solid var(--border-color);">
+                <h2 style="font-size: 18px; color: var(--accent);">Starred Notes</h2>
+                <p style="font-size: 12px; color: var(--text-dim);">${cells.length} notes found</p>
+            </div>
+        `;
+        document.getElementById('notebook-title').value = 'Starred Notes';
+
+        if (cells.length === 0) {
+            document.getElementById('cells-list').innerHTML += `
+                <div style="text-align: center; padding: 40px; color: var(--text-dim);">
+                    <i data-lucide="star" style="width: 48px; height: 48px; margin-bottom: 10px; opacity: 0.2;"></i>
+                    <p>No starred notes yet.</p>
+                </div>
+            `;
+        } else {
+            cells.forEach(cell => {
+                const container = document.getElementById('cells-list');
+                const cellElem = document.createElement('div');
+                cellElem.className = 'cell';
+                cellElem.innerHTML = `
+                    <div class="cell-header">
+                        <span style="font-size: 10px; color: var(--accent); margin-right: 10px;">${cell.notebookTitle}</span>
+                        <span class="cell-title-input" style="flex: 1; border: none;">${cell.title || 'Untitled'}</span>
+                        <div class="cell-actions">
+                             <button class="btn-icon btn-goto-notebook" data-id="${cell.notebookId}" title="Go to Notebook">
+                                <i data-lucide="external-link"></i>
+                             </button>
+                        </div>
+                    </div>
+                    <div class="editor-container" style="padding: 20px; font-family: 'JetBrains Mono'; font-size: 14px; background: rgba(0,0,0,0.2);">
+                        ${cell.type === 'markdown' ? marked.parse(cell.content) : `<pre>${cell.content}</pre>`}
+                    </div>
+                `;
+                container.appendChild(cellElem);
+            });
+        }
+
+        // Add listener for "Go to Notebook"
+        document.querySelectorAll('.btn-goto-notebook').forEach(btn => {
+            btn.onclick = (e) => {
+                const id = btn.getAttribute('data-id');
+                this.loadNotebook(id);
+            };
+        });
+
+        lucide.createIcons();
     }
 }
 

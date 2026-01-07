@@ -164,7 +164,10 @@ body {
     padding: 2px 5px;
     outline: none;
     transition: border-color 0.2s;
-    width: 200px;
+    width: auto;
+    flex: 1;
+    min-width: 150px;
+    max-width: 60%;
 }
 
 .cell-title-input:focus {
@@ -208,6 +211,14 @@ body {
 .btn-icon:hover {
     background: rgba(255, 255, 255, 0.1);
     color: white;
+}
+
+.btn-star-cell {
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.btn-star-cell:hover {
+    transform: scale(1.2);
 }
 
 .btn-icon-sm {
