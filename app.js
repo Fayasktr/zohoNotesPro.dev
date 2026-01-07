@@ -16,6 +16,7 @@ const noteSchema = new mongoose.Schema({
     id: { type: String, required: true, unique: true },
     title: { type: String, default: 'Untitled' },
     isStarred: { type: Boolean, default: false },
+    isTrashed: { type: Boolean, default: false },
     content: { type: mongoose.Schema.Types.Mixed, default: {} },
     folder: { type: String, default: 'root' },
     updatedAt: { type: Date, default: Date.now }
@@ -50,7 +51,7 @@ app.post('/api/execute', async (req, res) => {
 // API: List Notebooks (from MongoDB)
 app.get('/api/notebooks', async (req, res) => {
     try {
-        const notes = await Note.find({}, 'id title folder isStarred');
+        const notes = await Note.find({ isTrashed: { $ne: true } }, 'id title folder isStarred');
         res.json(notes);
     } catch (err) {
         res.status(500).json({ error: 'Failed to list notebooks', details: err.message });
@@ -95,15 +96,57 @@ app.post('/api/notebooks', async (req, res) => {
     }
 });
 
-// API: Delete Notebook (from MongoDB)
+// API: List Trash
+app.get('/api/trash', async (req, res) => {
+    try {
+        const notes = await Note.find({ isTrashed: true }, 'id title folder updated_at');
+        res.json(notes);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to list trash' });
+    }
+});
+
+// API: Soft Delete to Trash
 app.delete(/^\/api\/notebooks\/(.+)$/, async (req, res) => {
     const notebookId = req.params[0];
     try {
-        const result = await Note.deleteOne({ id: notebookId });
-        if (result.deletedCount === 0) return res.status(404).json({ error: 'Notebook not found' });
+        const result = await Note.updateOne({ id: notebookId }, { isTrashed: true });
+        if (result.matchedCount === 0) return res.status(404).json({ error: 'Notebook not found' });
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to delete notebook', details: err.message });
+        res.status(500).json({ error: 'Failed to move to trash' });
+    }
+});
+
+// API: Restore from Trash
+app.post(/^\/api\/trash\/restore\/(.+)$/, async (req, res) => {
+    const notebookId = req.params[0];
+    try {
+        const result = await Note.updateOne({ id: notebookId }, { isTrashed: false });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to restore notebook' });
+    }
+});
+
+// API: Permanent Delete One
+app.delete(/^\/api\/trash\/(.+)$/, async (req, res) => {
+    const notebookId = req.params[0];
+    try {
+        const result = await Note.deleteOne({ id: notebookId });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to permanently delete' });
+    }
+});
+
+// API: Empty Trash (Delete Many)
+app.delete('/api/trash-all', async (req, res) => {
+    try {
+        await Note.deleteMany({ isTrashed: true });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to empty trash' });
     }
 });
 

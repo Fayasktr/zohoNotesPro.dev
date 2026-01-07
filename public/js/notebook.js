@@ -68,6 +68,7 @@ class NotebookApp {
         });
 
         document.getElementById('nav-starred-cells').addEventListener('click', () => this.loadStarredNotes());
+        document.getElementById('nav-trash').addEventListener('click', () => this.loadTrash());
 
         // Event Delegation for Sidebar
         document.getElementById('notebook-list').addEventListener('click', (e) => {
@@ -545,7 +546,128 @@ class NotebookApp {
                 }
             }
         } catch (e) {
-            console.error('Delete failed', e);
+            console.error('Move to trash failed', e);
+        }
+    }
+
+    async loadTrash() {
+        try {
+            const res = await fetch('/api/trash');
+            if (!res.ok) throw new Error('Failed to fetch trash');
+            const list = await res.json();
+            this.renderTrashView(list);
+        } catch (e) {
+            console.error('Failed to load trash list', e);
+        }
+    }
+
+    renderTrashView(notebooks) {
+        if (!Array.isArray(notebooks)) return;
+        this.disposeEditors();
+
+        const titleEl = document.getElementById('notebook-title');
+        if (titleEl) titleEl.value = 'Trash';
+
+        const listContainer = document.getElementById('cells-list');
+        if (!listContainer) return;
+
+        listContainer.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 10px; border-bottom: 1px solid var(--border-color);">
+                <div>
+                    <h2 style="font-size: 18px; color: var(--accent);">Trash</h2>
+                    <p style="font-size: 12px; color: var(--text-dim);">${notebooks.length} items</p>
+                </div>
+                ${notebooks.length > 0 ? `<button class="btn-run" id="btn-empty-trash" style="background: #ff3b30;">Empty Trash</button>` : ''}
+            </div>
+        `;
+
+        if (notebooks.length === 0) {
+            listContainer.innerHTML += `
+                <div style="text-align: center; padding: 60px; color: var(--text-dim);">
+                    <i data-lucide="trash-2" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.2;"></i>
+                    <p>Trash is empty</p>
+                </div>
+            `;
+        } else {
+            notebooks.forEach(nb => {
+                const item = document.createElement('div');
+                item.className = 'cell';
+                item.style.padding = '15px 20px';
+                item.style.display = 'flex';
+                item.style.alignItems = 'center';
+                item.style.gap = '15px';
+                item.innerHTML = `
+                    <i data-lucide="file-text" style="color: var(--text-dim);"></i>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600;">${nb.title || 'Untitled'}</div>
+                        <div style="font-size: 11px; color: var(--text-dim);">In ${nb.folder || 'root'}</div>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn-icon btn-restore" data-id="${nb.id}" title="Restore">
+                            <i data-lucide="rotate-ccw"></i>
+                        </button>
+                        <button class="btn-icon btn-delete-perm" data-id="${nb.id}" title="Delete Permanently" style="color: #ff3b30;">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                    </div>
+                `;
+                listContainer.appendChild(item);
+            });
+        }
+
+        // Event Listeners for Trash Actions
+        const emptyBtn = document.getElementById('btn-empty-trash');
+        if (emptyBtn) {
+            emptyBtn.onclick = () => this.emptyTrash();
+        }
+
+        document.querySelectorAll('.btn-restore').forEach(btn => {
+            btn.onclick = () => this.restoreNotebook(btn.getAttribute('data-id'));
+        });
+
+        document.querySelectorAll('.btn-delete-perm').forEach(btn => {
+            btn.onclick = () => {
+                if (confirm('Permanently delete this notebook?')) {
+                    this.deletePermanently(btn.getAttribute('data-id'));
+                }
+            };
+        });
+
+        lucide.createIcons();
+    }
+
+    async restoreNotebook(id) {
+        try {
+            const res = await fetch(`/api/trash/restore/${id}`, { method: 'POST' });
+            if (res.ok) {
+                await this.refreshNotebookList();
+                await this.loadTrash();
+            }
+        } catch (e) {
+            console.error('Restore failed', e);
+        }
+    }
+
+    async deletePermanently(id) {
+        try {
+            const res = await fetch(`/api/trash/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                await this.loadTrash();
+            }
+        } catch (e) {
+            console.error('Permanent delete failed', e);
+        }
+    }
+
+    async emptyTrash() {
+        if (!confirm('Are you sure you want to empty the trash? This action cannot be undone.')) return;
+        try {
+            const res = await fetch('/api/trash-all', { method: 'DELETE' });
+            if (res.ok) {
+                await this.loadTrash();
+            }
+        } catch (e) {
+            console.error('Empty trash failed', e);
         }
     }
 
