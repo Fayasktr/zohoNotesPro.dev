@@ -7,8 +7,9 @@ const mongoose = require('mongoose');
 const engine = require('./engine/AntigravityEngine');
 
 // MongoDB Connection
-mongoose.connect('mongodb://localhost:27017/zoho')
-    .then(() => console.log('Connected to MongoDB: zoho'))
+const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/zoho';
+mongoose.connect(mongoURI)
+    .then(() => console.log('Connected to MongoDB'))
     .catch(err => console.error('MongoDB connection error:', err));
 
 // Note Schema
@@ -25,7 +26,7 @@ const noteSchema = new mongoose.Schema({
 const Note = mongoose.model('Note', noteSchema);
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -150,6 +151,6 @@ app.delete('/api/trash-all', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server on http://localhost:${PORT}`);
 });

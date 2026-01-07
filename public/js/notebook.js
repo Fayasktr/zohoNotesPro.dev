@@ -97,7 +97,7 @@ class NotebookApp {
                 const id = item.getAttribute('data-id');
                 if (e.target.closest('.delete-notebook-btn')) {
                     e.stopPropagation();
-                    if (confirm('Delete this notebook permanently?')) {
+                    if (confirm('Move this notebook to trash?')) {
                         this.deleteNotebook(id);
                     }
                 } else {
