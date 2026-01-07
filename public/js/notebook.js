@@ -379,9 +379,14 @@ class NotebookApp {
 
             const updateHeight = () => {
                 const contentHeight = editor.getContentHeight();
+                const options = editor.getOptions();
+                const lineHeight = options.get(monaco.editor.EditorOption.lineHeight);
+                const minHeight = (lineHeight * 5) + 26; // 16px top + 10px bottom padding
+                const finalHeight = Math.max(contentHeight, minHeight);
+
                 const editorDiv = document.getElementById(`editor-${cell.id}`);
                 if (editorDiv) {
-                    editorDiv.style.height = `${contentHeight}px`;
+                    editorDiv.style.height = `${finalHeight}px`;
                     editor.layout();
                 }
             };
@@ -481,7 +486,8 @@ class NotebookApp {
         const outputDiv = document.getElementById(`output-${cellId}`);
         if (!outputDiv) return;
         outputDiv.classList.remove('hidden');
-        outputDiv.innerHTML = '';
+        outputDiv.innerHTML = '<div style="font-size: 10px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase; font-weight: bold; opacity: 0.7;">output:</div>';
+
         if (data.logs && data.logs.length > 0) {
             data.logs.forEach(log => {
                 const logElem = document.createElement('div');
@@ -490,11 +496,13 @@ class NotebookApp {
                 outputDiv.appendChild(logElem);
             });
         }
+
         if (data.success) {
-            if (data.result !== 'undefined') {
+            // Merging result into output area without separate "Result:" label
+            if (data.result !== 'undefined' && data.result !== null) {
                 const resElem = document.createElement('div');
-                resElem.className = 'output-result';
-                resElem.innerHTML = `<strong>Result:</strong> <pre>${data.result}</pre>`;
+                resElem.className = 'output-log';
+                resElem.textContent = data.result;
                 outputDiv.appendChild(resElem);
             }
         } else {
