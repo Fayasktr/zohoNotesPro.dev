@@ -60,10 +60,6 @@ class NotebookApp {
 
         document.getElementById('btn-star').addEventListener('click', () => this.toggleStar());
 
-        document.getElementById('nav-starred').addEventListener('click', () => {
-            document.getElementById('starred-list').classList.toggle('collapsed');
-        });
-
         const titleInput = document.getElementById('notebook-title');
         titleInput.addEventListener('input', (e) => {
             this.notebook.title = e.target.value;
@@ -180,12 +176,9 @@ class NotebookApp {
 
     renderNotebookList(notebooks) {
         const listContainer = document.getElementById('notebook-list');
-        const starredContainer = document.getElementById('starred-list');
         listContainer.innerHTML = '';
-        starredContainer.innerHTML = '';
 
         const groups = {};
-        const starred = notebooks.filter(nb => nb.isStarred);
 
         notebooks.forEach(nb => {
             const folder = nb.folder || 'root';
@@ -207,9 +200,6 @@ class NotebookApp {
             `;
             container.appendChild(item);
         };
-
-        // Render Starred List
-        starred.forEach(nb => renderItem(nb, starredContainer));
 
         // Render Main List with Folders
         Object.keys(groups).sort().forEach(folder => {
@@ -560,8 +550,6 @@ class NotebookApp {
     }
 
     async saveToBackend() {
-        const statusEl = document.getElementById('save-status').querySelector('span');
-        statusEl.innerText = 'Saving...';
         try {
             const res = await fetch('/api/notebooks', {
                 method: 'POST',
@@ -569,14 +557,10 @@ class NotebookApp {
                 body: JSON.stringify(this.notebook)
             });
             if (res.ok) {
-                statusEl.innerText = 'All saved';
                 localStorage.setItem('zoho-notebook-current-id', this.notebook.id);
-            } else {
-                statusEl.innerText = 'Save error';
             }
         } catch (e) {
             console.error('Save failed', e);
-            statusEl.innerText = 'Offline';
         }
     }
     async loadStarredNotes() {
