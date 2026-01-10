@@ -589,13 +589,16 @@
 
         async function safeFetch(url, options = {}) {
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-            if (csrfToken && options.method && options.method !== 'GET') {
+            const method = (options.method || 'GET').toUpperCase();
+            const nonMutating = ['GET', 'HEAD', 'OPTIONS'];
+
+            if (csrfToken && !nonMutating.includes(method)) {
                 options.headers = {
                     ...options.headers,
                     'X-CSRF-Token': csrfToken
                 };
             }
-            return fetch(url, options);
+            return window.fetch(url, options);
         }
 
         function showCreateModal() {

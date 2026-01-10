@@ -232,13 +232,16 @@ class NotebookApp {
 
     async safeFetch(url, options = {}) {
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-        if (csrfToken && options.method && options.method !== 'GET') {
+        const method = (options.method || 'GET').toUpperCase();
+        const nonMutating = ['GET', 'HEAD', 'OPTIONS'];
+
+        if (csrfToken && !nonMutating.includes(method)) {
             options.headers = {
                 ...options.headers,
                 'X-CSRF-Token': csrfToken
             };
         }
-        return this.safeFetch(url, options);
+        return window.fetch(url, options);
     }
 
     // Modal Helpers
