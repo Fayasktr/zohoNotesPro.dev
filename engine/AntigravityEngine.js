@@ -10,10 +10,10 @@ class AntigravityEngine {
         const logs = [];
         const resultId = uuidv4();
         const customConsole = {
-            log: (...args) => logs.push(args.map(a => this._serialize(a)).join(' ')),
-            error: (...args) => logs.push(`ERROR: ${args.map(a => this._serialize(a)).join(' ')}`),
-            warn: (...args) => logs.push(`WARN: ${args.map(a => this._serialize(a)).join(' ')}`),
-            info: (...args) => logs.push(`INFO: ${args.map(a => this._serialize(a)).join(' ')}`),
+            log: (...args) => { logs.push(args.map(a => this._serialize(a)).join(' ')); },
+            error: (...args) => { logs.push(`ERROR: ${args.map(a => this._serialize(a)).join(' ')}`); },
+            warn: (...args) => { logs.push(`WARN: ${args.map(a => this._serialize(a)).join(' ')}`); },
+            info: (...args) => { logs.push(`INFO: ${args.map(a => this._serialize(a)).join(' ')}`); },
         };
 
         const sandbox = {

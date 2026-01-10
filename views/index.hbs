@@ -53,11 +53,26 @@
                 </div>
             </nav>
 
-            <div style="margin-top: auto;">
+            <div style="margin-top: auto; padding: 20px 0; border-top: 1px solid var(--border-color);">
+                <div class="user-profile"
+                    style="display: flex; align-items: center; gap: 12px; padding: 0 16px; margin-bottom: 20px;">
+                    <div class="user-avatar"
+                        style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; text-transform: uppercase;">
+                        {{#if username}}{{substring username 0 1}}{{else}}U{{/if}}
+                    </div>
+                    <div style="flex: 1; overflow: hidden;">
+                        <div
+                            style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            {{username}}</div>
+                        <a href="/logout"
+                            style="font-size: 12px; color: #ff3b30; text-decoration: none; font-weight: 600; display: block; margin-top: 2px;">Logout</a>
+                    </div>
+                </div>
                 <div class="nav-item">
                     <i data-lucide="settings"></i> Settings
                 </div>
-                <div style="margin-top: auto; margin-left: 20%; font-size: 12px; color: var(--text-dim);">
+                <div
+                    style="margin-left: 20px; font-size: 10px; color: var(--text-dim); opacity: 0.5; margin-top: 10px;">
                     ©Fayas kp
                 </div>
             </div>
