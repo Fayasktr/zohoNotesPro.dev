@@ -192,19 +192,23 @@ class NotebookApp {
     }
 
     setupTheme() {
-        const dark = localStorage.getItem('theme-dark') !== 'false';
-        this.toggleTheme(dark);
-        document.getElementById('theme-switch').checked = !dark;
+        const isLight = localStorage.getItem('theme-light') === 'true';
+        this.applyTheme(isLight);
+        document.getElementById('theme-switch').checked = isLight;
+    }
+
+    applyTheme(isLight) {
+        if (isLight) {
+            document.body.classList.add('light-theme');
+            localStorage.setItem('theme-light', 'true');
+        } else {
+            document.body.classList.remove('light-theme');
+            localStorage.setItem('theme-light', 'false');
+        }
     }
 
     toggleTheme(isLight) {
-        if (isLight) {
-            document.body.classList.add('light-theme');
-            localStorage.setItem('theme-dark', 'false');
-        } else {
-            document.body.classList.remove('light-theme');
-            localStorage.setItem('theme-dark', 'true');
-        }
+        this.applyTheme(isLight);
     }
 
     openModal(modalId) {
@@ -224,6 +228,17 @@ class NotebookApp {
         document.querySelectorAll('.modal-content').forEach(m => m.classList.add('hidden'));
         this.currentConfirmCallback = null;
         this.currentInputCallback = null;
+    }
+
+    async safeFetch(url, options = {}) {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (csrfToken && options.method && options.method !== 'GET') {
+            options.headers = {
+                ...options.headers,
+                'X-CSRF-Token': csrfToken
+            };
+        }
+        return this.safeFetch(url, options);
     }
 
     // Modal Helpers
@@ -288,7 +303,7 @@ class NotebookApp {
 
     async refreshNotebookList() {
         try {
-            const res = await fetch('/api/notebooks');
+            const res = await this.safeFetch('/api/notebooks');
             const list = await res.json();
             this.renderNotebookList(list);
         } catch (e) {
@@ -392,7 +407,7 @@ class NotebookApp {
 
     async loadNotebook(id) {
         try {
-            const res = await fetch(`/api/notebooks/${id}`);
+            const res = await this.safeFetch(`/api/notebooks/${id}`);
             if (!res.ok) throw new Error('Not found');
             const data = await res.json();
 
@@ -574,7 +589,7 @@ class NotebookApp {
             runBtn.disabled = true;
         }
         try {
-            const response = await fetch('/api/execute', {
+            const response = await this.safeFetch('/api/execute', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code })
@@ -677,7 +692,7 @@ class NotebookApp {
     async deleteNotebook(id) {
         this.confirmAction('Move to Trash?', 'This notebook will be moved to the trash.', async () => {
             try {
-                const res = await fetch(`/api/notebooks/${id}`, { method: 'DELETE' });
+                const res = await this.safeFetch(`/api/notebooks/${id}`, { method: 'DELETE' });
                 if (res.ok) {
                     if (this.notebook.id === id) {
                         localStorage.removeItem('zoho-notebook-current-id');
@@ -696,7 +711,7 @@ class NotebookApp {
         this.inputAction('Rename File', 'Enter a new title for this notebook:', oldTitle, async (newTitle) => {
             if (!newTitle || newTitle === oldTitle) return;
             try {
-                const res = await fetch(`/api/notebooks/${id}/rename`, {
+                const res = await this.safeFetch(`/api/notebooks/${id}/rename`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title: newTitle })
@@ -718,7 +733,7 @@ class NotebookApp {
         this.inputAction('Rename Folder', `Enter a new name for "${oldName}":`, oldName, async (newName) => {
             if (!newName || newName === oldName) return;
             try {
-                const res = await fetch('/api/folders/rename', {
+                const res = await this.safeFetch('/api/folders/rename', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ oldName, newName })
@@ -738,7 +753,7 @@ class NotebookApp {
     async deleteFolder(folderName) {
         this.confirmAction('Delete Folder?', `Move all notebooks in "${folderName}" to trash?`, async () => {
             try {
-                const res = await fetch(`/api/folders/${folderName}`, { method: 'DELETE' });
+                const res = await this.safeFetch(`/api/folders/${folderName}`, { method: 'DELETE' });
                 if (res.ok) {
                     if (this.notebook.folder === folderName) {
                         localStorage.removeItem('zoho-notebook-current-id');
@@ -755,7 +770,7 @@ class NotebookApp {
 
     async loadTrash() {
         try {
-            const res = await fetch('/api/trash');
+            const res = await this.safeFetch('/api/trash');
             if (!res.ok) throw new Error('Failed to fetch trash');
             const list = await res.json();
             this.renderTrashView(list);
@@ -842,7 +857,7 @@ class NotebookApp {
 
     async restoreNotebook(id) {
         try {
-            const res = await fetch(`/api/trash/restore/${id}`, { method: 'POST' });
+            const res = await this.safeFetch(`/api/trash/restore/${id}`, { method: 'POST' });
             if (res.ok) {
                 await this.refreshNotebookList();
                 await this.loadTrash();
@@ -854,7 +869,7 @@ class NotebookApp {
 
     async deletePermanently(id) {
         try {
-            const res = await fetch(`/api/trash/${id}`, { method: 'DELETE' });
+            const res = await this.safeFetch(`/api/trash/${id}`, { method: 'DELETE' });
             if (res.ok) {
                 await this.loadTrash();
             }
@@ -866,7 +881,7 @@ class NotebookApp {
     async emptyTrash() {
         this.confirmAction('Empty Trash?', 'Are you sure you want to empty the trash? This action cannot be undone.', async () => {
             try {
-                const res = await fetch('/api/trash-all', { method: 'DELETE' });
+                const res = await this.safeFetch('/api/trash-all', { method: 'DELETE' });
                 if (res.ok) {
                     await this.loadTrash();
                 }
@@ -878,7 +893,7 @@ class NotebookApp {
 
     async saveToBackend() {
         try {
-            const res = await fetch('/api/notebooks', {
+            const res = await this.safeFetch('/api/notebooks', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(this.notebook)
@@ -892,7 +907,7 @@ class NotebookApp {
     }
     async loadStarredNotes() {
         try {
-            const res = await fetch('/api/notebooks');
+            const res = await this.safeFetch('/api/notebooks');
             const notebooks = await res.json();
             const starredCells = [];
 
@@ -900,7 +915,7 @@ class NotebookApp {
             // Better would be a backend endpoint, but we can do it client-side for now
             // since notebooks are small usually.
             await Promise.all(notebooks.map(async (nb) => {
-                const fullRes = await fetch(`/api/notebooks/${nb.id}`);
+                const fullRes = await this.safeFetch(`/api/notebooks/${nb.id}`);
                 const fullNb = await fullRes.json();
                 const cells = fullNb.cells || [];
                 cells.forEach(cell => {

@@ -158,6 +158,7 @@
         {{/if}}
 
         <form action="/reset-password/{{token}}" method="POST">
+            <input type="hidden" name="_csrf" value="{{csrfToken}}">
             <div class="form-group">
                 <label>New Password</label>
                 <input type="password" name="password" placeholder="••••••••" required minlength="6">

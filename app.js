@@ -11,6 +11,9 @@ const bcrypt = require('bcryptjs');
 const engine = require('./engine/AntigravityEngine');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+const helmet = require('helmet');
+const csrf = require('csurf');
+const rateLimit = require('express-rate-limit');
 
 // Models
 const User = require('./models/User');
@@ -34,6 +37,11 @@ mongoose.connect(mongoURI)
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Security Headers
+app.use(helmet({
+    contentSecurityPolicy: false, // Disabled for simplicity with CDN resources
+}));
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -55,6 +63,69 @@ app.use(session({
     store: MongoStore.create({ mongoUrl: mongoURI }),
     cookie: { maxAge: 1000 * 60 * 60 * 24 } // 1 day
 }));
+
+// CSRF Protection
+const csrfProtection = csrf({ cookie: false });
+
+// Global CSRF Token Middleware
+app.use((req, res, next) => {
+    // Skip CSRF for non-mutating methods if desired, 
+    // but csurf does this by default (GET, HEAD, OPTIONS are ignored)
+    next();
+});
+
+// Middleware: Sync User Data & Check Block Status
+app.use(async (req, res, next) => {
+    if (req.session.userId) {
+        try {
+            const user = await User.findById(req.session.userId);
+            if (!user || user.isBlocked) {
+                const message = user && user.isBlocked ? 'Blocked by Admin' : 'Account deleted';
+                return req.session.destroy(() => {
+                    res.clearCookie('connect.sid');
+                    // Add a query param to tell login why they were kicked
+                    res.redirect(`/login?error=${encodeURIComponent(message)}`);
+                });
+            }
+            res.locals.currentUser = user;
+            res.locals.username = user.username; // Priority over session data
+        } catch (err) {
+            console.error('User sync error:', err);
+        }
+    }
+    next();
+});
+
+// Rate Limiting for Auth Routes
+const authLimiter = rateLimit({
+    windowMs: 3 * 60 * 1000, // 3 minutes
+    max: 30, // Limit each IP to 30 requests per window
+    message: 'Too many requests from this IP, please try again after 15 minutes',
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+app.use('/login', authLimiter);
+app.use('/signup', authLimiter);
+app.use('/forgot-password', authLimiter);
+
+// Apply CSRF Protection to all routes after session is initialized
+app.use(csrfProtection);
+
+// Pass CSRF token to all views
+app.use((req, res, next) => {
+    res.locals.csrfToken = req.csrfToken();
+    next();
+});
+
+// CSRF Error Handler
+app.use((err, req, res, next) => {
+    if (err.code !== 'EBADCSRFTOKEN') return next(err);
+    res.status(403).render('error', {
+        title: 'Security Error',
+        message: 'Invalid or missing CSRF token. Please refresh and try again.'
+    });
+});
 
 // Middleware: Check Authentication
 const isAuthenticated = (req, res, next) => {
@@ -94,7 +165,8 @@ app.get('/login', (req, res) => {
     if (req.session.userId) {
         return req.session.role === 'admin' ? res.redirect('/admin/dashboard') : res.redirect('/');
     }
-    res.render('login', { title: 'Login - Zoho Notes' });
+    const error = req.query.error;
+    res.render('login', { title: 'Login - Zoho Notes', error });
 });
 
 app.post('/login', async (req, res) => {
@@ -118,7 +190,7 @@ app.post('/login', async (req, res) => {
         const user = await User.findOne({ email });
         if (user && await bcrypt.compare(password, user.password)) {
             if (user.isBlocked) {
-                return res.render('login', { error: 'Your account has been blocked. Please contact support.' });
+                return res.render('login', { error: 'Your account has been blocked by an administrator.' });
             }
 
             // Clear attempts on success
@@ -254,7 +326,7 @@ app.get('/', isAuthenticated, (req, res) => {
     if (req.session.role === 'admin') return res.redirect('/admin/dashboard');
     res.render('index', {
         title: 'Zoho Notes',
-        username: req.session.username
+        username: res.locals.username
     });
 });
 
