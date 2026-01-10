@@ -99,12 +99,32 @@ app.get('/login', (req, res) => {
 
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
+
+    // Rate Limiting Logic: 3 strikes, 30s cooldown
+    const MAX_ATTEMPTS = 3;
+    const COOLDOWN_MS = 30000;
+
+    if (req.session.failedAttempts >= MAX_ATTEMPTS) {
+        const now = Date.now();
+        const elapsed = now - (req.session.lastAttemptTime || 0);
+
+        if (elapsed < COOLDOWN_MS) {
+            const waitTime = Math.ceil((COOLDOWN_MS - elapsed) / 1000);
+            return res.render('login', { error: `Too many failed attempts. Please wait ${waitTime} seconds.` });
+        }
+    }
+
     try {
         const user = await User.findOne({ email });
         if (user && await bcrypt.compare(password, user.password)) {
             if (user.isBlocked) {
                 return res.render('login', { error: 'Your account has been blocked. Please contact support.' });
             }
+
+            // Clear attempts on success
+            req.session.failedAttempts = 0;
+            req.session.lastAttemptTime = null;
+
             req.session.userId = user._id;
             req.session.username = user.username;
             req.session.role = user.role;
@@ -115,7 +135,15 @@ app.post('/login', async (req, res) => {
                 res.redirect('/');
             }
         } else {
-            res.render('login', { error: 'Invalid email or password' });
+            // Track failures
+            req.session.failedAttempts = (req.session.failedAttempts || 0) + 1;
+            req.session.lastAttemptTime = Date.now();
+
+            let message = 'Invalid email or password';
+            if (req.session.failedAttempts >= MAX_ATTEMPTS) {
+                message = 'Too many failed attempts. Please wait 30 seconds.';
+            }
+            res.render('login', { error: message });
         }
     } catch (err) {
         res.render('login', { error: 'Something went wrong' });
@@ -255,7 +283,11 @@ app.get('/api/notebooks', isAuthenticated, async (req, res) => {
 app.get(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
     const notebookId = req.params[0];
     try {
-        const note = await Note.findOne({ id: notebookId, owner: req.session.userId });
+        const query = { id: notebookId };
+        if (req.session.role !== 'admin') {
+            query.owner = req.session.userId;
+        }
+        const note = await Note.findOne(query);
         if (!note) return res.status(404).json({ error: 'Notebook not found' });
         res.json(note.content || note);
     } catch (err) {
@@ -306,6 +338,45 @@ app.delete(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to move to trash' });
+    }
+});
+
+// Rename Notebook
+app.put(/^\/api\/notebooks\/(.+)\/rename$/, isAuthenticated, async (req, res) => {
+    const notebookId = req.params[0];
+    const { title } = req.body;
+    try {
+        await Note.updateOne({ id: notebookId, owner: req.session.userId }, { title, updatedAt: new Date() });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to rename notebook' });
+    }
+});
+
+// Folder Management
+app.put('/api/folders/rename', isAuthenticated, async (req, res) => {
+    const { oldName, newName } = req.body;
+    try {
+        await Note.updateMany(
+            { folder: oldName, owner: req.session.userId },
+            { folder: newName, updatedAt: new Date() }
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to rename folder' });
+    }
+});
+
+app.delete(/^\/api\/folders\/(.+)$/, isAuthenticated, async (req, res) => {
+    const folderName = req.params[0];
+    try {
+        await Note.updateMany(
+            { folder: folderName, owner: req.session.userId },
+            { isTrashed: true, updatedAt: new Date() }
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to delete folder' });
     }
 });
 

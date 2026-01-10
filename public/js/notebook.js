@@ -25,10 +25,13 @@ class NotebookApp {
         this.editors = {}; // cellId -> monaco editor instance
         this._autoSave = debounce(() => this.saveToBackend(), 1500);
 
+        this.currentPendingFolder = 'root';
+
         this.init();
     }
 
     async init() {
+        this.setupTheme();
         this.setupEventListeners();
         await this.refreshNotebookList();
 
@@ -83,7 +86,37 @@ class NotebookApp {
                 return;
             }
 
+            if (item) {
+                const id = item.getAttribute('data-id');
+                const title = item.querySelector('span').innerText;
+
+                if (e.target.closest('.delete-notebook-btn')) {
+                    e.stopPropagation();
+                    this.deleteNotebook(id);
+                } else if (e.target.closest('.rename-notebook-btn')) {
+                    e.stopPropagation();
+                    this.renameNotebook(id, title);
+                } else {
+                    this.loadNotebook(id);
+                }
+                return;
+            }
+
             if (folderHeader) {
+                const folder = folderHeader.getAttribute('data-folder');
+
+                if (e.target.closest('.btn-delete-folder')) {
+                    e.stopPropagation();
+                    this.deleteFolder(folder);
+                    return;
+                }
+
+                if (e.target.closest('.btn-rename-folder')) {
+                    e.stopPropagation();
+                    this.renameFolder(folder);
+                    return;
+                }
+
                 const content = folderHeader.nextElementSibling;
                 if (content && content.classList.contains('folder-content')) {
                     content.classList.toggle('collapsed');
@@ -91,18 +124,6 @@ class NotebookApp {
                     if (icon) icon.classList.toggle('collapsed-chevron');
                 }
                 return;
-            }
-
-            if (item) {
-                const id = item.getAttribute('data-id');
-                if (e.target.closest('.delete-notebook-btn')) {
-                    e.stopPropagation();
-                    if (confirm('Move this notebook to trash?')) {
-                        this.deleteNotebook(id);
-                    }
-                } else {
-                    this.loadNotebook(id);
-                }
             }
         });
 
@@ -134,15 +155,135 @@ class NotebookApp {
                 this._autoSave();
             }
         });
+
+        // Modal Specific Listeners
+        document.getElementById('modal-overlay').addEventListener('click', (e) => {
+            if (e.target.id === 'modal-overlay') this.closeAllModals();
+        });
+
+        document.querySelectorAll('.modal-close').forEach(btn => {
+            btn.addEventListener('click', () => this.closeAllModals());
+        });
+
+        document.getElementById('btn-confirm-folder').addEventListener('click', () => this.handleFolderCreate());
+        document.getElementById('btn-confirm-file').addEventListener('click', () => this.handleFileCreate());
+
+        document.getElementById('nav-settings').addEventListener('click', () => this.openModal('modal-settings'));
+
+        document.getElementById('theme-switch').addEventListener('change', (e) => {
+            this.toggleTheme(e.target.checked);
+        });
+
+        // Generic Modal Action Listeners
+        document.getElementById('btn-modal-input-confirm').addEventListener('click', () => {
+            if (this.currentInputCallback) {
+                const val = document.getElementById('modal-input-field').value;
+                this.currentInputCallback(val);
+                this.closeAllModals();
+            }
+        });
+
+        document.getElementById('btn-modal-alert-confirm').addEventListener('click', () => {
+            if (this.currentConfirmCallback) {
+                this.currentConfirmCallback();
+                this.closeAllModals();
+            }
+        });
+    }
+
+    setupTheme() {
+        const dark = localStorage.getItem('theme-dark') !== 'false';
+        this.toggleTheme(dark);
+        document.getElementById('theme-switch').checked = !dark;
+    }
+
+    toggleTheme(isLight) {
+        if (isLight) {
+            document.body.classList.add('light-theme');
+            localStorage.setItem('theme-dark', 'false');
+        } else {
+            document.body.classList.remove('light-theme');
+            localStorage.setItem('theme-dark', 'true');
+        }
+    }
+
+    openModal(modalId) {
+        document.getElementById('modal-overlay').classList.remove('hidden');
+        document.querySelectorAll('.modal-content').forEach(m => m.classList.add('hidden'));
+        document.getElementById(modalId).classList.remove('hidden');
+
+        const input = document.getElementById(modalId).querySelector('input');
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    }
+
+    closeAllModals() {
+        document.getElementById('modal-overlay').classList.add('hidden');
+        document.querySelectorAll('.modal-content').forEach(m => m.classList.add('hidden'));
+        this.currentConfirmCallback = null;
+        this.currentInputCallback = null;
+    }
+
+    // Modal Helpers
+    confirmAction(title, desc, onConfirm) {
+        document.getElementById('modal-alert-title').innerText = title;
+        document.getElementById('modal-alert-desc').innerText = desc;
+        this.currentConfirmCallback = onConfirm;
+        this.openModal('modal-alert');
+    }
+
+    inputAction(title, desc, defaultValue, onConfirm) {
+        document.getElementById('modal-input-title').innerText = title;
+        document.getElementById('modal-input-desc').innerText = desc;
+        document.getElementById('modal-input-field').value = defaultValue;
+        this.currentInputCallback = onConfirm;
+        this.openModal('modal-input');
     }
 
     async createFolder() {
-        const folderName = prompt('Enter folder name:', 'New Folder');
+        this.openModal('modal-folder');
+    }
+
+    async handleFolderCreate() {
+        const folderName = document.getElementById('input-folder-name').value;
         if (!folderName) return;
-        // Folders are just metadata on notebooks, so we don't need a folder API.
-        // We'll create a dummy notebook or just refresh.
-        // Actually, let's just refresh the UI with the new folder concept.
-        this.createNewNotebook(folderName);
+        this.closeAllModals();
+        this.createNewNotebookInternal(folderName);
+    }
+
+    async createNewNotebook(folderName = 'root') {
+        this.currentPendingFolder = folderName;
+        document.getElementById('target-folder-name').innerText = folderName;
+        this.openModal('modal-file');
+    }
+
+    async handleFileCreate() {
+        const title = document.getElementById('input-file-name').value;
+        this.closeAllModals();
+        this.createNewNotebookInternal(this.currentPendingFolder, title);
+    }
+
+    async createNewNotebookInternal(folderName = 'root', title = 'New File') {
+        this.disposeEditors();
+        const id = `ntbk-${Date.now()}`;
+        this.notebook = {
+            id: id,
+            title: title || 'Untitled File',
+            isStarred: false,
+            folder: folderName,
+            cells: [],
+            tags: []
+        };
+        this.updateStarUI();
+        document.getElementById('cells-list').innerHTML = '';
+        document.getElementById('notebook-title').value = this.notebook.title;
+
+        this.addCell('code');
+        await this.saveToBackend();
+        await this.refreshNotebookList();
+        this.setActiveNotebookUI(this.notebook.id);
     }
 
     async refreshNotebookList() {
@@ -195,9 +336,14 @@ class NotebookApp {
                 <i data-lucide="${nb.id === this.notebook.id ? 'edit-3' : (nb.isStarred ? 'star' : 'file-code')}" 
                    style="width: 14px; ${nb.isStarred ? 'color: #ffcc00; fill: #ffcc00;' : ''}"></i> 
                 <span style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${nb.title}</span>
-                <button class="btn-icon-sm delete-notebook-btn" title="Delete Notebook">
-                    <i data-lucide="trash-2"></i>
-                </button>
+                <div class="item-actions">
+                    <button class="btn-icon-sm rename-notebook-btn" title="Rename File">
+                        <i data-lucide="edit-2"></i>
+                    </button>
+                    <button class="btn-icon-sm delete-notebook-btn" title="Delete File">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                </div>
             `;
             container.appendChild(item);
         };
@@ -207,13 +353,22 @@ class NotebookApp {
             if (folder !== 'root') {
                 const folderHeader = document.createElement('div');
                 folderHeader.className = 'folder-header';
+                folderHeader.setAttribute('data-folder', folder);
                 folderHeader.innerHTML = `
                     <i data-lucide="chevron-down" class="folder-chevron" style="width: 12px;"></i>
                     <i data-lucide="folder" style="width: 14px;"></i> 
                     <span style="flex: 1;">${folder}</span>
-                    <button class="btn-icon-sm btn-add-file" data-folder="${folder}" title="Add File">
-                        <i data-lucide="file-plus"></i>
-                    </button>
+                    <div class="folder-actions" style="display: flex; gap: 4px;">
+                        <button class="btn-icon-sm btn-rename-folder" title="Rename Folder">
+                            <i data-lucide="edit-2"></i>
+                        </button>
+                        <button class="btn-icon-sm btn-delete-folder" title="Delete Folder">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                        <button class="btn-icon-sm btn-add-file" data-folder="${folder}" title="Add File">
+                            <i data-lucide="file-plus"></i>
+                        </button>
+                    </div>
                 `;
                 listContainer.appendChild(folderHeader);
             }
@@ -233,30 +388,6 @@ class NotebookApp {
             const span = activeItem.querySelector('span');
             if (span) span.innerText = this.notebook.title;
         }
-    }
-
-    async createNewNotebook(folderName = 'root') {
-        const title = prompt('Enter file title:', 'New File');
-        if (title === null) return;
-
-        this.disposeEditors();
-        const id = `ntbk-${Date.now()}`;
-        this.notebook = {
-            id: id,
-            title: title || 'Untitled File',
-            isStarred: false,
-            folder: folderName,
-            cells: [],
-            tags: []
-        };
-        this.updateStarUI();
-        document.getElementById('cells-list').innerHTML = '';
-        document.getElementById('notebook-title').value = this.notebook.title;
-
-        this.addCell('code');
-        await this.saveToBackend();
-        await this.refreshNotebookList();
-        this.setActiveNotebookUI(this.notebook.id);
     }
 
     async loadNotebook(id) {
@@ -532,30 +663,94 @@ class NotebookApp {
     }
 
     deleteCell(cellId) {
-        if (!confirm('Delete this note?')) return;
-        this.notebook.cells = this.notebook.cells.filter(c => c.id !== cellId);
-        if (this.editors[cellId]) {
-            this.editors[cellId].dispose();
-            delete this.editors[cellId];
-        }
-        document.getElementById(`container-${cellId}`).remove();
-        this._autoSave();
+        this.confirmAction('Delete Note?', 'Are you sure you want to remove this cell?', () => {
+            this.notebook.cells = this.notebook.cells.filter(c => c.id !== cellId);
+            if (this.editors[cellId]) {
+                this.editors[cellId].dispose();
+                delete this.editors[cellId];
+            }
+            document.getElementById(`container-${cellId}`).remove();
+            this._autoSave();
+        });
     }
 
     async deleteNotebook(id) {
-        try {
-            const res = await fetch(`/api/notebooks/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                if (this.notebook.id === id) {
-                    localStorage.removeItem('zoho-notebook-current-id');
-                    location.reload();
-                } else {
+        this.confirmAction('Move to Trash?', 'This notebook will be moved to the trash.', async () => {
+            try {
+                const res = await fetch(`/api/notebooks/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    if (this.notebook.id === id) {
+                        localStorage.removeItem('zoho-notebook-current-id');
+                        location.reload();
+                    } else {
+                        await this.refreshNotebookList();
+                    }
+                }
+            } catch (e) {
+                console.error('Move to trash failed', e);
+            }
+        });
+    }
+
+    async renameNotebook(id, oldTitle) {
+        this.inputAction('Rename File', 'Enter a new title for this notebook:', oldTitle, async (newTitle) => {
+            if (!newTitle || newTitle === oldTitle) return;
+            try {
+                const res = await fetch(`/api/notebooks/${id}/rename`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: newTitle })
+                });
+                if (res.ok) {
+                    if (this.notebook.id === id) {
+                        this.notebook.title = newTitle;
+                        document.getElementById('notebook-title').value = newTitle;
+                    }
                     await this.refreshNotebookList();
                 }
+            } catch (e) {
+                console.error('Rename failed', e);
             }
-        } catch (e) {
-            console.error('Move to trash failed', e);
-        }
+        });
+    }
+
+    async renameFolder(oldName) {
+        this.inputAction('Rename Folder', `Enter a new name for "${oldName}":`, oldName, async (newName) => {
+            if (!newName || newName === oldName) return;
+            try {
+                const res = await fetch('/api/folders/rename', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ oldName, newName })
+                });
+                if (res.ok) {
+                    if (this.notebook.folder === oldName) {
+                        this.notebook.folder = newName;
+                    }
+                    await this.refreshNotebookList();
+                }
+            } catch (e) {
+                console.error('Folder rename failed', e);
+            }
+        });
+    }
+
+    async deleteFolder(folderName) {
+        this.confirmAction('Delete Folder?', `Move all notebooks in "${folderName}" to trash?`, async () => {
+            try {
+                const res = await fetch(`/api/folders/${folderName}`, { method: 'DELETE' });
+                if (res.ok) {
+                    if (this.notebook.folder === folderName) {
+                        localStorage.removeItem('zoho-notebook-current-id');
+                        location.reload();
+                    } else {
+                        await this.refreshNotebookList();
+                    }
+                }
+            } catch (e) {
+                console.error('Folder delete failed', e);
+            }
+        });
     }
 
     async loadTrash() {
@@ -635,9 +830,10 @@ class NotebookApp {
 
         document.querySelectorAll('.btn-delete-perm').forEach(btn => {
             btn.onclick = () => {
-                if (confirm('Permanently delete this notebook?')) {
-                    this.deletePermanently(btn.getAttribute('data-id'));
-                }
+                const id = btn.getAttribute('data-id');
+                this.confirmAction('Permanently Delete?', 'This notebook will be gone forever!', () => {
+                    this.deletePermanently(id);
+                });
             };
         });
 
@@ -668,15 +864,16 @@ class NotebookApp {
     }
 
     async emptyTrash() {
-        if (!confirm('Are you sure you want to empty the trash? This action cannot be undone.')) return;
-        try {
-            const res = await fetch('/api/trash-all', { method: 'DELETE' });
-            if (res.ok) {
-                await this.loadTrash();
+        this.confirmAction('Empty Trash?', 'Are you sure you want to empty the trash? This action cannot be undone.', async () => {
+            try {
+                const res = await fetch('/api/trash-all', { method: 'DELETE' });
+                if (res.ok) {
+                    await this.loadTrash();
+                }
+            } catch (e) {
+                console.error('Empty trash failed', e);
             }
-        } catch (e) {
-            console.error('Empty trash failed', e);
-        }
+        });
     }
 
     async saveToBackend() {

@@ -289,6 +289,88 @@
             line-height: 1.5;
         }
 
+        /* Notes Viewer Styles */
+        .bread-nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            color: var(--text-dim);
+            font-size: 14px;
+        }
+
+        .bread-nav span {
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .bread-nav span:hover {
+            color: var(--accent);
+        }
+
+        .note-viewer {
+            display: none;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 20px;
+            padding: 30px;
+            margin-top: 20px;
+        }
+
+        .cell-display {
+            background: #1a1a1d;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .cell-label {
+            font-size: 10px;
+            color: var(--accent);
+            text-transform: uppercase;
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .cell-content-pretty {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #eee;
+        }
+
+        .code-block {
+            background: #000;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .folder-card {
+            background: rgba(109, 93, 252, 0.1);
+            border: 1px solid rgba(109, 93, 252, 0.2);
+            padding: 20px;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .folder-card:hover {
+            background: rgba(109, 93, 252, 0.2);
+            transform: translateY(-3px);
+        }
+
+        .folder-icon {
+            font-size: 24px;
+            color: var(--accent);
+        }
+
         /* Modal / Form */
         .modal {
             display: none;
@@ -444,9 +526,26 @@
     <div id="notesDetailView" class="detail-view">
         <div class="detail-container">
             <i class="fas fa-times close-detail" onclick="closeDetail()"></i>
-            <h2 id="viewUserName">User's Notes</h2>
+
+            <div id="notesHeaderSection">
+                <h2 id="viewUserName">User's Notes</h2>
+                <div class="bread-nav" id="notesBreadcrumb">
+                    <!-- Breadcrumbs like "Root > My Work" -->
+                </div>
+            </div>
+
             <div id="notesGrid" class="notes-grid">
-                <!-- Notes will be loaded here -->
+                <!-- Folders and Files will be loaded here -->
+            </div>
+
+            <div id="noteContentArea" class="note-viewer">
+                <div class="dashboard-header" style="margin-bottom: 20px;">
+                    <h2 id="currentOpenedNoteTitle">Note Title</h2>
+                    <button class="btn-cancel" onclick="backToNotesList()" style="max-width: 100px;">Back</button>
+                </div>
+                <div id="noteCellsList">
+                    <!-- Cells will be rendered here -->
+                </div>
             </div>
         </div>
     </div>
@@ -479,9 +578,13 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
         const modal = document.getElementById('userModal');
         const detailView = document.getElementById('notesDetailView');
+        let userNotesData = [];
+        let currentUserId = '';
+        let currentUserName = '';
 
         function showCreateModal() {
             document.getElementById('modalTitle').innerText = 'Create New User';
@@ -561,36 +664,124 @@
         }
 
         async function viewUserNotes(id, name) {
+            currentUserId = id;
+            currentUserName = name;
             document.getElementById('viewUserName').innerText = `${name}'s Notes`;
             const grid = document.getElementById('notesGrid');
             grid.innerHTML = '<p>Loading notes...</p>';
             detailView.style.display = 'block';
+            backToNotesList();
 
             try {
                 const res = await fetch(`/admin/users/${id}/notes`);
-                const notes = await res.json();
-                grid.innerHTML = '';
-
-                if (notes.length === 0) {
-                    grid.innerHTML = '<p style="color: var(--text-dim);">No notes found for this user.</p>';
-                } else {
-                    notes.forEach(note => {
-                        const card = document.createElement('div');
-                        card.className = 'note-card';
-                        card.innerHTML = `
-                            <h3>${note.title || 'Untitled'}</h3>
-                            <p>${note.folder !== 'root' ? '📁 ' + note.folder : '📄 Note'}</p>
-                            <div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">
-                                Last updated: ${new Date(note.updatedAt).toLocaleDateString()}
-                            </div>
-                        `;
-                        card.onclick = () => alert('Admin Note Editing Coming Soon! Implementation details for editing content require cell-by-cell rendering similar to notebook.js');
-                        grid.appendChild(card);
-                    });
-                }
+                userNotesData = await res.json();
+                renderNotesLevel('root');
             } catch (err) {
                 grid.innerHTML = '<p style="color: var(--danger);">Error loading notes.</p>';
             }
+        }
+
+        function renderNotesLevel(folderName) {
+            const grid = document.getElementById('notesGrid');
+            const bread = document.getElementById('notesBreadcrumb');
+            grid.innerHTML = '';
+
+            // Build Breadcrumb
+            bread.innerHTML = `<span onclick="renderNotesLevel('root')">Root</span>`;
+            if (folderName !== 'root') {
+                bread.innerHTML += ` <i class="fas fa-chevron-right" style="font-size: 10px; margin: 0 5px;"></i> <span>${folderName}</span>`;
+            }
+
+            const itemsInLevel = userNotesData.filter(n => (n.folder || 'root') === folderName);
+
+            // If we are at root, show other folders first
+            if (folderName === 'root') {
+                const folders = [...new Set(userNotesData.map(n => n.folder || 'root'))].filter(f => f !== 'root');
+                folders.forEach(f => {
+                    const card = document.createElement('div');
+                    card.className = 'folder-card';
+                    card.innerHTML = `
+                        <i class="fas fa-folder folder-icon"></i>
+                        <div>
+                            <div style="font-weight: 600;">${f}</div>
+                            <div style="font-size: 12px; color: var(--text-dim);">${userNotesData.filter(n => n.folder === f).length} items</div>
+                        </div>
+                    `;
+                    card.onclick = () => renderNotesLevel(f);
+                    grid.appendChild(card);
+                });
+            }
+
+            // Show files
+            if (itemsInLevel.length === 0 && folderName === 'root' && grid.innerHTML === '') {
+                grid.innerHTML = '<p style="color: var(--text-dim);">No notes found for this user.</p>';
+                return;
+            }
+
+            itemsInLevel.forEach(note => {
+                const card = document.createElement('div');
+                card.className = 'note-card';
+                card.innerHTML = `
+                    <h3>${note.title || 'Untitled'}</h3>
+                    <p>📄 Note File</p>
+                    <div style="font-size: 11px; color: var(--text-dim); margin-top: 10px;">
+                        Last updated: ${new Date(note.updatedAt).toLocaleDateString()}
+                    </div>
+                `;
+                card.onclick = () => viewNoteContent(note.id, note.title);
+                grid.appendChild(card);
+            });
+        }
+
+        async function viewNoteContent(id, title) {
+            document.getElementById('notesHeaderSection').style.display = 'none';
+            document.getElementById('notesGrid').style.display = 'none';
+            const contentArea = document.getElementById('noteContentArea');
+            const listArea = document.getElementById('noteCellsList');
+
+            contentArea.style.display = 'block';
+            document.getElementById('currentOpenedNoteTitle').innerText = title || 'Untitled Note';
+            listArea.innerHTML = '<p>Loading content...</p>';
+
+            try {
+                const res = await fetch(`/api/notebooks/${id}`);
+                const data = await res.json();
+                const cells = data.cells || [];
+                listArea.innerHTML = '';
+
+                if (cells.length === 0) {
+                    listArea.innerHTML = '<p style="color: var(--text-dim);">This note is empty.</p>';
+                } else {
+                    cells.forEach(cell => {
+                        const cellDiv = document.createElement('div');
+                        cellDiv.className = 'cell-display';
+                        const typeLabel = cell.type === 'markdown' ? 'MARKDOWN' : 'CODE';
+                        const titleLabel = cell.title ? ` - ${cell.title}` : '';
+
+                        cellDiv.innerHTML = `
+                            <span class="cell-label">${typeLabel}${titleLabel}</span>
+                            <div class="cell-content-pretty">
+                                ${cell.type === 'markdown' ? marked.parse(cell.content || '') : `<pre class="code-block"><code>${escapeHtml(cell.content || '')}</code></pre>`}
+                            </div>
+                        `;
+                        listArea.appendChild(cellDiv);
+                    });
+                }
+            } catch (err) {
+                listArea.innerHTML = '<p style="color: var(--danger);">Error loading note content.</p>';
+            }
+        }
+
+        function backToNotesList() {
+            document.getElementById('notesHeaderSection').style.display = 'block';
+            document.getElementById('notesGrid').style.display = 'grid';
+            document.getElementById('noteContentArea').style.display = 'none';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
     </script>
 </body>

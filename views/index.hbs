@@ -45,34 +45,25 @@
                 <div class="nav-item" id="nav-starred-cells">
                     <i data-lucide="star" style="fill: #ffcc00; color: #ffcc00;"></i> Starred Notes
                 </div>
-                <div class="nav-item">
-                    <i data-lucide="tag"></i> Tags
-                </div>
                 <div class="nav-item" id="nav-trash">
                     <i data-lucide="trash-2"></i> Trash
                 </div>
             </nav>
 
             <div style="margin-top: auto; padding: 20px 0; border-top: 1px solid var(--border-color);">
-                <div class="user-profile"
-                    style="display: flex; align-items: center; gap: 12px; padding: 0 16px; margin-bottom: 20px;">
-                    <div class="user-avatar"
-                        style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; text-transform: uppercase;">
+                <div class="user-profile-card">
+                    <div class="user-avatar">
                         {{#if username}}{{substring username 0 1}}{{else}}U{{/if}}
                     </div>
-                    <div style="flex: 1; overflow: hidden;">
-                        <div
-                            style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                            {{username}}</div>
-                        <a href="/logout"
-                            style="font-size: 12px; color: #ff3b30; text-decoration: none; font-weight: 600; display: block; margin-top: 2px;">Logout</a>
+                    <div class="user-info">
+                        <div class="user-name-sidebar">{{username}}</div>
+                        <a href="/logout" class="user-logout-link">Logout Account</a>
                     </div>
                 </div>
-                <div class="nav-item">
+                <div class="nav-item" id="nav-settings">
                     <i data-lucide="settings"></i> Settings
                 </div>
-                <div
-                    style="margin-left: 20%; font-size: 10px; color: var(--text-dim); opacity: 0.9; margin-top: 10px;">
+                <div style="margin-left: 20%; font-size: 10px; color: var(--text-dim); opacity: 0.9; margin-top: 10px;">
                     <a href="" style="text-decoration: none; color: var(--text-dim);">©Fayas kp</a>
                 </div>
             </div>
@@ -89,8 +80,6 @@
                     <input type="text" class="notebook-title" id="notebook-title" value="Untitled Notebook"
                         placeholder="Enter title..." style="flex: 1; margin-bottom: 0;">
                     <div style="display: flex; gap: 10px;">
-                        <span class="nav-item"
-                            style="padding: 4px 10px; font-size: 12px; height: auto;">#javascript</span>
                     </div>
                 </header>
 
@@ -111,6 +100,96 @@
         <button class="btn-floating" style="background: #333;" id="run-all-cells" title="Run All">
             <i data-lucide="play"></i>
         </button>
+    </div>
+
+    <!-- Generic Modal Structure -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <!-- New Folder Modal -->
+        <div id="modal-folder" class="modal-content hidden">
+            <button class="modal-btn-x modal-close">&times;</button>
+            <div class="modal-icon">
+                <img src="/.gemini/antigravity/brain/f8109448-7949-4cf6-af9a-eca12ee95687/folder_creation_icon_1768049162606.png"
+                    alt="Folder Icon">
+            </div>
+            <h2>Create New Folder</h2>
+            <p>Organize your thoughts into a new workspace.</p>
+            <input type="text" id="input-folder-name" placeholder="Folder name..." value="New Folder">
+            <button class="btn-primary" id="btn-confirm-folder">Create Folder</button>
+        </div>
+
+        <!-- New File Modal -->
+        <div id="modal-file" class="modal-content hidden">
+            <button class="modal-btn-x modal-close">&times;</button>
+            <div class="modal-icon">
+                <img src="/.gemini/antigravity/brain/f8109448-7949-4cf6-af9a-eca12ee95687/file_creation_icon_1768049187671.png"
+                    alt="File Icon">
+            </div>
+            <h2>Create New File</h2>
+            <p>Start a new note in <span id="target-folder-name">root</span></p>
+            <input type="text" id="input-file-name" placeholder="File title..." value="New File">
+            <button class="btn-primary" id="btn-confirm-file">Create File</button>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="modal-settings" class="modal-content hidden">
+            <button class="modal-btn-x modal-close">&times;</button>
+            <div class="modal-icon"
+                style="background: var(--accent); border-radius: 50%; width: 60px; height: 60px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 24px;">
+                {{#if username}}{{substring username 0 1}}{{else}}U{{/if}}
+            </div>
+            <h2>Settings</h2>
+            <p>Manage your account and preferences.</p>
+
+            <div class="settings-group">
+                <div class="user-info-large">
+                    <strong>{{username}}</strong>
+                    <span>User Account</span>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <div class="theme-toggle-row">
+                    <span>Appearance</span>
+                    <label class="switch">
+                        <input type="checkbox" id="theme-switch">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <a href="/logout" class="btn-danger-outline">Logout Account</a>
+            </div>
+        </div>
+
+        <!-- Generic Input Modal (Rename) -->
+        <div id="modal-input" class="modal-content hidden">
+            <button class="modal-btn-x modal-close">&times;</button>
+            <div class="modal-icon">
+                <i data-lucide="edit-3" style="width: 50px; height: 50px; color: var(--accent);"></i>
+            </div>
+            <h2 id="modal-input-title">Rename</h2>
+            <p id="modal-input-desc">Enter a new name.</p>
+            <input type="text" id="modal-input-field" placeholder="Type here...">
+            <div class="modal-footer">
+                <button class="btn-primary" id="btn-modal-input-confirm">Confirm</button>
+                <button class="btn-secondary modal-close">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Generic Alert Modal (Confirmation) -->
+        <div id="modal-alert" class="modal-content hidden">
+            <button class="modal-btn-x modal-close">&times;</button>
+            <div class="modal-icon">
+                <i data-lucide="alert-triangle" style="width: 50px; height: 50px; color: #ff3b30;"></i>
+            </div>
+            <h2 id="modal-alert-title">Are you sure?</h2>
+            <p id="modal-alert-desc">This action cannot be undone.</p>
+            <div class="modal-footer">
+                <button class="btn-primary" id="btn-modal-alert-confirm" style="background: #ff3b30;">Confirm</button>
+                <button class="btn-secondary modal-close">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <script src="/js/notebook.js"></script>

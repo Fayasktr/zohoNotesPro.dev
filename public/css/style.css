@@ -1,14 +1,33 @@
 :root {
     --bg-dark: #0a0a0c;
+    --sidebar-bg: #0f0f12;
     --card-bg: rgba(255, 255, 255, 0.03);
     --border-color: rgba(255, 255, 255, 0.1);
     --accent: #6d5dfc;
+    --accent-rgb: 109, 93, 252;
     --accent-hover: #5b4cf0;
     --text-main: #e0e0e0;
     --text-dim: #a0a0a0;
     --glass-bg: rgba(18, 18, 22, 0.8);
     --code-bg: #1e1e1e;
     --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    --modal-bg: #121216;
+}
+
+body.light-theme {
+    --bg-dark: #e0e2e5;
+    --sidebar-bg: #d0d4d9;
+    --card-bg: #f0f2f5;
+    --border-color: #c8ccd1;
+    --accent: #6d5dfc;
+    --accent-rgb: 109, 93, 252;
+    --accent-hover: #5b4cf0;
+    --text-main: #3c4043;
+    --text-dim: #5f6368;
+    --glass-bg: rgba(224, 226, 229, 0.9);
+    --code-bg: #d8dce0;
+    --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
+    --modal-bg: #f0f2f5;
 }
 
 * {
@@ -36,7 +55,7 @@ body {
 /* Sidebar Styling */
 .sidebar {
     width: 280px;
-    background: #0f0f12;
+    background: var(--sidebar-bg);
     /* Distinct dark background for separation */
     border-right: 1px solid var(--border-color);
     backdrop-filter: blur(12px);
@@ -53,7 +72,7 @@ body {
     font-size: 24px;
     font-weight: 800;
     margin-bottom: 40px;
-    background: linear-gradient(135deg, #6d5dfc, #e0e0e0);
+    background: linear-gradient(135deg, var(--accent), var(--text-main));
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -117,7 +136,7 @@ body {
     font-weight: 700;
     background: none;
     border: none;
-    color: white;
+    color: var(--text-main);
     width: 100%;
     margin-bottom: 10px;
 }
@@ -209,8 +228,8 @@ body {
 }
 
 .btn-icon:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+    background: rgba(var(--accent-rgb), 0.1);
+    color: var(--accent);
 }
 
 .btn-star-cell {
@@ -239,21 +258,27 @@ body {
 }
 
 .btn-icon-sm:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: white;
+    background: rgba(var(--accent-rgb), 0.15);
+    color: var(--accent);
 }
 
-.delete-notebook-btn {
+.delete-notebook-btn,
+.rename-notebook-btn {
     opacity: 0;
     transition: opacity 0.2s;
 }
 
-.notebook-item:hover .delete-notebook-btn {
+.notebook-item:hover .delete-notebook-btn,
+.notebook-item:hover .rename-notebook-btn {
     opacity: 1;
 }
 
 .delete-notebook-btn:hover {
     color: #ff3b30;
+}
+
+.rename-notebook-btn:hover {
+    color: var(--accent);
 }
 
 /* Markdown Specifics */
@@ -417,7 +442,7 @@ body {
 }
 
 .notebook-item:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--card-bg);
     color: var(--text-main);
 }
 
@@ -454,14 +479,25 @@ body {
     transform: rotate(-90deg);
 }
 
-.btn-add-file {
+.btn-add-file,
+.btn-rename-folder,
+.btn-delete-folder {
     opacity: 0;
     transition: opacity 0.2s;
-    margin-left: auto;
 }
 
-.folder-header:hover .btn-add-file {
+.folder-header:hover .btn-add-file,
+.folder-header:hover .btn-rename-folder,
+.folder-header:hover .btn-delete-folder {
     opacity: 1;
+}
+
+.btn-delete-folder:hover {
+    color: #ff3b30;
+}
+
+.btn-rename-folder:hover {
+    color: var(--accent);
 }
 
 .folder-content {
@@ -501,7 +537,297 @@ body {
     background: rgba(255, 255, 255, 0.05);
 }
 
+/* Modals */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    transition: opacity 0.3s ease;
+}
+
+.modal-content {
+    background: var(--modal-bg);
+    width: 100%;
+    max-width: 400px;
+    padding: 40px;
+    border-radius: 24px;
+    position: relative;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+    text-align: center;
+    animation: modalPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes modalPop {
+    from {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.modal-btn-x {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 24px;
+    cursor: pointer;
+    line-height: 1;
+    z-index: 10;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 12px;
+    margin-top: 30px;
+}
+
+.modal-footer button {
+    flex: 1;
+}
+
+.btn-secondary {
+    background: var(--card-bg);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background: rgba(150, 150, 150, 0.1);
+    border-color: var(--text-dim);
+}
+
+.modal-icon img {
+    width: 100px;
+    height: 100px;
+    margin-bottom: 20px;
+}
+
+.modal-content h2 {
+    font-size: 22px;
+    margin-bottom: 10px;
+    color: var(--text-main);
+}
+
+.modal-content p {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-bottom: 25px;
+}
+
+.modal-content input {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    color: var(--text-main);
+    margin-bottom: 20px;
+    outline: none;
+    font-size: 14px;
+}
+
+.modal-content input:focus {
+    border-color: var(--accent);
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-primary:hover {
+    background: var(--accent-hover);
+}
+
+.btn-danger-outline {
+    display: inline-block;
+    padding: 10px 20px;
+    border: 1px solid #ff3b30;
+    color: #ff3b30;
+    text-decoration: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.btn-danger-outline:hover {
+    background: #ff3b30;
+    color: white;
+}
+
+/* Settings Specifics */
+.settings-group {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+    text-align: left;
+}
+
+.user-info-large {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-info-large strong {
+    font-size: 18px;
+}
+
+.user-info-large span {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.theme-toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 46px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #333;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked+.slider {
+    background-color: var(--accent);
+}
+
+input:checked+.slider:before {
+    transform: translateX(22px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
 /* Utils */
 .hidden {
-    display: none;
+    display: none !important;
+}
+
+/* User Profile Card Button */
+.user-profile-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    margin-bottom: 20px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.user-profile-card:hover {
+    background: rgba(150, 150, 150, 0.1);
+    /* Gray-mixed hover effect */
+    border-color: var(--border-color);
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    text-transform: uppercase;
+    color: white;
+    flex-shrink: 0;
+}
+
+.user-info {
+    flex: 1;
+    overflow: hidden;
+}
+
+.user-name-sidebar {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-main);
+}
+
+.user-logout-link {
+    font-size: 12px;
+    color: #ff3b30;
+    text-decoration: none;
+    font-weight: 600;
+    display: block;
+    margin-top: 1px;
+    opacity: 0.8;
+}
+
+.user-profile-card:hover .user-logout-link {
+    opacity: 1;
+    text-decoration: underline;
 }
