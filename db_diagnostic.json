@@ -1,0 +1,54 @@
+{
+  "total": 7,
+  "users": [
+    {
+      "id": "695e9ca643977d48384b8f5b",
+      "email": "test@example.com",
+      "role": "user",
+      "isBlocked": false,
+      "hasPassword": true
+    },
+    {
+      "id": "695e9d0a43977d48384b8f65",
+      "email": "Fayaskpktr@gmail.com",
+      "role": "user",
+      "isBlocked": false,
+      "hasPassword": true
+    },
+    {
+      "id": "695fe57ef2c9b0849d034a1b",
+      "email": "zayn@gamil.com",
+      "role": "user",
+      "isBlocked": false,
+      "hasPassword": true
+    },
+    {
+      "id": "6960a82873de6bb63eb605f0",
+      "email": "fayaskaykay@gmail.com",
+      "role": "user",
+      "isBlocked": false,
+      "hasPassword": true
+    },
+    {
+      "id": "6961ea03293ce0d52414f4aa",
+      "email": "anaswarasuresh333@gmail.com",
+      "role": "user",
+      "isBlocked": false,
+      "hasPassword": true
+    },
+    {
+      "id": "6961f69df978ad41db232d1a",
+      "email": "admin@gmail.com",
+      "role": "admin",
+      "isBlocked": false,
+      "hasPassword": true
+    },
+    {
+      "id": "696210af598a1c15244d1315",
+      "email": "demo@gamil.com",
+      "role": "user",
+      "isBlocked": false,
+      "hasPassword": true
+    }
+  ]
+}

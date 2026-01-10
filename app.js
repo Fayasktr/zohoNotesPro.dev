@@ -12,6 +12,13 @@ const engine = require('./engine/AntigravityEngine');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 
+// Models
+const User = require('./models/User');
+const Note = require('./models/Note');
+
+// Routes
+const adminRoutes = require('./routes/adminRoutes');
+
 // Handlebars Helpers
 hbs.registerHelper('substring', function (str, start, len) {
     if (!str) return "";
@@ -24,31 +31,6 @@ mongoose.connect(mongoURI)
     .then(() => console.log('Connected to MongoDB'))
     .catch(err => console.error('MongoDB connection error:', err));
 
-// User Schema
-const userSchema = new mongoose.Schema({
-    username: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    resetPasswordToken: String,
-    resetPasswordExpires: Date
-});
-
-const User = mongoose.model('User', userSchema);
-
-// Note Schema (Updated with owner)
-const noteSchema = new mongoose.Schema({
-    id: { type: String, required: true, unique: true },
-    title: { type: String, default: 'Untitled' },
-    isStarred: { type: Boolean, default: false },
-    isTrashed: { type: Boolean, default: false },
-    content: { type: mongoose.Schema.Types.Mixed, default: {} },
-    folder: { type: String, default: 'root' },
-    owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    updatedAt: { type: Date, default: Date.now }
-}, { collection: 'notes' });
-
-const Note = mongoose.model('Note', noteSchema);
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -59,7 +41,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'hbs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Prevent caching for all routes (important for logout security)
+// Prevent caching for all routes
 app.use((req, res, next) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     next();
@@ -82,8 +64,12 @@ const isAuthenticated = (req, res, next) => {
     res.redirect('/login');
 };
 
-// --- AUTH ROUTES ---
+// --- ROUTES ---
 
+// Admin Routes (MVC)
+app.use('/admin', adminRoutes);
+
+// Auth Routes
 app.get('/signup', (req, res) => {
     if (req.session.userId) return res.redirect('/');
     res.render('signup', { title: 'Signup - Zoho Notes' });
@@ -93,10 +79,11 @@ app.post('/signup', async (req, res) => {
     const { username, email, password } = req.body;
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        const user = new User({ username, email, password: hashedPassword });
+        const user = new User({ username, email, password: hashedPassword, role: 'user' });
         await user.save();
         req.session.userId = user._id;
         req.session.username = user.username;
+        req.session.role = user.role;
         res.redirect('/');
     } catch (err) {
         res.render('signup', { error: 'Email already exists' });
@@ -104,7 +91,9 @@ app.post('/signup', async (req, res) => {
 });
 
 app.get('/login', (req, res) => {
-    if (req.session.userId) return res.redirect('/');
+    if (req.session.userId) {
+        return req.session.role === 'admin' ? res.redirect('/admin/dashboard') : res.redirect('/');
+    }
     res.render('login', { title: 'Login - Zoho Notes' });
 });
 
@@ -113,9 +102,18 @@ app.post('/login', async (req, res) => {
     try {
         const user = await User.findOne({ email });
         if (user && await bcrypt.compare(password, user.password)) {
+            if (user.isBlocked) {
+                return res.render('login', { error: 'Your account has been blocked. Please contact support.' });
+            }
             req.session.userId = user._id;
             req.session.username = user.username;
-            res.redirect('/');
+            req.session.role = user.role;
+
+            if (user.role === 'admin') {
+                res.redirect('/admin/dashboard');
+            } else {
+                res.redirect('/');
+            }
         } else {
             res.render('login', { error: 'Invalid email or password' });
         }
@@ -142,13 +140,12 @@ app.post('/forgot-password', async (req, res) => {
     try {
         const user = await User.findOne({ email });
         if (!user) {
-            // Security best practice: don't reveal if user exists
             return res.render('forgot', { success: 'If an account exists with that email, a reset link has been sent.' });
         }
 
         const token = crypto.randomBytes(20).toString('hex');
         user.resetPasswordToken = token;
-        user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+        user.resetPasswordExpires = Date.now() + 3600000;
         await user.save();
 
         const transporter = nodemailer.createTransport({
@@ -174,25 +171,17 @@ app.post('/forgot-password', async (req, res) => {
         if (process.env.EMAIL_USER && process.env.EMAIL_PASS && !isPlaceholder(process.env.EMAIL_USER) && !isPlaceholder(process.env.EMAIL_PASS)) {
             try {
                 await transporter.sendMail(mailOptions);
-                await transporter.sendMail(mailOptions);
                 console.log(`Password reset email sent to: ${user.email}`);
             } catch (smtpError) {
                 console.error('SMTP ERROR detail:', smtpError);
-                console.error('SMTP Error Message:', smtpError.message);
-                // Fallback to console if SMTP fails
-                console.log('--- RESET LINK (SMTP FAILED) ---');
                 console.log(`Link: http://${req.headers.host}/reset-password/${token}`);
-                console.log('-------------------------------------------');
             }
         } else {
-            console.log('--- RESET LINK (Emails not configured or using placeholders) ---');
             console.log(`Link: http://${req.headers.host}/reset-password/${token}`);
-            console.log('-------------------------------------------');
         }
 
         res.render('forgot', { success: 'If an account exists with that email, a reset link has been sent.' });
     } catch (err) {
-        console.error('Forgot password error:', err);
         res.render('forgot', { error: 'Something went wrong. Please try again later.' });
     }
 });
@@ -203,11 +192,7 @@ app.get('/reset-password/:token', async (req, res) => {
             resetPasswordToken: req.params.token,
             resetPasswordExpires: { $gt: Date.now() }
         });
-
-        if (!user) {
-            return res.render('forgot', { error: 'Password reset token is invalid or has expired.' });
-        }
-
+        if (!user) return res.render('forgot', { error: 'Password reset token is invalid or has expired.' });
         res.render('reset', { title: 'Reset Password - Zoho Notes', token: req.params.token });
     } catch (err) {
         res.render('forgot', { error: 'Something went wrong.' });
@@ -219,23 +204,16 @@ app.post('/reset-password/:token', async (req, res) => {
     if (password !== confirm) {
         return res.render('reset', { error: 'Passwords do not match.', token: req.params.token });
     }
-
     try {
         const user = await User.findOne({
             resetPasswordToken: req.params.token,
             resetPasswordExpires: { $gt: Date.now() }
         });
-
-        if (!user) {
-            return res.render('forgot', { error: 'Password reset token is invalid or has expired.' });
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-        user.password = hashedPassword;
+        if (!user) return res.render('forgot', { error: 'Password reset token is invalid or has expired.' });
+        user.password = await bcrypt.hash(password, 10);
         user.resetPasswordToken = undefined;
         user.resetPasswordExpires = undefined;
         await user.save();
-
         res.render('login', { success: 'Success! Your password has been changed. You can now login.' });
     } catch (err) {
         res.render('reset', { error: 'Something went wrong.', token: req.params.token });
@@ -245,6 +223,7 @@ app.post('/reset-password/:token', async (req, res) => {
 // --- CORE APP ROUTES ---
 
 app.get('/', isAuthenticated, (req, res) => {
+    if (req.session.role === 'admin') return res.redirect('/admin/dashboard');
     res.render('index', {
         title: 'Zoho Notes',
         username: req.session.username
@@ -343,7 +322,7 @@ app.post(/^\/api\/trash\/restore\/(.+)$/, isAuthenticated, async (req, res) => {
 app.delete(/^\/api\/trash\/(.+)$/, isAuthenticated, async (req, res) => {
     const notebookId = req.params[0];
     try {
-        const result = await Note.deleteOne({ id: notebookId, owner: req.session.userId });
+        await Note.deleteOne({ id: notebookId, owner: req.session.userId });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to permanently delete' });
