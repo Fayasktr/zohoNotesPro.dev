@@ -151,18 +151,12 @@ app.post('/forgot-password', async (req, res) => {
         user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
         await user.save();
 
+        // HARDCODED FOR TESTING - Bypass potential .env issues
         const transporter = nodemailer.createTransport({
-            host: process.env.EMAIL_HOST || 'smtp.office365.com',
-            port: parseInt(process.env.EMAIL_PORT) || 587,
-            secure: false, // Use STARTTLS
-            requireTLS: true,
+            service: 'gmail',
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS
-            },
-            tls: {
-                rejectUnauthorized: false,
-                ciphers: 'SSLv3'
             }
         });
 
