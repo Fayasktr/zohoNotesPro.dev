@@ -151,7 +151,6 @@ app.post('/forgot-password', async (req, res) => {
         user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
         await user.save();
 
-        // HARDCODED FOR TESTING - Bypass potential .env issues
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: {
@@ -174,6 +173,7 @@ app.post('/forgot-password', async (req, res) => {
 
         if (process.env.EMAIL_USER && process.env.EMAIL_PASS && !isPlaceholder(process.env.EMAIL_USER) && !isPlaceholder(process.env.EMAIL_PASS)) {
             try {
+                await transporter.sendMail(mailOptions);
                 await transporter.sendMail(mailOptions);
                 console.log(`Password reset email sent to: ${user.email}`);
             } catch (smtpError) {

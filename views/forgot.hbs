@@ -185,13 +185,23 @@
         <div class="success-msg">{{success}}</div>
         {{/if}}
 
-        <form action="/forgot-password" method="POST">
+        <form action="/forgot-password" method="POST" id="forgotForm">
             <div class="form-group">
                 <label>Email Address</label>
                 <input type="email" name="email" placeholder="name@example.com" required>
             </div>
-            <button type="submit" class="btn-action">Send Reset Link</button>
+            <button type="submit" class="btn-action" id="submitBtn">Send Reset Link</button>
         </form>
+
+        <script>
+            document.getElementById('forgotForm').addEventListener('submit', function () {
+                const btn = document.getElementById('submitBtn');
+                btn.disabled = true;
+                btn.innerText = 'Sending...';
+                btn.style.opacity = '0.7';
+                btn.style.cursor = 'not-allowed';
+            });
+        </script>
 
         <div class="footer">
             Remembered? <a href="/login">Back to Login</a>
