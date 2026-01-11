@@ -447,6 +447,29 @@ app.put(/^\/api\/notebooks\/(.+)\/rename$/, isAuthenticated, async (req, res) =>
     }
 });
 
+// Move Cell between Notebooks
+app.post('/api/notebooks/move-cell', isAuthenticated, async (req, res) => {
+    const { sourceNotebookId, targetNotebookId, cell } = req.body;
+    try {
+        // 1. Remove from source
+        await Note.updateOne(
+            { id: sourceNotebookId, owner: req.session.userId },
+            { $pull: { 'content.cells': { id: cell.id } } }
+        );
+
+        // 2. Add to target
+        await Note.updateOne(
+            { id: targetNotebookId, owner: req.session.userId },
+            { $push: { 'content.cells': cell } }
+        );
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Move cell API error:', err);
+        res.status(500).json({ error: 'Failed to move cell' });
+    }
+});
+
 // Folder Management
 app.put('/api/folders/rename', isAuthenticated, async (req, res) => {
     const { oldName, newName } = req.body;

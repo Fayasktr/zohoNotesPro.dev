@@ -176,6 +176,36 @@ body {
     transform: translateY(-2px);
 }
 
+/* Drag and Drop Styles */
+.drag-handle {
+    cursor: grab;
+    padding: 4px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.drag-handle:hover {
+    color: var(--text-main);
+}
+
+.cell.dragging {
+    opacity: 0.5;
+    border: 2px dashed var(--accent);
+}
+
+.cell.drag-over {
+    border-top: 4px solid var(--accent);
+    transform: translateY(2px);
+}
+
+.notebook-item.drag-over {
+    background: rgba(109, 93, 252, 0.2);
+    border: 1px dashed var(--accent);
+}
+
 .cell-header {
     padding: 10px 12px;
     border-bottom: 1px solid var(--border-color);

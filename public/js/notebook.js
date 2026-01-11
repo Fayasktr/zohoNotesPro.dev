@@ -155,6 +155,20 @@ class NotebookApp {
             }
         });
 
+        // Drag and Drop for Reordering Cells
+        const cellsList = document.getElementById('cells-list');
+        cellsList.addEventListener('dragstart', (e) => this.handleCellDragStart(e));
+        cellsList.addEventListener('dragover', (e) => this.handleCellDragOver(e));
+        cellsList.addEventListener('dragleave', (e) => this.handleCellDragLeave(e));
+        cellsList.addEventListener('dragend', (e) => this.handleCellDragEnd(e));
+        cellsList.addEventListener('drop', (e) => this.handleCellDrop(e));
+
+        // Drag and Drop for Moving Notes to other Notebooks
+        const notebookList = document.getElementById('notebook-list');
+        notebookList.addEventListener('dragover', (e) => this.handleNotebookDragOver(e));
+        notebookList.addEventListener('dragleave', (e) => this.handleNotebookDragLeave(e));
+        notebookList.addEventListener('drop', (e) => this.handleNotebookDrop(e));
+
         document.getElementById('cells-list').addEventListener('input', (e) => {
             if (e.target.classList.contains('cell-title-input')) {
                 const cellElem = e.target.closest('.cell');
@@ -537,11 +551,15 @@ class NotebookApp {
         const cellElem = document.createElement('div');
         cellElem.className = 'cell';
         cellElem.id = `container-${cell.id}`;
+        cellElem.draggable = true;
 
         const isMark = cell.type === 'markdown';
 
         cellElem.innerHTML = `
             <div class="cell-header">
+                <div class="drag-handle" title="Drag to Reorder">
+                    <i data-lucide="grip-vertical" style="width: 14px;"></i>
+                </div>
                 <div class="reorder-btns">
                     <button class="btn-reorder move-up" title="Move Up"><i data-lucide="chevron-up" style="width:12px;"></i></button>
                     <button class="btn-reorder move-down" title="Move Down"><i data-lucide="chevron-down" style="width:12px;"></i></button>
@@ -798,8 +816,8 @@ class NotebookApp {
     }
 
     async renameNotebook(id, oldTitle) {
-        this.inputAction('Rename File', 'Enter a new title for this notebook:', oldTitle, async (newTitle) => {
-            if (!newTitle || newTitle === oldTitle) return;
+        this.inputAction('Rename Notebook', 'Enter a new title for this notebook:', oldTitle, async (newTitle) => {
+            if (!newTitle) return;
             try {
                 const res = await this.safeFetch(`/api/notebooks/${id}/rename`, {
                     method: 'PUT',
@@ -815,6 +833,115 @@ class NotebookApp {
                 }
             } catch (e) {
                 console.error('Rename failed', e);
+            }
+        });
+    }
+
+    // --- Drag and Drop Handlers ---
+
+    handleCellDragStart(e) {
+        const cell = e.target.closest('.cell');
+        if (!cell) return;
+        this.draggedCellId = cell.id.replace('container-', '');
+        cell.classList.add('dragging');
+        e.dataTransfer.setData('text/plain', this.draggedCellId);
+        e.dataTransfer.effectAllowed = 'move';
+    }
+
+    handleCellDragOver(e) {
+        e.preventDefault();
+        const cell = e.target.closest('.cell');
+        if (!cell || cell.id.replace('container-', '') === this.draggedCellId) return;
+        cell.classList.add('drag-over');
+    }
+
+    handleCellDragLeave(e) {
+        const cell = e.target.closest('.cell');
+        if (cell) cell.classList.remove('drag-over');
+    }
+
+    handleCellDragEnd(e) {
+        const cell = e.target.closest('.cell');
+        if (cell) cell.classList.remove('dragging');
+        document.querySelectorAll('.cell').forEach(c => c.classList.remove('drag-over'));
+    }
+
+    handleCellDrop(e) {
+        e.preventDefault();
+        const targetCell = e.target.closest('.cell');
+        if (!targetCell) return;
+
+        const targetCellId = targetCell.id.replace('container-', '');
+        if (targetCellId === this.draggedCellId) return;
+
+        const sourceIndex = this.notebook.cells.findIndex(c => c.id === this.draggedCellId);
+        const targetIndex = this.notebook.cells.findIndex(c => c.id === targetCellId);
+
+        if (sourceIndex !== -1 && targetIndex !== -1) {
+            const [movedCell] = this.notebook.cells.splice(sourceIndex, 1);
+            this.notebook.cells.splice(targetIndex, 0, movedCell);
+
+            this.disposeEditors();
+            document.getElementById('cells-list').innerHTML = '';
+            this.notebook.cells.forEach(cell => this.renderCell(cell));
+            this._autoSave();
+        }
+    }
+
+    handleNotebookDragOver(e) {
+        e.preventDefault();
+        const item = e.target.closest('.notebook-item');
+        if (item && item.getAttribute('data-id') !== this.notebook.id) {
+            item.classList.add('drag-over');
+            e.dataTransfer.dropEffect = 'move';
+        }
+    }
+
+    handleNotebookDragLeave(e) {
+        const item = e.target.closest('.notebook-item');
+        if (item) item.classList.remove('drag-over');
+    }
+
+    async handleNotebookDrop(e) {
+        e.preventDefault();
+        const item = e.target.closest('.notebook-item');
+        if (!item) return;
+
+        item.classList.remove('drag-over');
+        const targetNotebookId = item.getAttribute('data-id');
+        const cellId = e.dataTransfer.getData('text/plain');
+
+        if (targetNotebookId === this.notebook.id) return;
+
+        this.confirmAction('Move Note?', 'Move this note to another notebook?', async () => {
+            try {
+                const cellIndex = this.notebook.cells.findIndex(c => c.id === cellId);
+                if (cellIndex === -1) return;
+
+                const [cell] = this.notebook.cells.splice(cellIndex, 1);
+
+                const res = await this.safeFetch('/api/notebooks/move-cell', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sourceNotebookId: this.notebook.id,
+                        targetNotebookId: targetNotebookId,
+                        cell: cell
+                    })
+                });
+
+                if (res.ok) {
+                    this.disposeEditors();
+                    document.getElementById('cells-list').innerHTML = '';
+                    this.notebook.cells.forEach(cell => this.renderCell(cell));
+                    this._autoSave();
+                } else {
+                    // Restore cell if move failed
+                    this.notebook.cells.splice(cellIndex, 0, cell);
+                    alert('Failed to move note');
+                }
+            } catch (err) {
+                console.error('Move cell failed', err);
             }
         });
     }
