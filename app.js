@@ -8,7 +8,9 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 const { MongoStore } = require('connect-mongo');
 const bcrypt = require('bcryptjs');
-const engine = require('./engine/AntigravityEngine');
+const Note = require('./models/Note');
+const TrashedCell = require('./models/TrashedCell');
+const AntigravityEngine = require('./engine/AntigravityEngine');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const helmet = require('helmet');
@@ -17,7 +19,6 @@ const rateLimit = require('express-rate-limit');
 
 // Models
 const User = require('./models/User');
-const Note = require('./models/Note');
 
 // Routes
 const adminRoutes = require('./routes/adminRoutes');
@@ -109,9 +110,9 @@ app.use(async (req, res, next) => {
 
 // Rate Limiting for Auth Routes
 const authLimiter = rateLimit({
-    windowMs: 3 * 60 * 1000, // 3 minutes
-    max: 30, // Limit each IP to 30 requests per window
-    message: 'Too many requests from this IP, please try again after 15 minutes',
+    windowMs: 1 * 60 * 1000, // 1 minutes
+    max: 100, // Limit each IP to 100 requests per window
+    message: 'Too many requests from this IP, please try again after 1 minutes. This is to prevent abuse.',
     standardHeaders: true,
     legacyHeaders: false,
 });
@@ -417,10 +418,88 @@ app.post('/api/notebooks', isAuthenticated, async (req, res) => {
 
 app.get('/api/trash', isAuthenticated, async (req, res) => {
     try {
-        const notes = await Note.find({ owner: req.session.userId, isTrashed: true }, 'id title folder updated_at');
-        res.json(notes);
+        const notebooks = await Note.find({ owner: req.session.userId, isTrashed: true }, 'id title folder updatedAt');
+        const cells = await TrashedCell.find({ owner: req.session.userId }).sort({ deletedAt: -1 });
+
+        res.json({
+            notebooks,
+            cells
+        });
     } catch (err) {
         res.status(500).json({ error: 'Failed to list trash' });
+    }
+});
+
+// Trash individual cell
+app.post('/api/cells/trash', isAuthenticated, async (req, res) => {
+    const { notebookId, cell } = req.body;
+    try {
+        const notebook = await Note.findOne({ id: notebookId, owner: req.session.userId });
+        if (!notebook) return res.status(404).json({ error: 'Notebook not found' });
+
+        // Save to TrashedCell
+        const trashedCell = new TrashedCell({
+            ...cell,
+            originalNotebookId: notebookId,
+            originalNotebookTitle: notebook.title,
+            owner: req.session.userId
+        });
+        await trashedCell.save();
+
+        // Remove from Note content
+        await Note.updateOne(
+            { id: notebookId, owner: req.session.userId },
+            { $pull: { 'content.cells': { id: cell.id } } }
+        );
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Trash cell error:', err);
+        res.status(500).json({ error: 'Failed to trash cell' });
+    }
+});
+
+// Restore individual cell
+app.post('/api/trash/restore-cell/:id', isAuthenticated, async (req, res) => {
+    const cellId = req.params.id;
+    try {
+        const trashedCell = await TrashedCell.findOne({ id: cellId, owner: req.session.userId });
+        if (!trashedCell) return res.status(404).json({ error: 'Trashed cell not found' });
+
+        // Check if notebook exists
+        const notebook = await Note.findOne({ id: trashedCell.originalNotebookId, owner: req.session.userId });
+        if (!notebook) return res.status(404).json({ error: 'Original notebook no longer exists' });
+
+        // Move back to notebook
+        const cellData = trashedCell.toObject();
+        delete cellData._id;
+        delete cellData.originalNotebookId;
+        delete cellData.originalNotebookTitle;
+        delete cellData.deletedAt;
+        delete cellData.owner;
+
+        await Note.updateOne(
+            { id: trashedCell.originalNotebookId, owner: req.session.userId },
+            { $push: { 'content.cells': cellData } }
+        );
+
+        // Delete from trash
+        await TrashedCell.deleteOne({ id: cellId, owner: req.session.userId });
+
+        res.json({ success: true, notebookId: trashedCell.originalNotebookId });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to restore cell' });
+    }
+});
+
+// Permanently delete individual cell
+app.delete('/api/trash/cell/:id', isAuthenticated, async (req, res) => {
+    const cellId = req.params.id;
+    try {
+        await TrashedCell.deleteOne({ id: cellId, owner: req.session.userId });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to delete trashed cell' });
     }
 });
 
@@ -520,6 +599,7 @@ app.delete(/^\/api\/trash\/(.+)$/, isAuthenticated, async (req, res) => {
 app.delete('/api/trash-all', isAuthenticated, async (req, res) => {
     try {
         await Note.deleteMany({ owner: req.session.userId, isTrashed: true });
+        await TrashedCell.deleteMany({ owner: req.session.userId });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to empty trash' });

@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zoho Notes | Master User Manual</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --accent: #6d5dfc;
+            --accent-soft: rgba(109, 93, 252, 0.1);
+            --bg: #ffffff;
+            --sidebar-bg: #f8f9fa;
+            --text-main: #1a1a1a;
+            --text-dim: #666666;
+            --border: #e2e8f0;
+        }
+
+        .dark-mode {
+            --bg: #0a0a0c;
+            --sidebar-bg: #0f0f12;
+            --text-main: #e0e0e0;
+            --text-dim: #a0a0a0;
+            --border: #26262b;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.6;
+        }
+
+        .sidebar {
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border);
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            color: var(--text-dim);
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover {
+            color: var(--accent);
+            background: var(--accent-soft);
+        }
+
+        .nav-link.active {
+            color: var(--accent);
+            background: var(--accent-soft);
+        }
+
+        .content-section {
+            margin-bottom: 80px;
+            scroll-margin-top: 40px;
+        }
+
+        .feature-card {
+            background: var(--sidebar-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 24px;
+            height: 100%;
+        }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--accent-soft);
+            color: var(--accent);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .badge-purple {
+            background: var(--accent-soft);
+            color: var(--accent);
+        }
+
+        .badge-green {
+            background: rgba(48, 255, 106, 0.1);
+            color: #27ae60;
+        }
+
+        @media (max-width: 1024px) {
+            .sidebar {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body class="dark-mode">
+    <div class="flex min-h-screen">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar w-72 h-screen sticky top-0 overflow-y-auto p-6 flex flex-col gap-8">
+            <div class="flex items-center gap-3 px-2">
+                <div
+                    class="w-10 h-10 bg-gradient-to-br from-[#6d5dfc] to-[#a29bfe] rounded-xl flex items-center justify-center font-bold text-white shadow-lg">
+                    ZN</div>
+                <span class="text-xl font-extrabold tracking-tight">Manual</span>
+            </div>
+
+            <nav class="space-y-1">
+                <p class="px-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Getting Started</p>
+                <a href="#intro" class="nav-link"><i data-lucide="info" class="w-4 h-4"></i> Overview</a>
+                <a href="#auth" class="nav-link"><i data-lucide="user" class="w-4 h-4"></i> Authentication</a>
+
+                <p class="px-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-6 mb-2">Organization</p>
+                <a href="#hierarchy" class="nav-link"><i data-lucide="folder-tree" class="w-4 h-4"></i> File
+                    Structure</a>
+                <a href="#drag-drop" class="nav-link"><i data-lucide="mouse-pointer-2" class="w-4 h-4"></i>
+                    Reordering</a>
+                <a href="#trash" class="nav-link"><i data-lucide="trash-2" class="w-4 h-4"></i> Trash System</a>
+
+                <p class="px-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-6 mb-2">The Editor</p>
+                <a href="#cells" class="nav-link"><i data-lucide="box" class="w-4 h-4"></i> Cell Types</a>
+                <a href="#execution" class="nav-link"><i data-lucide="play" class="w-4 h-4"></i> Running Code</a>
+                <a href="#smart-output" class="nav-link"><i data-lucide="sparkles" class="w-4 h-4"></i> Smart Output</a>
+
+                <p class="px-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-6 mb-2">Security</p>
+                <a href="#safety" class="nav-link"><i data-lucide="shield-check" class="w-4 h-4"></i> Safety
+                    Features</a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 max-w-4xl mx-auto py-20 px-8">
+            <!-- Header -->
+            <section id="intro" class="content-section text-center">
+                <h1 class="text-5xl font-black mb-6 tracking-tight">Zoho Notes: User Manual</h1>
+                <p class="text-xl text-gray-400">Your ultimate guide to mastering the world's most developer-friendly
+                    note-taking platform.</p>
+                <div class="mt-12 p-8 glass rounded-3xl border border-white/5 bg-white/5 text-left">
+                    <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                        <i data-lucide="rocket" class="text-orange-400"></i> What is Zoho Notes?
+                    </h3>
+                    <p class="text-gray-400 leading-relaxed mb-4">
+                        Zoho Notes isn't just a text editor; it's a <strong>Computational Notebook</strong>. It combines
+                        the ease of a simple note-taking app with the power of a professional IDE.
+                    </p>
+                    <p class="text-gray-400 leading-relaxed">
+                        Whether you are documenting complex logic using <strong>Markdown</strong> or testing snippets in
+                        <strong>JavaScript</strong>, Zoho Notes provides a unified, secure environment accessible from
+                        any device.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Authentication -->
+            <section id="auth" class="content-section">
+                <div class="flex items-center gap-4 mb-8">
+                    <div class="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500"><i
+                            data-lucide="user-check"></i></div>
+                    <h2 class="text-3xl font-extrabold">1. Authentication & Access</h2>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="feature-card">
+                        <h4 class="font-bold mb-2">Cloud Sync & Persistence</h4>
+                        <p class="text-sm text-gray-400">
+                            <strong>The Purpose:</strong> To ensure your workspace is available 24/7. When you log in,
+                            your notes are pulled from our secure database.
+                            <br><br>
+                            <strong>What you can do:</strong> Start a note on your computer at home, and continue
+                            exactly where you left off on your phone or tablet.
+                        </p>
+                    </div>
+                    <div class="feature-card">
+                        <h4 class="font-bold mb-2">Forgot Password</h4>
+                        <p class="text-sm text-gray-400">
+                            <strong>The Purpose:</strong> Security and recovery. If you lose your keys, we provide a
+                            100% safe way to get back in.
+                            <br><br>
+                            <strong>What you can do:</strong> Request a recovery link to your registered email to reset
+                            your credentials securely.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Hierarchy -->
+            <section id="hierarchy" class="content-section">
+                <div class="flex items-center gap-4 mb-8">
+                    <div
+                        class="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                        <i data-lucide="folder-tree"></i></div>
+                    <h2 class="text-3xl font-extrabold">2. The Hierarchy</h2>
+                </div>
+                <div class="space-y-6">
+                    <div class="p-6 border-l-4 border-indigo-500 bg-indigo-500/5 rounded-r-2xl">
+                        <p class="text-sm">
+                            Zoho Notes uses a three-tier organization system:
+                            <br><br>
+                            - <strong>Folders:</strong> Top-level categorization (e.g., "Web Dev", "Python Basics").
+                            <br>
+                            - <strong>Files (Notebooks):</strong> Individual documents within folders.
+                            <br>
+                            - <strong>Notes (Cells):</strong> The content phases inside each file.
+                            <br><br>
+                            <em>Why? Because high-level projects need deep organization to remain manageable.</em>
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Drag and Drop -->
+            <section id="drag-drop" class="content-section">
+                <div class="flex items-center gap-4 mb-8">
+                    <div class="w-12 h-12 rounded-2xl bg-pink-500/10 flex items-center justify-center text-pink-500"><i
+                            data-lucide="mouse-pointer-2"></i></div>
+                    <h2 class="text-3xl font-extrabold">3. Dynamic Interaction</h2>
+                </div>
+                <div class="feature-card mb-6">
+                    <h4 class="font-bold mb-4">Drag & Drop Logic</h4>
+                    <p class="text-sm text-gray-400">
+                        <strong>Inside a File:</strong> Grab the vertical handle next to a note to reorder it. Each note
+                        has a unique <strong>Sequence Number</strong> (1, 2, 3...) that updates in real-time as you move
+                        things around.
+                        <br><br>
+                        <strong>Across Files:</strong> Want to move a specific note to a different notebook? Just drag
+                        it from the main area and drop it onto a notebook title in the Sidebar.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Trash System -->
+            <section id="trash" class="content-section">
+                <div class="flex items-center gap-4 mb-8">
+                    <div class="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500"><i
+                            data-lucide="trash-2"></i></div>
+                    <h2 class="text-3xl font-extrabold">4. The Safety Net (Trash)</h2>
+                </div>
+                <p class="text-gray-400 mb-6">Mistakes happen. Our Trash system acts as a temporary buffer for
+                    everything you delete.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="feature-card border-l-4 border-blue-400">
+                        <h4 class="font-bold mb-2">Notebook Trash</h4>
+                        <p class="text-sm text-gray-400">Deletes whole files. Great for clearing out projects you no
+                            longer need but might want back later.</p>
+                    </div>
+                    <div class="feature-card border-l-4 border-green-400">
+                        <h4 class="font-bold mb-2">Individual Note Trash</h4>
+                        <p class="text-sm text-gray-400">Deletes a specific cell. The system remembers where it came
+                            from (original notebook) so you can restore it exactly where it was.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Editor & Execution -->
+            <section id="cells" class="content-section">
+                <div class="flex items-center gap-4 mb-8">
+                    <div class="w-12 h-12 rounded-2xl bg-green-500/10 flex items-center justify-center text-green-500">
+                        <i data-lucide="code-2"></i></div>
+                    <h2 class="text-3xl font-extrabold">5. The Execution Engine</h2>
+                </div>
+                <div class="space-y-8">
+                    <div class="feature-card">
+                        <h4 class="font-bold mb-2">Smart Output</h4>
+                        <p class="text-sm text-gray-400 mb-4">We use the same core engine that powers <strong>VS
+                                Code</strong>. This means you get:</p>
+                        <div class="grid grid-cols-2 gap-4 text-xs">
+                            <div class="flex items-center gap-2"><i data-lucide="check"
+                                    class="w-3 h-3 text-green-400"></i> Auto-Complete</div>
+                            <div class="flex items-center gap-2"><i data-lucide="check"
+                                    class="w-3 h-3 text-green-400"></i> Syntax Highlighting</div>
+                            <div class="flex items-center gap-2"><i data-lucide="check"
+                                    class="w-3 h-3 text-green-400"></i> Multi-Cursor</div>
+                            <div class="flex items-center gap-2"><i data-lucide="check"
+                                    class="w-3 h-3 text-green-400"></i> Bracket Matching</div>
+                        </div>
+                    </div>
+
+                    <div id="smart-output" class="feature-card">
+                        <h4 class="font-bold mb-2 flex items-center gap-2">
+                            Smart Output <span class="badge badge-purple text-[10px]">Special Feature</span>
+                        </h4>
+                        <p class="text-sm text-gray-400">
+                            <strong>Why?</strong> For fast prototyping. No one likes typing <code>console.log()</code>
+                            100 times.
+                            <br><br>
+                            <strong>How it works:</strong> If you turn it ON in Settings, our engine captures the
+                            <em>last expression</em> of your code and displays it as the result automatically. If you
+                            turn it OFF, we only show what you explicitly tell us to print.
+                        </p>
+                    </div>
+
+                    <div id="execution" class="feature-card">
+                        <h4 class="font-bold mb-2">Batch Operations</h4>
+                        <p class="text-sm text-gray-400">
+                            - <strong>Run All:</strong> Executes every cell in the file sequentially.
+                            <br>
+                            - <strong>Clear All:</strong> Wipes all outputs if you want a clean slate for a fresh
+                            "prediction" session.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Safety Features -->
+            <section id="safety" class="content-section">
+                <div class="flex items-center gap-4 mb-8">
+                    <div
+                        class="w-12 h-12 rounded-2xl bg-yellow-500/10 flex items-center justify-center text-yellow-500">
+                        <i data-lucide="shield-alert"></i></div>
+                    <h2 class="text-3xl font-extrabold">6. Advanced Safety (Pro Protection)</h2>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex gap-4 p-4 glass rounded-2xl border border-white/5">
+                        <i data-lucide="zap" class="text-yellow-400 shrink-0"></i>
+                        <div>
+                            <p class="font-bold">Rate Limiting & Brute Force Prevention</p>
+                            <p class="text-sm text-gray-400">If three failed logins are detected, the system forces a
+                                30-second cooldown. This makes it impossible for automated attackers to guess your
+                                password.</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-4 p-4 glass rounded-2xl border border-white/5">
+                        <i data-lucide="globe" class="text-blue-400 shrink-0"></i>
+                        <div>
+                            <p class="font-bold">IP Blocking</p>
+                            <p class="text-sm text-gray-400">Our server monitors traffic. If a single IP address sends
+                                suspicious amounts of requests, it is automatically throttled or blocked to keep the
+                                service fast for everyone.</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-4 p-4 glass rounded-2xl border border-white/5">
+                        <i data-lucide="shield" class="text-green-400 shrink-0"></i>
+                        <div>
+                            <p class="font-bold">CSRF & XSS Shield</p>
+                            <p class="text-sm text-gray-400">Every interaction is validated with secure tokens, and
+                                every input is sanitized to prevent malicious scripts from affecting your data.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="mt-40 pt-20 border-t border-white/5 text-center">
+                <p class="text-gray-500 text-sm">© 2026 Zoho Notes User Manual - Crafted for clarity and productivity.
+                </p>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // Smooth active navigation highlight
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    document.querySelectorAll('.nav-link').forEach(link => {
+                        link.classList.remove('active');
+                        if (link.getAttribute('href').substring(1) === entry.target.id) {
+                            link.classList.add('active');
+                        }
+                    });
+                }
+            });
+        }, { threshold: 0.5 });
+
+        document.querySelectorAll('section').forEach(section => observer.observe(section));
+    </script>
+</body>
+
+</html>

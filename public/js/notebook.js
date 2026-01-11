@@ -811,18 +811,39 @@ class NotebookApp {
         }
     }
 
-    deleteCell(cellId) {
-        this.confirmAction('Delete Note?', 'Are you sure you want to remove this cell?', () => {
-            this.notebook.cells = this.notebook.cells.filter(c => c.id !== cellId);
-            if (this.editors[cellId]) {
-                this.editors[cellId].dispose();
-                delete this.editors[cellId];
+    async deleteCell(cellId) {
+        this.confirmAction('Delete Note?', 'Are you sure you want to remove this cell?', async () => {
+            const cellIndex = this.notebook.cells.findIndex(c => c.id === cellId);
+            if (cellIndex === -1) return;
+
+            const [cell] = this.notebook.cells.splice(cellIndex, 1);
+
+            try {
+                await this.safeFetch('/api/cells/trash', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        notebookId: this.notebook.id,
+                        cell: cell
+                    })
+                });
+
+                if (this.editors[cellId]) {
+                    this.editors[cellId].dispose();
+                    delete this.editors[cellId];
+                }
+
+                // Re-render to update sequence numbers
+                this.disposeEditors();
+                document.getElementById('cells-list').innerHTML = '';
+                this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
+                this._autoSave();
+            } catch (err) {
+                console.error('Delete cell failed', err);
+                // Restore cell if failed
+                this.notebook.cells.splice(cellIndex, 0, cell);
+                alert('Failed to delete note');
             }
-            // Re-render to update sequence numbers
-            this.disposeEditors();
-            document.getElementById('cells-list').innerHTML = '';
-            this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
-            this._autoSave();
         });
     }
 
@@ -1019,15 +1040,16 @@ class NotebookApp {
         try {
             const res = await this.safeFetch('/api/trash');
             if (!res.ok) throw new Error('Failed to fetch trash');
-            const list = await res.json();
-            this.renderTrashView(list);
+            const data = await res.json();
+            this.renderTrashView(data);
         } catch (e) {
             console.error('Failed to load trash list', e);
         }
     }
 
-    renderTrashView(notebooks) {
-        if (!Array.isArray(notebooks)) return;
+    renderTrashView(data) {
+        const { notebooks = [], cells = [] } = data;
+        const totalItems = notebooks.length + cells.length;
         this.disposeEditors();
 
         const titleEl = document.getElementById('notebook-title');
@@ -1040,13 +1062,13 @@ class NotebookApp {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 10px; border-bottom: 1px solid var(--border-color);">
                 <div>
                     <h2 style="font-size: 18px; color: var(--accent);">Trash</h2>
-                    <p style="font-size: 12px; color: var(--text-dim);">${notebooks.length} items</p>
+                    <p style="font-size: 12px; color: var(--text-dim);">${totalItems} items</p>
                 </div>
-                ${notebooks.length > 0 ? `<button class="btn-run" id="btn-empty-trash" style="background: #ff3b30;">Empty Trash</button>` : ''}
+                ${totalItems > 0 ? `<button class="btn-run" id="btn-empty-trash" style="background: #ff3b30;">Empty Trash</button>` : ''}
             </div>
         `;
 
-        if (notebooks.length === 0) {
+        if (totalItems === 0) {
             listContainer.innerHTML += `
                 <div style="text-align: center; padding: 60px; color: var(--text-dim);">
                     <i data-lucide="trash-2" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.2;"></i>
@@ -1054,6 +1076,7 @@ class NotebookApp {
                 </div>
             `;
         } else {
+            // Render Notebooks
             notebooks.forEach(nb => {
                 const item = document.createElement('div');
                 item.className = 'cell';
@@ -1062,16 +1085,46 @@ class NotebookApp {
                 item.style.alignItems = 'center';
                 item.style.gap = '15px';
                 item.innerHTML = `
-                    <i data-lucide="file-text" style="color: var(--text-dim);"></i>
+                    <div style="width: 24px; height: 24px; background: rgba(109, 93, 252, 0.1); border-radius: 6px; display: flex; align-items: center; justify-content: center;">
+                        <i data-lucide="book" style="width: 14px; color: var(--accent);"></i>
+                    </div>
                     <div style="flex: 1;">
-                        <div style="font-weight: 600;">${nb.title || 'Untitled'}</div>
-                        <div style="font-size: 11px; color: var(--text-dim);">In ${nb.folder || 'root'}</div>
+                        <div style="font-weight: 600;">${nb.title || 'Untitled Notebook'}</div>
+                        <div style="font-size: 11px; color: var(--text-dim);">Type: Notebook • In ${nb.folder || 'root'}</div>
                     </div>
                     <div style="display: flex; gap: 10px;">
-                        <button class="btn-icon btn-restore" data-id="${nb.id}" title="Restore">
+                        <button class="btn-icon btn-restore-notebook" data-id="${nb.id}" title="Restore">
                             <i data-lucide="rotate-ccw"></i>
                         </button>
-                        <button class="btn-icon btn-delete-perm" data-id="${nb.id}" title="Delete Permanently" style="color: #ff3b30;">
+                        <button class="btn-icon btn-delete-notebook-perm" data-id="${nb.id}" title="Delete Permanently" style="color: #ff3b30;">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                    </div>
+                `;
+                listContainer.appendChild(item);
+            });
+
+            // Render Cells
+            cells.forEach(cell => {
+                const item = document.createElement('div');
+                item.className = 'cell';
+                item.style.padding = '15px 20px';
+                item.style.display = 'flex';
+                item.style.alignItems = 'center';
+                item.style.gap = '15px';
+                item.innerHTML = `
+                    <div style="width: 24px; height: 24px; background: rgba(48, 255, 106, 0.1); border-radius: 6px; display: flex; align-items: center; justify-content: center;">
+                        <i data-lucide="file-code" style="width: 14px; color: #30ff6a;"></i>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600;">${cell.title || 'Untitled Note'}</div>
+                        <div style="font-size: 11px; color: var(--text-dim);">Type: Note • Original: ${cell.originalNotebookTitle}</div>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn-icon btn-restore-cell" data-id="${cell.id}" title="Restore">
+                            <i data-lucide="rotate-ccw"></i>
+                        </button>
+                        <button class="btn-icon btn-delete-cell-perm" data-id="${cell.id}" title="Delete Permanently" style="color: #ff3b30;">
                             <i data-lucide="trash-2"></i>
                         </button>
                     </div>
@@ -1086,11 +1139,11 @@ class NotebookApp {
             emptyBtn.onclick = () => this.emptyTrash();
         }
 
-        document.querySelectorAll('.btn-restore').forEach(btn => {
+        document.querySelectorAll('.btn-restore-notebook').forEach(btn => {
             btn.onclick = () => this.restoreNotebook(btn.getAttribute('data-id'));
         });
 
-        document.querySelectorAll('.btn-delete-perm').forEach(btn => {
+        document.querySelectorAll('.btn-delete-notebook-perm').forEach(btn => {
             btn.onclick = () => {
                 const id = btn.getAttribute('data-id');
                 this.confirmAction('Permanently Delete?', 'This notebook will be gone forever!', () => {
@@ -1099,7 +1152,51 @@ class NotebookApp {
             };
         });
 
+        document.querySelectorAll('.btn-restore-cell').forEach(btn => {
+            btn.onclick = () => this.restoreCell(btn.getAttribute('data-id'));
+        });
+
+        document.querySelectorAll('.btn-delete-cell-perm').forEach(btn => {
+            btn.onclick = () => {
+                const id = btn.getAttribute('data-id');
+                this.confirmAction('Permanently Delete?', 'This note will be gone forever!', () => {
+                    this.deleteCellPermanently(id);
+                });
+            };
+        });
+
         lucide.createIcons();
+    }
+
+    async restoreCell(id) {
+        try {
+            const res = await this.safeFetch(`/api/trash/restore-cell/${id}`, { method: 'POST' });
+            if (res.ok) {
+                const data = await res.json();
+                // If it's the current notebook, reload it
+                if (this.notebook.id === data.notebookId) {
+                    await this.loadNotebook(data.notebookId);
+                } else {
+                    await this.loadTrash();
+                }
+            } else {
+                const data = await res.json();
+                alert(data.error || 'Failed to restore cell');
+            }
+        } catch (e) {
+            console.error('Restore failed', e);
+        }
+    }
+
+    async deleteCellPermanently(id) {
+        try {
+            const res = await this.safeFetch(`/api/trash/cell/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                await this.loadTrash();
+            }
+        } catch (e) {
+            console.error('Permanent delete failed', e);
+        }
     }
 
     async restoreNotebook(id) {

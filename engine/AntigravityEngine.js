@@ -19,7 +19,8 @@ class AntigravityEngine {
         const sandbox = {
             console: customConsole,
             setTimeout, clearTimeout, setInterval, clearInterval,
-            Buffer, URL, process: { env: {} },
+            Buffer, URL, Promise, // Explicitly pass Promise to sandbox
+            process: { env: {} },
             ...contextExtension,
         };
 
@@ -28,7 +29,9 @@ class AntigravityEngine {
         try {
             const script = new vm.Script(code);
             const result = script.runInContext(context, { timeout: this.timeout });
-            const resolvedResult = result instanceof Promise ? await result : result;
+
+            // Duck-typing for Promises from different contexts
+            const resolvedResult = (result && typeof result.then === 'function') ? await result : result;
 
             return {
                 id: resultId,
@@ -50,9 +53,20 @@ class AntigravityEngine {
     _serialize(obj) {
         if (obj === undefined) return 'undefined';
         if (obj === null) return 'null';
+        if (typeof obj === 'string') return obj;
         if (typeof obj === 'function') return `[Function: ${obj.name || 'anonymous'}]`;
+
+        // Handle Promises
+        if (obj && typeof obj.then === 'function') return '[Promise]';
+
         try {
-            return typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj);
+            if (typeof obj === 'object') {
+                return JSON.stringify(obj, (key, value) => {
+                    if (typeof value === 'function') return `[Function: ${value.name || 'anonymous'}]`;
+                    return value;
+                }, 2);
+            }
+            return String(obj);
         } catch (e) {
             return String(obj);
         }
