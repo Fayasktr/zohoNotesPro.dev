@@ -28,6 +28,17 @@ hbs.registerHelper('substring', function (str, start, len) {
     return str.substring(start, len);
 });
 
+hbs.registerHelper('formatDate', function (date) {
+    if (!date) return "";
+    return new Date(date).toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+});
+
 // MongoDB Connection
 const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/zoho';
 mongoose.connect(mongoURI)
@@ -201,6 +212,10 @@ app.post('/login', async (req, res) => {
             req.session.username = user.username;
             req.session.role = user.role;
 
+            // Update Last Login
+            user.lastLogin = new Date();
+            await user.save();
+
             if (user.role === 'admin') {
                 res.redirect('/admin/dashboard');
             } else {
@@ -222,7 +237,14 @@ app.post('/login', async (req, res) => {
     }
 });
 
-app.get('/logout', (req, res) => {
+app.get('/logout', async (req, res) => {
+    try {
+        if (req.session.userId) {
+            await User.findByIdAndUpdate(req.session.userId, { lastLogout: new Date() });
+        }
+    } catch (err) {
+        console.error('Logout log error:', err);
+    }
     req.session.destroy((err) => {
         res.clearCookie('connect.sid');
         res.redirect('/login');

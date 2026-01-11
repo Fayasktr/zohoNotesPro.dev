@@ -7,7 +7,9 @@ const userSchema = new mongoose.Schema({
     resetPasswordToken: String,
     resetPasswordExpires: Date,
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
-    isBlocked: { type: Boolean, default: false }
+    isBlocked: { type: Boolean, default: false },
+    lastLogin: Date,
+    lastLogout: Date
 });
 
 module.exports = mongoose.model('User', userSchema);
