@@ -26,20 +26,30 @@ class NotebookApp {
         this._autoSave = debounce(() => this.saveToBackend(), 1500);
 
         this.currentPendingFolder = 'root';
+        this.setupTheme();
+        this.setupEventListeners();
+        this.setupMobileSidebar();
+        this.setupResizableSidebar();
 
         this.init();
     }
 
     async init() {
-        this.setupTheme();
-        this.setupEventListeners();
-        await this.refreshNotebookList();
+        const notebooks = await this.refreshNotebookList();
 
-        const saved = localStorage.getItem('zoho-notebook-current-id');
-        if (saved) {
-            await this.loadNotebook(saved);
+        const savedId = localStorage.getItem('zoho-notebook-current-id');
+        if (savedId) {
+            const exists = notebooks.some(nb => nb.id === savedId);
+            if (exists) {
+                await this.loadNotebook(savedId);
+                return;
+            }
+        }
+
+        if (notebooks.length > 0) {
+            await this.loadNotebook(notebooks[0].id);
         } else {
-            this.addCell('code');
+            await this.createNewNotebookInternal('new folder', 'New Note');
         }
     }
 
@@ -61,8 +71,6 @@ class NotebookApp {
             e.stopPropagation();
             this.createFolder();
         });
-
-        document.getElementById('btn-star').addEventListener('click', () => this.toggleStar());
 
         const titleInput = document.getElementById('notebook-title');
         titleInput.addEventListener('input', (e) => {
@@ -190,6 +198,77 @@ class NotebookApp {
                 this.closeAllModals();
             }
         });
+
+        // Mobile Sidebar Listeners
+        document.getElementById('open-sidebar').addEventListener('click', () => this.toggleMobileSidebar(true));
+        document.getElementById('close-sidebar').addEventListener('click', () => this.toggleMobileSidebar(false));
+        document.getElementById('sidebar-overlay').addEventListener('click', () => this.toggleMobileSidebar(false));
+    }
+
+    setupMobileSidebar() {
+        this.toggleMobileSidebar(false);
+    }
+
+    toggleMobileSidebar(open) {
+        const sidebar = document.getElementById('main-sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        if (open) {
+            sidebar.classList.add('sidebar-open');
+            overlay.classList.remove('hidden');
+            setTimeout(() => overlay.classList.add('opacity-100'), 10);
+        } else {
+            sidebar.classList.remove('sidebar-open');
+            overlay.classList.remove('opacity-100');
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+    }
+
+    setupResizableSidebar() {
+        const sidebar = document.getElementById('main-sidebar');
+        const resizer = document.getElementById('sidebar-resizer');
+        const container = document.getElementById('layout-container');
+
+        // Load saved width
+        const savedWidth = localStorage.getItem('zoho-sidebar-width');
+        if (savedWidth && window.innerWidth > 1024) {
+            sidebar.style.width = `${savedWidth}px`;
+        }
+
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            container.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            let newWidth = e.clientX;
+            if (newWidth < 200) newWidth = 200;
+            if (newWidth > 450) newWidth = 450;
+
+            sidebar.style.width = `${newWidth}px`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                container.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+                localStorage.setItem('zoho-sidebar-width', parseInt(sidebar.style.width));
+            }
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (window.innerWidth <= 1024) {
+                sidebar.style.width = '';
+            } else {
+                const width = localStorage.getItem('zoho-sidebar-width') || 280;
+                sidebar.style.width = `${width}px`;
+            }
+        });
     }
 
     setupTheme() {
@@ -295,10 +374,6 @@ class NotebookApp {
             cells: [],
             tags: []
         };
-        this.updateStarUI();
-        document.getElementById('cells-list').innerHTML = '';
-        document.getElementById('notebook-title').value = this.notebook.title;
-
         this.addCell('code');
         await this.saveToBackend();
         await this.refreshNotebookList();
@@ -310,29 +385,11 @@ class NotebookApp {
             const res = await this.safeFetch('/api/notebooks');
             const list = await res.json();
             this.renderNotebookList(list);
+            return list;
         } catch (e) {
             console.error('Failed to load notebook list', e);
+            return [];
         }
-    }
-
-    async toggleStar() {
-        this.notebook.isStarred = !this.notebook.isStarred;
-        this.updateStarUI();
-        await this.saveToBackend();
-        await this.refreshNotebookList();
-    }
-
-    updateStarUI() {
-        const btn = document.getElementById('btn-star');
-        if (this.notebook.isStarred) {
-            btn.style.color = '#ffcc00';
-            btn.querySelector('i').setAttribute('data-lucide', 'star-off');
-            btn.innerHTML = '<i data-lucide="star" style="fill: #ffcc00;"></i>';
-        } else {
-            btn.style.color = 'var(--text-dim)';
-            btn.innerHTML = '<i data-lucide="star"></i>';
-        }
-        lucide.createIcons();
     }
 
     renderNotebookList(notebooks) {
@@ -352,8 +409,8 @@ class NotebookApp {
             item.className = `notebook-item ${nb.id === this.notebook.id ? 'active' : ''}`;
             item.setAttribute('data-id', nb.id);
             item.innerHTML = `
-                <i data-lucide="${nb.id === this.notebook.id ? 'edit-3' : (nb.isStarred ? 'star' : 'file-code')}" 
-                   style="width: 14px; ${nb.isStarred ? 'color: #ffcc00; fill: #ffcc00;' : ''}"></i> 
+                <i data-lucide="${nb.id === this.notebook.id ? 'edit-3' : 'file-code'}" 
+                   style="width: 14px;"></i> 
                 <span style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${nb.title}</span>
                 <div class="item-actions">
                     <button class="btn-icon-sm rename-notebook-btn" title="Rename File">
@@ -409,7 +466,7 @@ class NotebookApp {
         }
     }
 
-    async loadNotebook(id) {
+    async loadNotebook(id, targetCellId = null) {
         try {
             const res = await this.safeFetch(`/api/notebooks/${id}`);
             if (!res.ok) throw new Error('Not found');
@@ -417,8 +474,6 @@ class NotebookApp {
 
             this.disposeEditors();
             this.notebook = data;
-
-            this.updateStarUI();
 
             document.getElementById('cells-list').innerHTML = '';
             document.getElementById('notebook-title').value = this.notebook.title;
@@ -430,6 +485,17 @@ class NotebookApp {
                 this.addCell('code');
             } else {
                 this.notebook.cells.forEach(cell => this.renderCell(cell));
+            }
+
+            if (targetCellId) {
+                setTimeout(() => {
+                    const el = document.getElementById(`container-${targetCellId}`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        el.classList.add('cell-highlight');
+                        setTimeout(() => el.classList.remove('cell-highlight'), 3000);
+                    }
+                }, 500);
             }
         } catch (e) {
             console.error('Failed to load notebook', e);
@@ -481,7 +547,7 @@ class NotebookApp {
                     <button class="btn-reorder move-down" title="Move Down"><i data-lucide="chevron-down" style="width:12px;"></i></button>
                 </div>
                 <input type="text" class="cell-title-input" placeholder="Set note label..." value="${cell.title || ''}">
-                <div style="text-align: right; margin-right: 15px; font-size: 10px; opacity: 0.5;">${cell.type.toUpperCase()}</div>
+                <div style="text-align: right; margin-right: 8px; font-size: 9px; opacity: 0.5; flex-shrink: 0;">${cell.type.toUpperCase()}</div>
                 <div class="cell-actions">
                     <button class="btn-icon btn-star-cell" title="Star Note">
                         <i data-lucide="star" ${cell.isStarred ? 'style="fill: #ffcc00; color: #ffcc00;"' : ''}></i>
@@ -696,7 +762,7 @@ class NotebookApp {
                     btn.style.color = 'var(--text-dim)';
                 }
             }
-            this._autoSave();
+            this.saveToBackend();
         }
     }
 
@@ -717,9 +783,10 @@ class NotebookApp {
             try {
                 const res = await this.safeFetch(`/api/notebooks/${id}`, { method: 'DELETE' });
                 if (res.ok) {
-                    if (this.notebook.id === id) {
+                    const savedId = localStorage.getItem('zoho-notebook-current-id');
+                    if (savedId === id) {
                         localStorage.removeItem('zoho-notebook-current-id');
-                        location.reload();
+                        await this.init(); // Re-initialize to load next available or new note
                     } else {
                         await this.refreshNotebookList();
                     }
@@ -780,7 +847,7 @@ class NotebookApp {
                 if (res.ok) {
                     if (this.notebook.folder === folderName) {
                         localStorage.removeItem('zoho-notebook-current-id');
-                        location.reload();
+                        await this.init();
                     } else {
                         await this.refreshNotebookList();
                     }
@@ -980,8 +1047,8 @@ class NotebookApp {
                     <div class="cell-header">
                         <span style="font-size: 10px; color: var(--accent); margin-right: 10px;">${cell.notebookTitle}</span>
                         <span class="cell-title-input" style="flex: 1; border: none;">${cell.title || 'Untitled'}</span>
-                        <div class="cell-actions">
-                             <button class="btn-icon btn-goto-notebook" data-id="${cell.notebookId}" title="Go to Notebook">
+                         <div class="cell-actions">
+                             <button class="btn-icon btn-goto-notebook" data-id="${cell.notebookId}" data-cell-id="${cell.id}" title="Go to Note Phase">
                                 <i data-lucide="external-link"></i>
                              </button>
                         </div>
@@ -998,7 +1065,8 @@ class NotebookApp {
         document.querySelectorAll('.btn-goto-notebook').forEach(btn => {
             btn.onclick = (e) => {
                 const id = btn.getAttribute('data-id');
-                this.loadNotebook(id);
+                const cellId = btn.getAttribute('data-cell-id');
+                this.loadNotebook(id, cellId);
             };
         });
 

@@ -54,7 +54,8 @@ body {
 
 /* Sidebar Styling */
 .sidebar {
-    width: 280px;
+    /* width: 280px;  - Removed to allow dynamic resizing from JS */
+    min-width: 200px;
     background: var(--sidebar-bg);
     /* Distinct dark background for separation */
     border-right: 1px solid var(--border-color);
@@ -114,11 +115,18 @@ body {
     overflow-y: auto;
     /* Independent scroll for main area */
     height: 100vh;
-    padding: 40px;
+    padding: 20px;
+    /* Default mobile padding */
     display: flex;
     flex-direction: column;
     align-items: center;
     background: var(--bg-dark);
+}
+
+@media (min-width: 1024px) {
+    .main-content {
+        padding: 40px;
+    }
 }
 
 .notebook-container {
@@ -132,13 +140,20 @@ body {
 }
 
 .notebook-title {
-    font-size: 32px;
+    font-size: 24px;
+    /* Smaller default for mobile */
     font-weight: 700;
     background: none;
     border: none;
     color: var(--text-main);
     width: 100%;
     margin-bottom: 10px;
+}
+
+@media (min-width: 1024px) {
+    .notebook-title {
+        font-size: 32px;
+    }
 }
 
 .notebook-title:focus {
@@ -162,15 +177,22 @@ body {
 }
 
 .cell-header {
-    padding: 12px 20px;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--border-color);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 12px;
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     color: var(--text-dim);
+}
+
+@media (min-width: 640px) {
+    .cell-header {
+        padding: 12px 20px;
+        font-size: 12px;
+    }
 }
 
 .cell-title-input {
@@ -178,15 +200,25 @@ body {
     border: none;
     border-bottom: 1px solid transparent;
     color: var(--text-main);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
-    padding: 2px 5px;
+    padding: 2px 2px;
     outline: none;
     transition: border-color 0.2s;
-    width: auto;
+    width: 100%;
     flex: 1;
-    min-width: 150px;
-    max-width: 60%;
+    min-width: 80px;
+    /* Reduced min-width for mobile */
+    margin: 0 8px;
+}
+
+@media (min-width: 640px) {
+    .cell-title-input {
+        font-size: 14px;
+        min-width: 150px;
+        max-width: 60%;
+        margin: 0;
+    }
 }
 
 .cell-title-input:focus {
@@ -197,17 +229,27 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 .btn-run {
     background: var(--accent);
     color: white;
     border: none;
-    padding: 6px 16px;
-    border-radius: 8px;
+    padding: 4px 10px;
+    border-radius: 6px;
     font-weight: 600;
+    font-size: 11px;
     cursor: pointer;
     transition: background 0.2s;
+}
+
+@media (min-width: 640px) {
+    .btn-run {
+        padding: 6px 16px;
+        border-radius: 8px;
+        font-size: 12px;
+    }
 }
 
 .btn-run:hover {
@@ -283,9 +325,16 @@ body {
 
 /* Markdown Specifics */
 .markdown-preview {
-    padding: 20px;
+    padding: 15px;
+    /* Tighter for mobile */
     color: var(--text-main);
     background: rgba(255, 255, 255, 0.01);
+}
+
+@media (min-width: 640px) {
+    .markdown-preview {
+        padding: 25px;
+    }
 }
 
 .markdown-preview h1,
@@ -314,6 +363,7 @@ body {
     flex-direction: column;
     gap: 2px;
     margin-right: 10px;
+    flex-shrink: 0;
 }
 
 .btn-reorder {
@@ -371,27 +421,44 @@ body {
 /* Floating Controls */
 .controls {
     position: fixed;
-    bottom: 30px;
-    right: 30px;
+    bottom: 20px;
+    right: 20px;
     display: flex;
-    gap: 10px;
+    gap: 8px;
     z-index: 100;
 }
 
+@media (min-width: 1024px) {
+    .controls {
+        bottom: 30px;
+        right: 30px;
+        gap: 10px;
+    }
+}
+
 .btn-floating {
-    width: 50px;
-    height: 50px;
-    border-radius: 25px;
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
     background: var(--accent);
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 18px;
     border: none;
     cursor: pointer;
     box-shadow: 0 4px 15px rgba(109, 93, 252, 0.4);
     transition: all 0.3s;
+}
+
+@media (min-width: 640px) {
+    .btn-floating {
+        width: 50px;
+        height: 50px;
+        border-radius: 25px;
+        font-size: 24px;
+    }
 }
 
 .btn-floating:hover {
@@ -830,4 +897,25 @@ input:checked+.slider:before {
 .user-profile-card:hover .user-logout-link {
     opacity: 1;
     text-decoration: underline;
+}
+
+/* Highlight Animation */
+.cell-highlight {
+    animation: pulse-highlight 2s ease-out;
+}
+
+@keyframes pulse-highlight {
+    0% {
+        box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.7);
+        border-color: var(--accent);
+    }
+
+    50% {
+        box-shadow: 0 0 0 15px rgba(var(--accent-rgb), 0);
+        border-color: var(--accent);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0);
+    }
 }

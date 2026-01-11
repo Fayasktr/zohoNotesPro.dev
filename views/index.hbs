@@ -12,77 +12,146 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        /* Custom styles that Tailwind doesn't easily cover or are too specific */
+        .sidebar-transition {
+            transition: transform 0.3s ease-in-out, width 0.1s linear;
+        }
+
+        .mobile-overlay {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+
+        .resizing {
+            cursor: col-resize;
+            user-select: none;
+        }
+
+        #sidebar-resizer {
+            z-index: 50;
+            width: 10px;
+            /* Wider hit area */
+            margin-left: -5px;
+            /* Offset to center it on the border */
+            background: transparent;
+        }
+
+        #sidebar-resizer:hover {
+            background: rgba(109, 93, 252, 0.3);
+        }
+
+        @media (max-width: 1024px) {
+            .sidebar-mobile {
+                position: fixed;
+                height: 100vh;
+                z-index: 1000;
+                transform: translateX(-100%);
+            }
+
+            .sidebar-open {
+                transform: translateX(0);
+            }
+        }
+    </style>
 </head>
 
-<body>
-    <div class="layout">
+<body class="bg-[#0a0a0c] text-[#e0e0e0] overflow-hidden">
+    <div class="layout flex h-screen relative" id="layout-container">
+        <!-- Mobile Sidebar Overlay -->
+        <div id="sidebar-overlay"
+            class="mobile-overlay fixed inset-0 z-[999] hidden opacity-0 transition-opacity duration-300"></div>
+
         <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="logo">
-                Zoho Notes <span></span>
+        <aside id="main-sidebar"
+            class="sidebar sidebar-mobile lg:relative lg:translate-x-0 w-72 bg-[#0f0f12] border-r border-[#ffffff1a] backdrop-blur-xl flex flex-col p-5 sidebar-transition overflow-y-auto">
+            <div class="flex items-center justify-between mb-8">
+                <div
+                    class="logo text-2xl font-extrabold bg-gradient-to-r from-[#6d5dfc] to-[#e0e0e0] bg-clip-text text-transparent flex items-center gap-2">
+                    Zoho Notes
+                </div>
+                <button id="close-sidebar" class="lg:hidden text-[#a0a0a0] hover:text-white p-2">
+                    <i data-lucide="x"></i>
+                </button>
             </div>
 
-            <button class="btn-new" id="btn-new-folder">
+            <button
+                class="w-full p-3 bg-[#ffffff08] border border-[#ffffff1a] text-[#e0e0e0] rounded-xl cursor-pointer flex items-center justify-center gap-2 font-semibold mb-5 hover:bg-[#ffffff0d] transition-colors"
+                id="btn-new-folder">
                 <i data-lucide="folder-plus"></i> New Folder
             </button>
 
-            <nav>
-                <div class="nav-item active" id="toggle-notebooks"
-                    style="display: flex; align-items: center; width: 100%;">
+            <nav class="flex-1">
+                <div class="p-3 rounded-xl mb-2 cursor-pointer transition-all text-[#a0a0a0] flex items-center gap-3 hover:bg-[#ffffff08] hover:text-[#e0e0e0] active"
+                    id="toggle-notebooks">
                     <i data-lucide="layers"></i>
-                    <span style="flex: 1;">My Notebooks</span>
-                    <button id="add-folder-sidebar" class="btn-icon-sm" title="Add Folder"
-                        style="margin-right: 8px; background: none; border: none;">
-                        <i data-lucide="folder-plus"></i>
+                    <span class="flex-1">My Notebooks</span>
+                    <button id="add-folder-sidebar" class="p-1 hover:text-[#6d5dfc]" title="Add Folder">
+                        <i data-lucide="folder-plus" class="w-4 h-4"></i>
                     </button>
-                    <i data-lucide="chevron-down" id="chevron-notebooks" style="width: 14px;"></i>
+                    <i data-lucide="chevron-down" id="chevron-notebooks"
+                        class="w-3.5 transition-transform duration-300"></i>
                 </div>
-                <div class="notebook-list" id="notebook-list">
+                <div class="notebook-list pl-5 border-l border-[#ffffff1a] ml-5 mt-2 mb-5 transition-all duration-300 overflow-hidden"
+                    id="notebook-list">
                     <!-- Dynamic notebooks here -->
                 </div>
-                <div class="nav-item" id="nav-starred-cells">
-                    <i data-lucide="star" style="fill: #ffcc00; color: #ffcc00;"></i> Starred Notes
+                <div class="flex p-3 rounded-xl mb-2 cursor-pointer transition-all text-[#a0a0a0] items-center gap-3 hover:bg-[#ffffff08] hover:text-[#e0e0e0]"
+                    id="nav-starred-cells">
+                    <i data-lucide="star" class="fill-[#ffcc00] text-[#ffcc00]"></i> Starred Notes
                 </div>
-                <div class="nav-item" id="nav-trash">
+                <div class="flex p-3 rounded-xl mb-2 cursor-pointer transition-all text-[#a0a0a0] items-center gap-3 hover:bg-[#ffffff08] hover:text-[#e0e0e0]"
+                    id="nav-trash">
                     <i data-lucide="trash-2"></i> Trash
                 </div>
             </nav>
 
-            <div style="margin-top: auto; padding: 20px 0; border-top: 1px solid var(--border-color);">
-                <div class="user-profile-card">
-                    <div class="user-avatar">
+            <div class="mt-auto py-5 border-t border-[#ffffff1a]">
+                <div
+                    class="flex items-center gap-3 p-2.5 mb-5 rounded-xl cursor-pointer hover:bg-[#9696961a] border border-transparent hover:border-[#ffffff1a] transition-all group">
+                    <div class="w-8 h-8 rounded-full bg-[#6d5dfc] flex items-center justify-center font-bold text-sm">
                         {{#if username}}{{substring username 0 1}}{{else}}U{{/if}}
                     </div>
-                    <div class="user-info">
-                        <div class="user-name-sidebar">{{username}}</div>
-                        <a href="/logout" class="user-logout-link">Logout Account</a>
+                    <div class="flex-1 overflow-hidden">
+                        <div class="text-sm font-semibold truncate">{{username}}</div>
+                        <a href="/logout"
+                            class="text-[11px] text-[#ff3b30] font-semibold opacity-80 group-hover:opacity-100 hover:underline">Logout
+                            Account</a>
                     </div>
                 </div>
-                <div class="nav-item" id="nav-settings">
+                <div class="flex p-3 rounded-xl cursor-pointer transition-all text-[#a0a0a0] items-center gap-3 hover:bg-[#ffffff08] hover:text-[#e0e0e0]"
+                    id="nav-settings">
                     <i data-lucide="settings"></i> Settings
                 </div>
-                <div style="margin-left: 20%; font-size: 10px; color: var(--text-dim); opacity: 0.9; margin-top: 10px;">
-                    <a href="https://fayasktr.github.io/Fayas-protfolio/" target="_blank" rel="noopener noreferrer"
-                        style="text-decoration: none; color: var(--text-dim);">©Fayas kp</a>
+                <div class="ml-1/5 text-[10px] text-[#a0a0a0] opacity-90 mt-2.5">
+                    <a href="https://fayasktr.github.io/Fayas-protfolio/" target="_blank" class="hover:underline">©Fayas
+                        kp</a>
                 </div>
             </div>
         </aside>
 
+        <!-- Resizer Handle -->
+        <div id="sidebar-resizer" class="resizer hidden lg:block"></div>
+
         <!-- Main Content -->
-        <main class="main-content">
-            <div class="notebook-container">
-                <header class="notebook-header" style="display: flex; align-items: center; gap: 15px;">
-                    <button id="btn-star" class="btn-icon" title="Star Notebook"
-                        style="font-size: 24px; color: var(--text-dim);">
-                        <i data-lucide="star"></i>
-                    </button>
-                    <input type="text" class="notebook-title" id="notebook-title" value="Untitled Notebook"
-                        placeholder="Enter title..." style="flex: 1; margin-bottom: 0;">
-                    <div style="display: flex; gap: 10px;">
-                    </div>
+        <main class="flex-1 overflow-y-auto h-screen p-4 sm:p-5 lg:p-10 flex flex-col items-center bg-[#0a0a0c]">
+            <!-- Mobile Toggle Header -->
+            <div class="w-full flex lg:hidden mb-5">
+                <button id="open-sidebar"
+                    class="p-2 text-[#a0a0a0] hover:text-white bg-[#ffffff08] rounded-lg border border-[#ffffff1a]">
+                    <i data-lucide="menu"></i>
+                </button>
+            </div>
+
+            <div class="notebook-container w-full max-w-[900px]">
+                <header class="mb-10 flex items-center gap-4">
+                    <input type="text"
+                        class="text-2xl lg:text-3xl font-bold bg-transparent border-none text-white w-full outline-none focus:border-b focus:border-[#6d5dfc] transition-all"
+                        id="notebook-title" value="Untitled Notebook" placeholder="Enter title...">
                 </header>
 
                 <div id="cells-list">

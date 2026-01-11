@@ -345,7 +345,7 @@ app.get('/api/notebooks', isAuthenticated, async (req, res) => {
         const notes = await Note.find({
             owner: req.session.userId,
             isTrashed: { $ne: true }
-        }, 'id title folder isStarred');
+        }, 'id title folder isStarred updatedAt').sort({ updatedAt: -1 });
         res.json(notes);
     } catch (err) {
         res.status(500).json({ error: 'Failed to list notebooks' });
