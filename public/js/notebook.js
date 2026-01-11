@@ -47,6 +47,7 @@ class NotebookApp {
         document.getElementById('add-code-cell').addEventListener('click', () => this.addCell('code'));
         document.getElementById('btn-new-folder').addEventListener('click', () => this.createFolder());
         document.getElementById('run-all-cells').addEventListener('click', () => this.runAll());
+        document.getElementById('clear-all-outputs').addEventListener('click', () => this.clearAllOutputs());
 
         document.getElementById('toggle-notebooks').addEventListener('click', (e) => {
             if (e.target.closest('#add-folder-sidebar')) return;
@@ -526,6 +527,13 @@ class NotebookApp {
 
             this.editors[cell.id] = editor;
 
+            // Keyboard Shortcut: Ctrl + Enter to run code
+            if (!isMark) {
+                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+                    this.runCell(cell.id);
+                });
+            }
+
             const updateHeight = () => {
                 const contentHeight = editor.getContentHeight();
                 const options = editor.getOptions();
@@ -629,6 +637,18 @@ class NotebookApp {
         for (const cell of this.notebook.cells) {
             if (cell.type === 'code') await this.runCell(cell.id);
         }
+    }
+
+    clearAllOutputs() {
+        this.notebook.cells.forEach(cell => {
+            cell.output = null;
+            const outputDiv = document.getElementById(`output-${cell.id}`);
+            if (outputDiv) {
+                outputDiv.innerHTML = '';
+                outputDiv.classList.add('hidden');
+            }
+        });
+        this._autoSave();
     }
 
     displayOutput(cellId, data) {
