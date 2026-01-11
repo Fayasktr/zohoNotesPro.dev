@@ -517,7 +517,7 @@ class NotebookApp {
             if (this.notebook.cells.length === 0) {
                 this.addCell('code');
             } else {
-                this.notebook.cells.forEach(cell => this.renderCell(cell));
+                this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
             }
 
             if (targetCellId) {
@@ -561,11 +561,11 @@ class NotebookApp {
         };
 
         this.notebook.cells.push(cell);
-        this.renderCell(cell);
+        this.renderCell(cell, this.notebook.cells.length);
         this._autoSave();
     }
 
-    renderCell(cell) {
+    renderCell(cell, index = 1) {
         const container = document.getElementById('cells-list');
         const cellElem = document.createElement('div');
         cellElem.className = 'cell';
@@ -579,6 +579,7 @@ class NotebookApp {
                 <div class="drag-handle" title="Drag to Reorder">
                     <i data-lucide="grip-vertical" style="width: 14px;"></i>
                 </div>
+                <div class="cell-index">${index}</div>
                 <div class="reorder-btns">
                     <button class="btn-reorder move-up" title="Move Up"><i data-lucide="chevron-up" style="width:12px;"></i></button>
                     <button class="btn-reorder move-down" title="Move Down"><i data-lucide="chevron-down" style="width:12px;"></i></button>
@@ -732,7 +733,7 @@ class NotebookApp {
         this.notebook.cells[newIndex] = temp;
         this.disposeEditors();
         document.getElementById('cells-list').innerHTML = '';
-        this.notebook.cells.forEach(cell => this.renderCell(cell));
+        this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
         this._autoSave();
     }
 
@@ -817,7 +818,10 @@ class NotebookApp {
                 this.editors[cellId].dispose();
                 delete this.editors[cellId];
             }
-            document.getElementById(`container-${cellId}`).remove();
+            // Re-render to update sequence numbers
+            this.disposeEditors();
+            document.getElementById('cells-list').innerHTML = '';
+            this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
             this._autoSave();
         });
     }
@@ -909,7 +913,7 @@ class NotebookApp {
 
             this.disposeEditors();
             document.getElementById('cells-list').innerHTML = '';
-            this.notebook.cells.forEach(cell => this.renderCell(cell));
+            this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
             this._autoSave();
         }
     }
@@ -959,7 +963,7 @@ class NotebookApp {
                 if (res.ok) {
                     this.disposeEditors();
                     document.getElementById('cells-list').innerHTML = '';
-                    this.notebook.cells.forEach(cell => this.renderCell(cell));
+                    this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
                     this._autoSave();
                 } else {
                     // Restore cell if move failed

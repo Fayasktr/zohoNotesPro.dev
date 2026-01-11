@@ -218,6 +218,22 @@ body {
     color: var(--text-dim);
 }
 
+.cell-index {
+    background: var(--accent);
+    color: white;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    flex-shrink: 0;
+    margin-right: 4px;
+    box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.3);
+}
+
 @media (min-width: 640px) {
     .cell-header {
         padding: 12px 20px;
