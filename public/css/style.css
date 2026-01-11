@@ -15,19 +15,19 @@
 }
 
 body.light-theme {
-    --bg-dark: #e0e2e5;
-    --sidebar-bg: #d0d4d9;
-    --card-bg: #f0f2f5;
-    --border-color: #c8ccd1;
+    --bg-dark: #e3e0e0;
+    --sidebar-bg: #c2bfbf;
+    --card-bg: #cfc8c8;
+    --border-color: #e0e0e0;
     --accent: #6d5dfc;
     --accent-rgb: 109, 93, 252;
     --accent-hover: #5b4cf0;
-    --text-main: #3c4043;
-    --text-dim: #5f6368;
-    --glass-bg: rgba(224, 226, 229, 0.9);
-    --code-bg: #d8dce0;
-    --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
-    --modal-bg: #f0f2f5;
+    --text-main: #4a4949;
+    --text-dim: #666666;
+    --glass-bg: rgba(150, 149, 149, 0.9);
+    --code-bg: #f1f3f4;
+    --shadow: 0 4px 20px rgba(103, 101, 101, 0.05);
+    --modal-bg: #969494;
 }
 
 * {

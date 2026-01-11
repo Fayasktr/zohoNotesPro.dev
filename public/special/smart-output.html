@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Output - Documentation</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-dark: #0a0a0c;
+            --accent: #6d5dfc;
+            --text-main: #e0e0e0;
+            --text-dim: #a0a0a0;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 40px;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, var(--accent), var(--text-main));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: white;
+        }
+
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-top: 32px;
+            margin-bottom: 12px;
+            color: var(--accent);
+        }
+
+        p {
+            color: var(--text-dim);
+            margin-bottom: 16px;
+        }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #ffcc00;
+        }
+
+        .feature-card {
+            background: rgba(109, 93, 252, 0.05);
+            border: 1px solid rgba(109, 93, 252, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 24px 0;
+        }
+
+        .btn-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 40px;
+            transition: transform 0.2s;
+        }
+
+        .btn-back:hover {
+            transform: translateX(-5px);
+        }
+
+        .example-box {
+            background: #000;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .example-header {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="logo">
+            <i data-lucide="zap" style="width: 24px;"></i>
+            Smart Output Feature
+        </div>
+
+        <h1>What is Smart Output?</h1>
+        <p>Smart Output is a powerful productivity feature in <strong>Zoho Notes</strong> that streamlines your coding
+            workflow. It decides how results are displayed in your notebook output window.</p>
+
+        <div class="feature-card">
+            <h2><i data-lucide="toggle-right"
+                    style="display:inline-block; vertical-align: middle; margin-right: 8px;"></i> Smart Output: ON
+                (Balanced Mode)</h2>
+            <p>In this mode, the editor automatically captures and displays the value of the <strong>last
+                    expression</strong> in your code cell, even if you don't use <code>console.log()</code>.</p>
+
+            <div class="example-box">
+                <div class="example-header"><i data-lucide="code" style="width: 12px;"></i> Input Code</div>
+                <code style="display:block; white-space: pre-wrap;">const a = 10;<br>const b = 20;<br>a + b;</code>
+                <div class="example-header" style="margin-top: 12px;"><i data-lucide="terminal"
+                        style="width: 12px;"></i> Output</div>
+                <div style="color: #4cd964;">30</div>
+            </div>
+        </div>
+
+        <div class="feature-card" style="background: rgba(255, 59, 48, 0.03); border-color: rgba(255, 59, 48, 0.1);">
+            <h2><i data-lucide="toggle-left"
+                    style="display:inline-block; vertical-align: middle; margin-right: 8px;"></i> Smart Output: OFF
+                (Strict Mode)</h2>
+            <p>When turned off, the application acts like a traditional compiler. It will <strong>only</strong> show
+                output that you explicitly print using <code>console.log()</code>. If nothing is printed, it will remind
+                you.</p>
+
+            <div class="example-box">
+                <div class="example-header"><i data-lucide="code" style="width: 12px;"></i> Input Code</div>
+                <code style="display:block; white-space: pre-wrap;">const result = 2 + 2; // Nothing printed</code>
+                <div class="example-header" style="margin-top: 12px;"><i data-lucide="terminal"
+                        style="width: 12px;"></i> Output</div>
+                <div style="color: var(--text-dim); font-style: italic;">Program did not output anything!</div>
+            </div>
+        </div>
+
+        <h2>Why use it?</h2>
+        <p>Smart Output is perfect for quick calculations and rapid prototyping where you don't want to type
+            <code>console.log()</code> for every result. Turn it <strong>OFF</strong> when you want a clean, standard
+            terminal experience where you have full control over what is displayed.</p>
+
+        
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

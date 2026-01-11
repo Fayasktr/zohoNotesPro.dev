@@ -27,6 +27,7 @@ class NotebookApp {
 
         this.currentPendingFolder = 'root';
         this.setupTheme();
+        this.setupSmartOutput();
         this.setupEventListeners();
         this.setupMobileSidebar();
         this.setupResizableSidebar();
@@ -197,6 +198,10 @@ class NotebookApp {
             this.toggleTheme(e.target.checked);
         });
 
+        document.getElementById('smart-output-switch').addEventListener('change', (e) => {
+            this.toggleSmartOutput(e.target.checked);
+        });
+
         // Generic Modal Action Listeners
         document.getElementById('btn-modal-input-confirm').addEventListener('click', () => {
             if (this.currentInputCallback) {
@@ -303,6 +308,20 @@ class NotebookApp {
 
     toggleTheme(isLight) {
         this.applyTheme(isLight);
+    }
+
+    setupSmartOutput() {
+        // Default is false (Log Only) as per user request
+        const isSmart = localStorage.getItem('smart-output') === 'true';
+        this.smartOutput = isSmart;
+        document.getElementById('smart-output-switch').checked = isSmart;
+    }
+
+    toggleSmartOutput(isSmart) {
+        this.smartOutput = isSmart;
+        localStorage.setItem('smart-output', isSmart);
+        // We don't necessarily need to re-render everything, 
+        // but new executions will respect this.
     }
 
     openModal(modalId) {
@@ -752,11 +771,18 @@ class NotebookApp {
 
         if (data.success) {
             // Merging result into output area without separate "Result:" label
-            if (data.result !== 'undefined' && data.result !== null) {
+            if (this.smartOutput && data.result !== 'undefined' && data.result !== null) {
                 const resElem = document.createElement('div');
                 resElem.className = 'output-log';
                 resElem.textContent = data.result;
                 outputDiv.appendChild(resElem);
+            } else if (!this.smartOutput && (!data.logs || data.logs.length === 0)) {
+                const infoElem = document.createElement('div');
+                infoElem.className = 'output-log';
+                infoElem.style.opacity = '0.5';
+                infoElem.style.fontStyle = 'italic';
+                infoElem.textContent = 'Program did not output anything!';
+                outputDiv.appendChild(infoElem);
             }
         } else {
             const errElem = document.createElement('div');

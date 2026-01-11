@@ -60,7 +60,7 @@
     </style>
 </head>
 
-<body class="bg-[#0a0a0c] text-[#e0e0e0] overflow-hidden">
+<body class="bg-[var(--bg-dark)] text-[var(--text-main)] overflow-hidden">
     <div class="layout flex h-screen relative" id="layout-container">
         <!-- Mobile Sidebar Overlay -->
         <div id="sidebar-overlay"
@@ -68,10 +68,10 @@
 
         <!-- Sidebar -->
         <aside id="main-sidebar"
-            class="sidebar sidebar-mobile lg:relative lg:translate-x-0 w-72 bg-[#0f0f12] border-r border-[#ffffff1a] backdrop-blur-xl flex flex-col p-5 sidebar-transition overflow-y-auto">
+            class="sidebar sidebar-mobile lg:relative lg:translate-x-0 w-72 bg-[var(--sidebar-bg)] border-r border-[#ffffff1a] backdrop-blur-xl flex flex-col p-5 sidebar-transition overflow-y-auto">
             <div class="flex items-center justify-between mb-8">
                 <div
-                    class="logo text-2xl font-extrabold bg-gradient-to-r from-[#6d5dfc] to-[#e0e0e0] bg-clip-text text-transparent flex items-center gap-2">
+                    class="logo text-2xl font-extrabold bg-gradient-to-r from-[#6d5dfc] to-[var(--text-main)] bg-clip-text text-transparent flex items-center gap-2">
                     Zoho Notes
                 </div>
                 <button id="close-sidebar" class="lg:hidden text-[#a0a0a0] hover:text-white p-2">
@@ -86,7 +86,7 @@
             </button>
 
             <nav class="flex-1">
-                <div class="p-3 rounded-xl mb-2 cursor-pointer transition-all text-[#a0a0a0] flex items-center gap-3 hover:bg-[#ffffff08] hover:text-[#e0e0e0] active"
+                <div class="p-3 rounded-xl mb-2 cursor-pointer transition-all text-[var(--text-dim)] flex items-center gap-3 hover:bg-[var(--card-bg)] hover:text-[var(--text-main)] active"
                     id="toggle-notebooks">
                     <i data-lucide="layers"></i>
                     <span class="flex-1">My Notebooks</span>
@@ -100,17 +100,17 @@
                     id="notebook-list">
                     <!-- Dynamic notebooks here -->
                 </div>
-                <div class="flex p-3 rounded-xl mb-2 cursor-pointer transition-all text-[#a0a0a0] items-center gap-3 hover:bg-[#ffffff08] hover:text-[#e0e0e0]"
+                <div class="flex p-3 rounded-xl mb-2 cursor-pointer transition-all text-[var(--text-dim)] items-center gap-3 hover:bg-[var(--card-bg)] hover:text-[var(--text-main)]"
                     id="nav-starred-cells">
                     <i data-lucide="star" class="fill-[#ffcc00] text-[#ffcc00]"></i> Starred Notes
                 </div>
-                <div class="flex p-3 rounded-xl mb-2 cursor-pointer transition-all text-[#a0a0a0] items-center gap-3 hover:bg-[#ffffff08] hover:text-[#e0e0e0]"
+                <div class="flex p-3 rounded-xl mb-2 cursor-pointer transition-all text-[var(--text-dim)] items-center gap-3 hover:bg-[var(--card-bg)] hover:text-[var(--text-main)]"
                     id="nav-trash">
                     <i data-lucide="trash-2"></i> Trash
                 </div>
             </nav>
 
-            <div class="mt-auto py-5 border-t border-[#ffffff1a]">
+            <div class="mt-auto py-5 border-t border-[var(--border-color)]">
                 <div
                     class="flex items-center gap-3 p-2.5 mb-5 rounded-xl cursor-pointer hover:bg-[#9696961a] border border-transparent hover:border-[#ffffff1a] transition-all group">
                     <div class="w-8 h-8 rounded-full bg-[#6d5dfc] flex items-center justify-center font-bold text-sm">
@@ -138,7 +138,7 @@
         <div id="sidebar-resizer" class="resizer hidden lg:block"></div>
 
         <!-- Main Content -->
-        <main class="flex-1 overflow-y-auto h-screen p-4 sm:p-5 lg:p-10 flex flex-col items-center bg-[#0a0a0c]">
+        <main class="flex-1 overflow-y-auto h-screen p-4 sm:p-5 lg:p-10 flex flex-col items-center bg-[var(--bg-dark)]">
             <!-- Mobile Toggle Header -->
             <div class="w-full flex lg:hidden mb-5">
                 <button id="open-sidebar"
@@ -150,7 +150,7 @@
             <div class="notebook-container w-full max-w-[900px]">
                 <header class="mb-10 flex items-center gap-4">
                     <input type="text"
-                        class="text-2xl lg:text-3xl font-bold bg-transparent border-none text-white w-full outline-none focus:border-b focus:border-[#6d5dfc] transition-all"
+                        class="text-2xl lg:text-3xl font-bold bg-transparent border-none text-[var(--text-main)] w-full outline-none focus:border-b focus:border-[#6d5dfc] transition-all"
                         id="notebook-title" value="Untitled Notebook" placeholder="Enter title...">
                 </header>
 
@@ -223,9 +223,22 @@
 
             <div class="settings-group">
                 <div class="theme-toggle-row">
-                    <span>Appearance</span>
+                    <span>Appearance (Light Mode)</span>
                     <label class="switch">
                         <input type="checkbox" id="theme-switch">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+                <div class="theme-toggle-row" style="margin-top: 15px;">
+                    <div>
+                        <span>Smart Output</span>
+                        <p style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">Show last result
+                            automatically <a href="/special/smart-output.html"
+                                class="text-[#6d5dfc] hover:underline ml-1" target="_blank"
+                                style="font-weight: 600;">More</a></p>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="smart-output-switch">
                         <span class="slider round"></span>
                     </label>
                 </div>
