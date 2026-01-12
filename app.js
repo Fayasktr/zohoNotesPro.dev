@@ -4,6 +4,7 @@ const hbs = require('hbs');
 const path = require('path');
 const cors = require('cors');
 const fs = require('fs');
+const http = require('http');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const { MongoStore } = require('connect-mongo');
@@ -77,12 +78,21 @@ app.use((req, res, next) => {
 });
 
 // Session Configuration
+if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1); // trust first proxy
+}
+
 app.use(session({
     secret: process.env.SESSION_SECRET || 'zoho-secret-key-123',
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({ mongoUrl: mongoURI }),
-    cookie: { maxAge: 1000 * 60 * 60 * 24 } // 1 day
+    cookie: {
+        maxAge: 1000 * 60 * 60 * 24, // 1 day
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax'
+    }
 }));
 
 // Passport Middleware
@@ -447,6 +457,17 @@ app.get('/api/feedback', isAuthenticated, async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch feedback' });
     }
+});
+
+// --- MONITORING & KEEP-ALIVE ---
+
+// Health Check Endpoint
+app.get('/api/health', (req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
 });
 
 app.post('/api/user/settings', isAuthenticated, async (req, res) => {
@@ -871,7 +892,7 @@ cron.schedule('*/10 * * * *', async () => {
             { $unset: { resetPasswordToken: 1, resetPasswordExpires: 1 } }
         );
 
-        let maintenanceMsg = "10-minute refresh completed.";
+        let maintenanceMsg = "System maintenance completed.";
         if (result.modifiedCount > 0) {
             maintenanceMsg += ` Cleaned up ${result.modifiedCount} expired reset tokens.`;
         }
@@ -879,17 +900,35 @@ cron.schedule('*/10 * * * *', async () => {
         // 2. System Heartbeat
         const userCount = await User.countDocuments({ role: { $ne: 'admin' } });
         const noteCount = await Note.countDocuments();
+        const feedbackCount = await Feedback.countDocuments();
 
         await SystemLog.create({
             type: 'info',
-            message: `${maintenanceMsg} System Status: ${userCount} Users, ${noteCount} Notes.`
+            message: `${maintenanceMsg} System Status: ${userCount} Users, ${noteCount} Notes, ${feedbackCount} Feedbacks.`
         });
+        console.log(`[Cron] Maintenance: ${maintenanceMsg}`);
     } catch (err) {
+        console.error('[Cron] Maintenance Error:', err);
         await SystemLog.create({
             type: 'error',
             message: `Background Maintenance Error: ${err.message}`
         });
     }
+});
+
+// Self-Ping Keep-Alive Job (Every 5 minutes)
+cron.schedule('*/5 * * * *', async () => {
+    const APP_URL = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+
+    http.get(`${APP_URL}/api/health`, (res) => {
+        if (res.statusCode === 200) {
+            console.log(`[Cron] Keep-Alive: Ping successful (${new Date().toLocaleTimeString()})`);
+        } else {
+            console.error(`[Cron] Keep-Alive: Ping failed with status ${res.statusCode}`);
+        }
+    }).on('error', (err) => {
+        console.error('[Cron] Keep-Alive Error:', err.message);
+    });
 });
 
 app.listen(PORT, '0.0.0.0', () => {

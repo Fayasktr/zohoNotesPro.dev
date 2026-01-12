@@ -144,7 +144,7 @@
                     id="nav-settings">
                     <i data-lucide="settings"></i> Settings
                 </div>
-                <div class="ml-1/5 text-[10px] text-[var(--text-dim)] opacity-70 mt-2.5 credit-text">
+                <div class="text-[10px] text-[var(--text-dim)] opacity-70 mt-2.5 credit-text text-center w-full">
                     <a href="https://fayasktr.github.io/Fayas-protfolio/" target="_blank" class="hover:underline">©Fayas
                         kp</a>
                 </div>
@@ -155,11 +155,13 @@
         <div id="sidebar-resizer" class="resizer hidden lg:block"></div>
 
         <!-- Main Content -->
-        <main class="flex-1 overflow-y-auto h-screen p-4 sm:p-5 lg:p-10 flex flex-col items-center bg-[var(--bg-dark)]">
-            <!-- Mobile Toggle Header -->
-            <div class="w-full flex lg:hidden mb-5">
+        <main
+            class="flex-1 overflow-y-auto h-screen px-4 pb-4 sm:px-5 sm:pb-5 lg:p-10 flex flex-col items-center bg-[var(--bg-dark)]">
+            <!-- Mobile Toggle Header (Sticky) -->
+            <div
+                class="sticky top-0 w-full flex lg:hidden pt-4 pb-2 bg-[var(--bg-dark)]/90 backdrop-blur-md z-[100] mb-2">
                 <button id="open-sidebar"
-                    class="p-2 text-[#a0a0a0] hover:text-white bg-[#ffffff08] rounded-lg border border-[#ffffff1a]">
+                    class="p-2 text-[#a0a0a5] hover:text-white bg-[#ffffff08] rounded-xl border border-[#ffffff1a] transition-all active:scale-95">
                     <i data-lucide="menu"></i>
                 </button>
             </div>
