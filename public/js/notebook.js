@@ -450,12 +450,16 @@ class NotebookApp {
 
         const renderItem = (nb, container) => {
             const item = document.createElement('div');
-            item.className = `notebook-item ${nb.id === this.notebook.id ? 'active' : ''}`;
+            item.className = `notebook-item ${nb.id === this.notebook.id ? 'active' : ''} ${nb.isShared ? 'shared-item' : ''}`;
             item.setAttribute('data-id', nb.id);
             item.innerHTML = `
-                <i data-lucide="${nb.id === this.notebook.id ? 'edit-3' : 'file-code'}" 
-                   style="width: 14px;"></i> 
-                <span style="flex: 1;">${nb.title}</span>
+                <i data-lucide="${nb.isShared ? 'users' : (nb.id === this.notebook.id ? 'edit-3' : 'file-code')}" 
+                   style="width: 14px; ${nb.isShared ? 'color: #6d5dfc;' : ''}"></i> 
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+                    <span class="truncate" style="font-size: 13px;">${nb.title}</span>
+                    ${nb.isShared ? `<span style="font-size: 8px; opacity: 0.5;">Shared by ${nb.ownerName}</span>` : ''}
+                </div>
+                ${!nb.isShared ? `
                 <div class="item-actions">
                     <button class="btn-icon-sm rename-notebook-btn" title="Rename File">
                         <i data-lucide="edit-2"></i>
@@ -464,6 +468,7 @@ class NotebookApp {
                         <i data-lucide="trash-2"></i>
                     </button>
                 </div>
+                ` : ''}
             `;
             container.appendChild(item);
         };

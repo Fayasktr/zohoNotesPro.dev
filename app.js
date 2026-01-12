@@ -476,25 +476,55 @@ app.post('/api/execute', isAuthenticated, async (req, res) => {
 
 app.get('/api/notebooks', isAuthenticated, async (req, res) => {
     try {
-        const notes = await Note.find({
-            owner: req.session.userId,
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+
+        // Find notebooks owned by the user
+        const ownedNotes = await Note.find({
+            owner: userId,
             isTrashed: { $ne: true }
         }, 'id title folder isStarred updatedAt').sort({ updatedAt: -1 });
-        res.json(notes);
+
+        // Find notebooks shared with the user (accepted)
+        const sharedNotes = await Note.find({
+            'collaborators.user': userId,
+            'collaborators.status': 'accepted',
+            isTrashed: { $ne: true }
+        }, 'id title folder isStarred updatedAt owner').populate('owner', 'username');
+
+        // Combine and mark shared ones
+        const allNotes = [
+            ...ownedNotes.map(n => ({ ...n.toObject(), isShared: false })),
+            ...sharedNotes.map(n => ({ ...n.toObject(), isShared: true, ownerName: n.owner?.username }))
+        ];
+
+        // Sort by updatedAt
+        allNotes.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+        res.json(allNotes);
     } catch (err) {
+        console.error('Notebook list error:', err);
         res.status(500).json({ error: 'Failed to list notebooks' });
     }
 });
 
 app.get(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
     const notebookId = req.params[0];
+    const userId = req.session.userId || (req.user ? req.user._id : null);
     try {
-        const query = { id: notebookId };
-        if (req.session.role !== 'admin') {
-            query.owner = req.session.userId;
+        let query;
+        if (req.session.role === 'admin') {
+            query = { id: notebookId };
+        } else {
+            query = {
+                id: notebookId,
+                $or: [
+                    { owner: userId },
+                    { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }
+                ]
+            };
         }
         const note = await Note.findOne(query);
-        if (!note) return res.status(404).json({ error: 'Notebook not found' });
+        if (!note) return res.status(404).json({ error: 'Notebook not found or access denied' });
         res.json(note.content || note);
     } catch (err) {
         res.status(500).json({ error: 'Failed to read notebook' });
@@ -516,8 +546,17 @@ app.post('/api/notebooks', isAuthenticated, async (req, res) => {
             updatedAt: new Date()
         };
 
-        await Note.findOneAndUpdate(
-            { id: notebookData.id, owner: req.session.userId },
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        const query = {
+            id: notebookData.id,
+            $or: [
+                { owner: userId },
+                { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }
+            ]
+        };
+
+        const note = await Note.findOneAndUpdate(
+            query,
             updateData,
             { upsert: true, new: true }
         );
@@ -704,6 +743,110 @@ app.delete(/^\/api\/trash\/(.+)$/, isAuthenticated, async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to permanently delete' });
+    }
+});
+
+// --- SHARING ROUTES ---
+
+app.get('/sharing-notes', isAuthenticated, async (req, res) => {
+    res.render('sharingNotes', { title: 'Collaborative Sharing - Zoho Notes' });
+});
+
+app.post('/api/share/invite', isAuthenticated, async (req, res) => {
+    const { email, notebookId } = req.body;
+    const currentUserId = req.session.userId || (req.user ? req.user._id : null);
+
+    try {
+        const targetUser = await User.findOne({ email });
+        if (!targetUser) return res.status(404).json({ error: 'User not found' });
+        if (targetUser._id.equals(currentUserId)) {
+            return res.status(400).json({ error: 'You cannot share with yourself' });
+        }
+
+        const notebook = await Note.findOne({ id: notebookId, owner: currentUserId });
+        if (!notebook) return res.status(404).json({ error: 'Notebook not found or not owned by you' });
+
+        // Check if already shared
+        const alreadyShared = notebook.collaborators.find(c => c.user && c.user.equals(targetUser._id));
+        if (alreadyShared) {
+            return res.status(400).json({ error: 'Notebook already shared with this user' });
+        }
+
+        notebook.collaborators.push({
+            user: targetUser._id,
+            email: targetUser.email,
+            status: 'pending'
+        });
+
+        await notebook.save();
+        res.json({ success: true, message: 'Invite sent successfully!' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to send invite' });
+    }
+});
+
+app.get('/api/share/invites', isAuthenticated, async (req, res) => {
+    const currentUserId = req.session.userId || (req.user ? req.user._id : null);
+    try {
+        // Find notebooks where I am a pending collaborator
+        const notebooks = await Note.find({
+            'collaborators.user': currentUserId,
+            'collaborators.status': 'pending'
+        }, 'id title owner').populate('owner', 'username email');
+
+        res.json(notebooks.map(nb => ({
+            notebookId: nb.id,
+            title: nb.title,
+            ownerName: nb.owner?.username,
+            ownerEmail: nb.owner?.email
+        })));
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch invites' });
+    }
+});
+
+app.get('/api/share/my-shared', isAuthenticated, async (req, res) => {
+    const currentUserId = req.session.userId || (req.user ? req.user._id : null);
+    try {
+        const notebooks = await Note.find({
+            owner: currentUserId,
+            'collaborators.0': { $exists: true }
+        }, 'id title collaborators');
+
+        res.json(notebooks);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch shared notebooks' });
+    }
+});
+
+app.post('/api/share/respond', isAuthenticated, async (req, res) => {
+    const { notebookId, response } = req.body; // response: 'accepted' or 'declined'
+    const currentUserId = req.session.userId || (req.user ? req.user._id : null);
+
+    try {
+        const notebook = await Note.findOne({ id: notebookId, 'collaborators.user': currentUserId });
+        if (!notebook) return res.status(404).json({ error: 'Invitation not found' });
+
+        if (response === 'accepted') {
+            await Note.updateOne(
+                { id: notebookId, 'collaborators.user': currentUserId },
+                {
+                    $set: {
+                        'collaborators.$.status': 'accepted',
+                        'collaborators.$.joinedAt': new Date()
+                    }
+                }
+            );
+        } else {
+            await Note.updateOne(
+                { id: notebookId },
+                { $pull: { collaborators: { user: currentUserId } } }
+            );
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to respond to invitation' });
     }
 });
 

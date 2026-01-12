@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    <meta name="csrf-token" content="{{csrfToken}}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            overflow-y: auto !important;
+            height: auto !important;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #6d5dfc;
+            border-radius: 10px;
+        }
+
+        select option {
+            background: white;
+            color: black;
+        }
+
+        /* Mobile/Browser default specific fix */
+        select {
+            color: white;
+        }
+    </style>
+</head>
+
+<body class="bg-[#0a0a0c] text-white min-h-screen">
+    <div class="max-w-5xl mx-auto p-6 lg:p-12">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-12">
+            <div>
+                <a href="/" class="text-[#6d5dfc] flex items-center gap-2 mb-4 hover:underline">
+                    <i data-lucide="arrow-left" class="w-4 h-4"></i> Back to Notebook
+                </a>
+                <h1 class="text-4xl font-extrabold tracking-tight">Collaborative Sharing</h1>
+                <p class="text-[#a0a0a5] mt-2">Invite others to collaborate on your notes and manage sharing requests.
+                </p>
+            </div>
+            <div class="w-16 h-16 bg-[#6d5dfc1a] text-[#6d5dfc] rounded-3xl flex items-center justify-center">
+                <i data-lucide="users" class="w-8 h-8"></i>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Column: Invite & My Shared -->
+            <div class="lg:col-span-2 space-y-8">
+                <!-- Section: Invite User -->
+                <div class="bg-[#151518] border border-[#ffffff1a] p-8 rounded-[2rem] shadow-xl">
+                    <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+                        <i data-lucide="user-plus" class="text-[#6d5dfc]"></i> Invite Collaborator
+                    </h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-[#a0a0a5] mb-2">Select Notebook</label>
+                            <select id="invite-notebook"
+                                class="w-full bg-[#ffffff08] border border-[#ffffff1a] p-4 rounded-xl outline-none focus:border-[#6d5dfc] transition-all">
+                                <option value="" disabled selected>Choose a notebook...</option>
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-[#a0a0a5] mb-2">Collaborator's Email</label>
+                            <div class="flex gap-3">
+                                <input type="email" id="invite-email" placeholder="friend@example.com"
+                                    class="flex-1 bg-[#ffffff08] border border-[#ffffff1a] p-4 rounded-xl outline-none focus:border-[#6d5dfc] transition-all">
+                                <button id="btn-send-invite"
+                                    class="bg-[#6d5dfc] text-white px-8 py-4 rounded-xl font-bold hover:scale-[1.02] active:scale-95 transition-all">
+                                    Send Invite
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: My Collaborative Notebooks (Sent) -->
+                <div class="bg-[#151518] border border-[#ffffff1a] p-8 rounded-[2rem] shadow-xl">
+                    <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+                        <i data-lucide="share-2" class="text-[#30ff6a]"></i> Managed Collaborations
+                    </h2>
+                    <div id="my-shared-list" class="space-y-4">
+                        <p class="text-center py-10 opacity-30 italic">No notebooks shared yet.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Pending Invites -->
+            <div class="space-y-8">
+                <div class="bg-[#151518] border border-[#ffffff1a] p-8 rounded-[2rem] shadow-xl">
+                    <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+                        <i data-lucide="mail" class="text-[#ffcc00]"></i> Pending Invites
+                    </h2>
+                    <div id="pending-invites-list" class="space-y-4">
+                        <!-- Populated dynamically -->
+                        <p class="text-center py-10 opacity-30 italic">No pending invitations.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast"
+        class="fixed bottom-8 right-8 bg-[#151518] border border-[#ffffff1a] p-5 rounded-2xl shadow-2xl transform translate-y-24 opacity-0 transition-all duration-300 z-[3000]">
+        <div class="flex items-center gap-3">
+            <div id="toast-icon" class="w-10 h-10 rounded-full flex items-center justify-center"></div>
+            <div>
+                <div id="toast-title" class="font-bold">Title</div>
+                <div id="toast-message" class="text-sm text-[#a0a0a5]">Message here</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/sharing.js"></script>
+    <script>lucide.createIcons();</script>
+</body>
+
+</html>
