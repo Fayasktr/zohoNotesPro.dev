@@ -56,6 +56,11 @@
             Admin Console
         </div>
         <div class="flex items-center gap-4">
+            <a href="/"
+                class="text-sm font-semibold text-[#a0a0a5] hover:text-white transition-colors flex items-center gap-1.5">
+                <i data-lucide="book" class="w-4 h-4"></i>
+                Notebook
+            </a>
             <div class="hidden sm:block text-sm text-[#a0a0a5]">Welcome, <span
                     class="text-white font-semibold">{{adminName}}</span></div>
             <a href="/logout"
@@ -87,6 +92,11 @@
                     class="w-full sm:w-auto bg-[#6d5dfc] text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-[#6d5dfc4d]">
                     <i data-lucide="user-plus" class="w-5 h-5"></i>
                     Create User
+                </button>
+                <button onclick="showFeedbackModal()"
+                    class="w-full sm:w-auto bg-[#30ff6a] text-[#0a0a0c] px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-[#30ff6a4d]">
+                    <i data-lucide="message-square" class="w-5 h-5"></i>
+                    Feedbacks
                 </button>
             </div>
         </div>
@@ -304,6 +314,32 @@
                         User</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- MODAL: USER FEEDBACKS -->
+    <div id="feedbackModal" class="fixed inset-0 z-[2000] hidden items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300"
+            id="feedbackOverlay"></div>
+        <div class="bg-[#151518] border border-[#ffffff1a] p-8 lg:p-10 rounded-[2rem] w-full max-w-2xl relative shadow-2xl scale-95 opacity-0 transition-all duration-300 transform"
+            id="feedbackBox">
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <h2 class="text-2xl font-bold mb-1">User Feedbacks</h2>
+                    <p class="text-[#a0a0a5] text-sm italic">Latest messages and suggestions from users</p>
+                </div>
+                <button onclick="closeFeedbackModal()" class="text-[#a0a0a5] hover:text-white"><i data-lucide="x"
+                        class="w-6 h-6"></i></button>
+            </div>
+
+            <div id="feedbackList" class="space-y-4 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2 min-h-[200px]">
+                <!-- Feedbacks here -->
+            </div>
+
+            <div class="flex gap-4 pt-8">
+                <button type="button" onclick="closeFeedbackModal()"
+                    class="w-full px-6 py-4 rounded-xl border border-[#ffffff1a] font-bold hover:bg-[#ffffff08] transition-all">Close</button>
+            </div>
         </div>
     </div>
 
@@ -687,6 +723,65 @@
             } catch (err) {
                 list.innerHTML = '<p class="text-center py-10 text-[#ff3b30]">Failed to load logs.</p>';
             }
+        }
+
+        async function showFeedbackModal() {
+            const modal = document.getElementById('feedbackModal');
+            const overlay = document.getElementById('feedbackOverlay');
+            const box = document.getElementById('feedbackBox');
+            const list = document.getElementById('feedbackList');
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            list.innerHTML = '<p class="text-center py-10 opacity-50">Fetching feedbacks...</p>';
+
+            setTimeout(() => {
+                overlay.classList.replace('opacity-0', 'opacity-100');
+                box.classList.replace('opacity-0', 'opacity-100');
+                box.classList.replace('scale-95', 'scale-100');
+            }, 10);
+
+            try {
+                const res = await safeFetch('/api/feedback');
+                const feedbacks = await res.json();
+                list.innerHTML = '';
+                if (feedbacks.length === 0) {
+                    list.innerHTML = '<div class="py-10 text-center opacity-30 italic">No feedbacks yet.</div>';
+                } else {
+                    feedbacks.forEach(f => {
+                        const date = new Date(f.createdAt).toLocaleString();
+                        const item = document.createElement('div');
+                        item.className = 'glass-card border border-[#ffffff1a] p-5 rounded-2xl';
+                        item.innerHTML = `
+                            <div class="flex items-center gap-3 mb-3">
+                                <div class="w-8 h-8 bg-[#30ff6a1a] text-[#30ff6a] rounded-full flex items-center justify-center font-bold text-xs">
+                                    ${(f.user?.username || '?')[0].toUpperCase()}
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-sm font-bold truncate">${f.user?.username || 'Unknown'}</div>
+                                    <div class="text-[10px] text-[#a0a0a5] truncate">${f.user?.email || ''}</div>
+                                </div>
+                                <div class="text-[10px] text-[#a0a0a5] font-mono">${date}</div>
+                            </div>
+                            <p class="text-sm leading-relaxed text-white/90 whitespace-pre-wrap">${f.message}</p>
+                        `;
+                        list.appendChild(item);
+                    });
+                }
+                lucide.createIcons();
+            } catch (err) {
+                list.innerHTML = `<p class="text-center py-10 text-[#ff3b30]">Error: ${err.message}</p>`;
+            }
+        }
+
+        function closeFeedbackModal() {
+            const modal = document.getElementById('feedbackModal');
+            const overlay = document.getElementById('feedbackOverlay');
+            const box = document.getElementById('feedbackBox');
+            overlay.classList.replace('opacity-100', 'opacity-0');
+            box.classList.replace('opacity-100', 'opacity-0');
+            box.classList.replace('scale-100', 'scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
         }
 
         async function clearSystemLogs() {

@@ -10,6 +10,7 @@ const { MongoStore } = require('connect-mongo');
 const bcrypt = require('bcryptjs');
 const Note = require('./models/Note');
 const TrashedCell = require('./models/TrashedCell');
+const Feedback = require('./models/Feedback');
 const engine = require('./engine/AntigravityEngine');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
@@ -42,6 +43,10 @@ hbs.registerHelper('formatDate', function (date) {
         hour: '2-digit',
         minute: '2-digit'
     });
+});
+
+hbs.registerHelper('eq', function (a, b) {
+    return a === b;
 });
 
 // MongoDB Connection
@@ -411,17 +416,58 @@ app.post('/reset-password/:token', async (req, res) => {
 // --- CORE APP ROUTES ---
 
 app.get('/', isAuthenticated, (req, res) => {
-    if (req.session.role === 'admin') return res.redirect('/admin/dashboard');
     res.render('index', {
         title: 'Zoho Notes',
-        username: res.locals.username
+        username: res.locals.username,
+        isAdmin: req.session.role === 'admin' || (req.user && req.user.role === 'admin'),
+        defaultLanguage: res.locals.currentUser?.settings?.defaultLanguage || 'javascript'
     });
 });
 
-app.post('/api/execute', isAuthenticated, async (req, res) => {
-    const { code } = req.body;
+app.post('/api/feedback', isAuthenticated, async (req, res) => {
+    const { message } = req.body;
     try {
-        const result = await engine.execute(code);
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        const feedback = new Feedback({ user: userId, message });
+        await feedback.save();
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to send feedback' });
+    }
+});
+
+app.get('/api/feedback', isAuthenticated, async (req, res) => {
+    // Only admin can see feedback
+    const userRole = req.session.role || (req.user ? req.user.role : 'user');
+    if (userRole !== 'admin') return res.status(403).json({ error: 'Access denied' });
+
+    try {
+        const feedbacks = await Feedback.find().populate('user', 'username email').sort({ createdAt: -1 });
+        res.json(feedbacks);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch feedback' });
+    }
+});
+
+app.post('/api/user/settings', isAuthenticated, async (req, res) => {
+    const { defaultLanguage } = req.body;
+    try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        await User.findByIdAndUpdate(userId, {
+            'settings.defaultLanguage': defaultLanguage
+        });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update settings' });
+    }
+});
+
+app.post('/api/execute', isAuthenticated, async (req, res) => {
+    const { code, lang } = req.body;
+    try {
+        const result = await engine.execute(code, lang);
         res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });

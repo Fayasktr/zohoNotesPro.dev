@@ -11,7 +11,10 @@ const userSchema = new mongoose.Schema({
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     isBlocked: { type: Boolean, default: false },
     lastLogin: Date,
-    lastLogout: Date
+    lastLogout: Date,
+    settings: {
+        defaultLanguage: { type: String, default: 'javascript' }
+    }
 });
 
 module.exports = mongoose.model('User', userSchema);

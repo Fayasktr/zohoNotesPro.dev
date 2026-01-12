@@ -23,6 +23,7 @@ class NotebookApp {
             tags: []
         };
         this.editors = {}; // cellId -> monaco editor instance
+        this.userSettings = window.USER_SETTINGS || { defaultLanguage: 'javascript' };
         this._autoSave = debounce(() => this.saveToBackend(), 1500);
 
         this.currentPendingFolder = 'root';
@@ -205,6 +206,12 @@ class NotebookApp {
         document.getElementById('smart-output-switch').addEventListener('change', (e) => {
             this.toggleSmartOutput(e.target.checked);
         });
+
+        document.getElementById('setting-default-lang').addEventListener('change', (e) => {
+            this.updateDefaultLanguage(e.target.value);
+        });
+
+        document.getElementById('btn-send-feedback').addEventListener('click', () => this.sendFeedback());
 
         // Generic Modal Action Listeners
         document.getElementById('btn-modal-input-confirm').addEventListener('click', () => {
@@ -553,14 +560,66 @@ class NotebookApp {
         this.editors = {};
     }
 
+    async updateDefaultLanguage(lang) {
+        this.userSettings.defaultLanguage = lang;
+        try {
+            await this.safeFetch('/api/user/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ defaultLanguage: lang })
+            });
+        } catch (err) {
+            console.error('Failed to update default language:', err);
+        }
+    }
+
+    async sendFeedback() {
+        const textarea = document.getElementById('feedback-message');
+        const message = textarea.value.trim();
+        if (!message) return;
+
+        const btn = document.getElementById('btn-send-feedback');
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+
+        try {
+            await this.safeFetch('/api/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            });
+            textarea.value = '';
+            btn.textContent = 'Sent Successfully!';
+            setTimeout(() => {
+                btn.textContent = 'Send Feedback';
+                btn.disabled = false;
+            }, 3000);
+        } catch (err) {
+            console.error('Feedback error:', err);
+            btn.textContent = 'Failed to Send';
+            btn.disabled = false;
+        }
+    }
+
+
     addCell(type, content = '') {
         const cellId = 'cell-' + Math.random().toString(36).substr(2, 9);
+        const lang = type === 'code' ? (this.userSettings.defaultLanguage || 'javascript') : 'markdown';
+
+        // Use templates for new cells
+        const templates = {
+            'c': '#include <stdio.h>\n\nint main() {\n    printf("Hello, World!\\n");\n    return 0;\n}',
+            'cpp': '#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!" << std::endl;\n    return 0;\n}',
+            'java': 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}'
+        };
+
         const cell = {
             id: cellId,
             type: type,
+            lang: lang,
             title: '',
             isStarred: false,
-            content: content,
+            content: content || (templates[lang] || ''),
             output: null
         };
 
@@ -589,7 +648,15 @@ class NotebookApp {
                     <button class="btn-reorder move-down" title="Move Down"><i data-lucide="chevron-down" style="width:12px;"></i></button>
                 </div>
                 <input type="text" class="cell-title-input" placeholder="Set note label..." value="${cell.title || ''}">
-                <div style="text-align: right; margin-right: 8px; font-size: 9px; opacity: 0.5; flex-shrink: 0;">${cell.type.toUpperCase()}</div>
+                ${!isMark ? `
+                <select class="cell-lang-select">
+                    <option value="javascript" ${cell.lang === 'javascript' ? 'selected' : ''}>JS</option>
+                    <option value="python" ${cell.lang === 'python' ? 'selected' : ''}>PY</option>
+                    <option value="java" ${cell.lang === 'java' ? 'selected' : ''}>JAVA</option>
+                    <option value="c" ${cell.lang === 'c' ? 'selected' : ''}>C</option>
+                    <option value="cpp" ${cell.lang === 'cpp' ? 'selected' : ''}>C++</option>
+                </select>
+                ` : `<div style="text-align: right; margin-right: 8px; font-size: 9px; opacity: 0.5; flex-shrink: 0;">MARKDOWN</div>`}
                 <div class="cell-actions">
                     <button class="btn-icon btn-star-cell" title="Star Note">
                         <i data-lucide="star" ${cell.isStarred ? 'style="fill: #ffcc00; color: #ffcc00;"' : ''}></i>
@@ -611,7 +678,7 @@ class NotebookApp {
         require(['vs/editor/editor.main'], () => {
             const editor = monaco.editor.create(document.getElementById(`editor-${cell.id}`), {
                 value: cell.content,
-                language: isMark ? 'markdown' : 'javascript',
+                language: isMark ? 'markdown' : (cell.lang === 'cpp' ? 'cpp' : (cell.lang === 'c' ? 'c' : (cell.lang === 'python' ? 'python' : (cell.lang === 'java' ? 'java' : 'javascript')))),
                 theme: 'vs-dark',
                 automaticLayout: true,
                 minimap: { enabled: false },
@@ -630,7 +697,19 @@ class NotebookApp {
                 wordWrap: 'on',
                 wrappingStrategy: 'advanced',
                 overviewRulerLanes: 0,
-                hideCursorInOverviewRuler: true
+                hideCursorInOverviewRuler: true,
+                quickSuggestions: {
+                    other: true,
+                    comments: true,
+                    strings: true
+                },
+                suggestOnTriggerCharacters: true,
+                parameterHints: {
+                    enabled: true
+                },
+                acceptSuggestionOnEnter: 'on',
+                snippetSuggestions: 'top',
+                wordBasedSuggestions: true
             });
 
             this.editors[cell.id] = editor;
@@ -693,6 +772,38 @@ class NotebookApp {
                     preview.classList.remove('hidden');
                     updatePreview();
                 }
+            } else {
+                // Language selection handling for code cells
+                const langSelect = cellElem.querySelector('.cell-lang-select');
+                if (langSelect) {
+                    langSelect.addEventListener('change', (e) => {
+                        const newLang = e.target.value;
+                        cell.lang = newLang;
+
+                        // Default templates
+                        const templates = {
+                            'c': '#include <stdio.h>\n\nint main() {\n    printf("Hello, World!\\n");\n    return 0;\n}',
+                            'cpp': '#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!" << std::endl;\n    return 0;\n}',
+                            'java': 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}'
+                        };
+
+                        // Update Monaco Language
+                        let monacoLang = 'javascript';
+                        if (newLang === 'python') monacoLang = 'python';
+                        else if (newLang === 'java') monacoLang = 'java';
+                        else if (newLang === 'c') monacoLang = 'c';
+                        else if (newLang === 'cpp') monacoLang = 'cpp';
+
+                        monaco.editor.setModelLanguage(editor.getModel(), monacoLang);
+
+                        // Auto-populate if empty
+                        if (!editor.getValue().trim()) {
+                            editor.setValue(templates[newLang] || '');
+                        }
+
+                        this._autoSave();
+                    });
+                }
             }
         });
     }
@@ -711,7 +822,7 @@ class NotebookApp {
             const response = await this.safeFetch('/api/execute', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code })
+                body: JSON.stringify({ code, lang: cell.lang || 'javascript' })
             });
             const data = await response.json();
             cell.output = data;

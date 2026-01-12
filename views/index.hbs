@@ -15,6 +15,17 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <script>
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+        window.MonacoEnvironment = {
+            getWorkerUrl: function (workerId, label) {
+                return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+                self.MonacoEnvironment = { baseUrl: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/' };
+                importScripts('https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/base/worker/workerMain.js');`
+                )}`;
+            }
+        };
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         /* Custom styles that Tailwind doesn't easily cover or are too specific */
@@ -247,6 +258,49 @@
                         <span class="slider round"></span>
                     </label>
                 </div>
+                <!-- Default Language Setting -->
+                <div style="margin-top: 20px; text-align: left;">
+                    <label
+                        style="display: block; font-size: 11px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px;">Default
+                        Programming Language</label>
+                    <div class="relative">
+                        <select id="setting-default-lang"
+                            style="width: 100%; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-main); padding: 10px; border-radius: 8px; font-size: 13px; outline: none; appearance: none; cursor: pointer;">
+                            <option value="javascript" {{#if (eq defaultLanguage 'javascript' )}}selected{{/if}}>
+                                JavaScript</option>
+                            <option value="python" {{#if (eq defaultLanguage 'python' )}}selected{{/if}}>Python</option>
+                            <option value="java" {{#if (eq defaultLanguage 'java' )}}selected{{/if}}>Java</option>
+                            <option value="c" {{#if (eq defaultLanguage 'c' )}}selected{{/if}}>C</option>
+                            <option value="cpp" {{#if (eq defaultLanguage 'cpp' )}}selected{{/if}}>C++</option>
+                        </select>
+                        <i data-lucide="chevron-down"
+                            style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 14px; pointer-events: none; color: var(--text-dim);"></i>
+                    </div>
+                    <p style="font-size: 10px; opacity: 0.5; margin-top: 5px;">New code cells will use this language by
+                        default.</p>
+                </div>
+
+                <!-- Feedback Section -->
+                <div style="margin-top: 25px; pt-5 border-t border-[var(--border-color)]; text-align: left;">
+                    <label
+                        style="display: block; font-size: 11px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px;">Send
+                        Feedback to Admin</label>
+                    <textarea id="feedback-message" placeholder="Found a bug? Have a suggestion?"
+                        style="width: 100%; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-main); padding: 10px; border-radius: 8px; font-size: 13px; outline: none; resize: none; min-height: 60px; margin-bottom: 10px;"></textarea>
+                    <button class="btn-primary" id="btn-send-feedback"
+                        style="width: 100%; font-size: 12px; padding: 10px;">Send Feedback</button>
+
+                    {{#if isAdmin}}
+                    <div
+                        style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 10px;">
+                        <a href="/admin/dashboard" class="btn-secondary"
+                            style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; border-color: #6d5dfc; color: #6d5dfc; text-decoration: none;">
+                            <i data-lucide="shield-check" style="width: 14px;"></i>
+                            Admin Dashboard
+                        </a>
+                    </div>
+                    {{/if}}
+                </div>
             </div>
 
             <div style="margin-top: 25px; pt-5 border-t border-[var(--border-color)]">
@@ -286,8 +340,14 @@
                 <button class="btn-secondary modal-close">Cancel</button>
             </div>
         </div>
+
     </div>
 
+    <script>
+        window.USER_SETTINGS = {
+            defaultLanguage: '{{defaultLanguage}}'
+        };
+    </script>
     <script src="/js/notebook.js"></script>
     <script>
         lucide.createIcons();

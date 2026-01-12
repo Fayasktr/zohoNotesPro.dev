@@ -1,0 +1,8 @@
+node_modules
+npm-debug.log
+.git
+.env
+db_diagnostic.json
+test_languages.js
+notebooks/
+trash/
