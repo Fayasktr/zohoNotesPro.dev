@@ -1,5 +1,5 @@
 const vm = require('node:vm');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -15,7 +15,7 @@ class AntigravityEngine {
     }
 
     async execute(code, lang = 'javascript', contextExtension = {}) {
-        const resultId = uuidv4();
+        const resultId = crypto.randomUUID();
 
         switch (lang.toLowerCase()) {
             case 'javascript':
@@ -38,7 +38,7 @@ class AntigravityEngine {
 
     async _executeJS(code, contextExtension = {}) {
         const logs = [];
-        const resultId = uuidv4();
+        const resultId = crypto.randomUUID();
         const customConsole = {
             log: (...args) => { logs.push(args.map(a => this._serialize(a)).join(' ')); },
             error: (...args) => { logs.push(`ERROR: ${args.map(a => this._serialize(a)).join(' ')}`); },
@@ -79,7 +79,7 @@ class AntigravityEngine {
     }
 
     async _executeExternal(code, command, ext) {
-        const id = uuidv4();
+        const id = crypto.randomUUID();
         const filePath = path.join(this.tempDir, `${id}.${ext}`);
         fs.writeFileSync(filePath, code);
 
@@ -108,7 +108,7 @@ class AntigravityEngine {
     }
 
     async _executeC(code) {
-        const id = uuidv4();
+        const id = crypto.randomUUID();
         const srcPath = path.join(this.tempDir, `${id}.c`);
         const binPath = path.join(this.tempDir, `${id}.out`);
         fs.writeFileSync(srcPath, code);
@@ -145,7 +145,7 @@ class AntigravityEngine {
     }
 
     async _executeCpp(code) {
-        const id = uuidv4();
+        const id = crypto.randomUUID();
         const srcPath = path.join(this.tempDir, `${id}.cpp`);
         const binPath = path.join(this.tempDir, `${id}.out`);
         fs.writeFileSync(srcPath, code);
@@ -182,7 +182,7 @@ class AntigravityEngine {
     }
 
     async _executeJava(code) {
-        const id = uuidv4();
+        const id = crypto.randomUUID();
         // Java requires filename to match public class name
         // Java requires filename to match public class name
         const classNameMatch = code.match(/public\s+class\s+([A-Za-z0-9_$]+)/);
