@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: zoho-Notes # IMPORTANT: This MUST match the name on your Render Dashboard exactly
+    runtime: docker
+    envVars:
+      - key: MONGODB_URI
+        sync: false # Tells Render to keep your existing value from the dashboard
+      - key: SESSION_SECRET
+        sync: false
+      - key: PORT
+        value: 10000
