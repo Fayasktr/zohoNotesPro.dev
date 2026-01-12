@@ -657,7 +657,7 @@ class NotebookApp {
                 <select class="cell-lang-select">
                     <option value="javascript" ${cell.lang === 'javascript' ? 'selected' : ''}>JS</option>
                     <option value="python" ${cell.lang === 'python' ? 'selected' : ''}>PY</option>
-                    <option value="java" ${cell.lang === 'java' ? 'selected' : ''}>JAVA</option>
+                    <option value="java" ${cell.lang === 'java' ? 'selected' : ''}>JAVA (JDK 17)</option>
                     <option value="c" ${cell.lang === 'c' ? 'selected' : ''}>C</option>
                     <option value="cpp" ${cell.lang === 'cpp' ? 'selected' : ''}>C++</option>
                 </select>

@@ -184,6 +184,7 @@ class AntigravityEngine {
     async _executeJava(code) {
         const id = uuidv4();
         // Java requires filename to match public class name
+        // Java requires filename to match public class name
         const classNameMatch = code.match(/public\s+class\s+([A-Za-z0-9_$]+)/);
         const className = classNameMatch ? classNameMatch[1] : 'Main';
 
