@@ -56,6 +56,12 @@ class AntigravityEngine {
         if (typeof obj === 'string') return obj;
         if (typeof obj === 'function') return `[Function: ${obj.name || 'anonymous'}]`;
 
+        // Handle Errors (they are not enumerable, so JSON.stringify returns {})
+        if (obj instanceof Error || (obj && obj.message && obj.stack)) {
+            // Error.stack usually already contains the Name and Message
+            return obj.stack || `${obj.name || 'Error'}: ${obj.message}`;
+        }
+
         // Handle Promises
         if (obj && typeof obj.then === 'function') return '[Promise]';
 
@@ -63,6 +69,7 @@ class AntigravityEngine {
             if (typeof obj === 'object') {
                 return JSON.stringify(obj, (key, value) => {
                     if (typeof value === 'function') return `[Function: ${value.name || 'anonymous'}]`;
+                    if (value instanceof Error) return `${value.name}: ${value.message}`;
                     return value;
                 }, 2);
             }

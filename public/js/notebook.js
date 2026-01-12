@@ -570,12 +570,12 @@ class NotebookApp {
         const cellElem = document.createElement('div');
         cellElem.className = 'cell';
         cellElem.id = `container-${cell.id}`;
-        cellElem.draggable = true;
+        // draggable="true" removed from here
 
         const isMark = cell.type === 'markdown';
 
         cellElem.innerHTML = `
-            <div class="cell-header">
+            <div class="cell-header" draggable="true">
                 <div class="drag-handle" title="Drag to Reorder">
                     <i data-lucide="grip-vertical" style="width: 14px;"></i>
                 </div>
@@ -759,7 +759,9 @@ class NotebookApp {
         const outputDiv = document.getElementById(`output-${cellId}`);
         if (!outputDiv) return;
         outputDiv.classList.remove('hidden');
-        outputDiv.innerHTML = '<div style="font-size: 10px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase; font-weight: bold; opacity: 0.7;">output:</div>';
+        outputDiv.innerHTML = '<div class="output-label" style="font-size: 10px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase; font-weight: bold; opacity: 0.7;">output:</div>';
+
+        const displayedLogs = new Set();
 
         if (data.logs && data.logs.length > 0) {
             data.logs.forEach(log => {
@@ -767,16 +769,20 @@ class NotebookApp {
                 logElem.className = 'output-log';
                 logElem.textContent = log;
                 outputDiv.appendChild(logElem);
+                displayedLogs.add(log.trim());
             });
         }
 
         if (data.success) {
-            // Merging result into output area without separate "Result:" label
             if (this.smartOutput && data.result !== 'undefined' && data.result !== null) {
-                const resElem = document.createElement('div');
-                resElem.className = 'output-log';
-                resElem.textContent = data.result;
-                outputDiv.appendChild(resElem);
+                const resultText = String(data.result).trim();
+                // Avoid duplicating if it's already in logs
+                if (!displayedLogs.has(resultText)) {
+                    const resElem = document.createElement('div');
+                    resElem.className = 'output-log';
+                    resElem.textContent = data.result;
+                    outputDiv.appendChild(resElem);
+                }
             } else if (!this.smartOutput && (!data.logs || data.logs.length === 0)) {
                 const infoElem = document.createElement('div');
                 infoElem.className = 'output-log';
@@ -786,10 +792,25 @@ class NotebookApp {
                 outputDiv.appendChild(infoElem);
             }
         } else {
-            const errElem = document.createElement('div');
-            errElem.className = 'output-error';
-            errElem.textContent = data.error;
-            outputDiv.appendChild(errElem);
+            const errorText = String(data.error).trim();
+            // Avoid duplicating if the error was already captured in logs (via console.log(e))
+            let alreadyShown = false;
+            displayedLogs.forEach(log => {
+                const logLower = log.toLowerCase();
+                const errLower = errorText.toLowerCase();
+                // Check if the error text is contained within any log (partial match for stacks)
+                // or if the log contains the core message
+                if (logLower.includes(errLower) || errLower.includes(logLower)) {
+                    alreadyShown = true;
+                }
+            });
+
+            if (!alreadyShown) {
+                const errElem = document.createElement('div');
+                errElem.className = 'output-error';
+                errElem.textContent = data.error;
+                outputDiv.appendChild(errElem);
+            }
         }
     }
 

@@ -20,5 +20,7 @@ router.delete('/users/:id', adminController.deleteUser);
 router.post('/users/:id/toggle-block', adminController.toggleBlock);
 router.get('/users/:id/notes', adminController.getUserNotes);
 router.put('/notes/:noteId', adminController.updateUserNote);
+router.get('/system-logs', adminController.getSystemLogs);
+router.post('/system-logs/clear', adminController.clearSystemLogs);
 
 module.exports = router;

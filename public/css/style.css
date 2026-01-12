@@ -18,16 +18,18 @@ body.light-theme {
     --bg-dark: #e3e0e0;
     --sidebar-bg: #c2bfbf;
     --card-bg: #cfc8c8;
-    --border-color: #e0e0e0;
+    --border-color: rgba(0, 0, 0, 0.15);
+    /* Slightly darker border for depth */
     --accent: #6d5dfc;
     --accent-rgb: 109, 93, 252;
     --accent-hover: #5b4cf0;
-    --text-main: #4a4949;
-    --text-dim: #666666;
-    --glass-bg: rgba(150, 149, 149, 0.9);
-    --code-bg: #f1f3f4;
-    --shadow: 0 4px 20px rgba(103, 101, 101, 0.05);
-    --modal-bg: #969494;
+    --text-main: #1a1a1a;
+    --text-dim: #7d7b7b;
+    /* Slightly lighter than main but still clear */
+    --glass-bg: rgba(167, 166, 166, 0.9);
+    --code-bg: #a7a6a6;
+    --shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    --modal-bg: #ffffff;
 }
 
 * {
@@ -102,11 +104,22 @@ body {
     gap: 12px;
 }
 
+body.light-theme .nav-item {
+    color: #000000;
+    /* Force black for maximum contrast in light theme sidebar */
+}
+
 .nav-item:hover,
 .nav-item.active {
     background: var(--card-bg);
     color: var(--text-main);
     border: 1px solid var(--border-color);
+}
+
+body.light-theme .nav-item:hover,
+body.light-theme .nav-item.active {
+    color: var(--text-main);
+    background: rgba(0, 0, 0, 0.05);
 }
 
 /* Main Content Area */
@@ -554,6 +567,11 @@ body {
     text-overflow: ellipsis;
 }
 
+body.light-theme .notebook-item {
+    color: #111111;
+    /* Improved contrast for light mode */
+}
+
 .notebook-item:hover {
     background: var(--card-bg);
     color: var(--text-main);
@@ -578,6 +596,10 @@ body {
     margin-top: 15px;
     transition: color 0.2s;
     user-select: none;
+}
+
+body.light-theme .folder-header {
+    color: #000000;
 }
 
 .folder-header:hover {
@@ -964,4 +986,89 @@ input:checked+.slider:before {
     100% {
         box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0);
     }
+}
+
+/* Output Area Refinements */
+.output-container {
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid var(--border-color);
+    padding: 12px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    user-select: text !important;
+    /* Force text selection */
+    cursor: text;
+}
+
+[data-theme="light"] .output-container {
+    background: rgba(0, 0, 0, 0.05);
+    /* Soft gray background for output */
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+body.light-theme .output-log {
+    color: #1a1a1a;
+    /* Sharp black text for logs in light mode */
+}
+
+.output-label {
+    opacity: 0.7;
+}
+
+body.light-theme .output-label {
+    color: #000000 !important;
+    /* Force black for 'output:' label in light theme */
+    opacity: 1 !important;
+    /* Full opacity for max darkness */
+}
+
+.output-log {
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-bottom: 4px;
+    color: var(--text-main);
+    user-select: text !important;
+}
+
+.output-error {
+    color: #ff3b30;
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: text !important;
+}
+
+.cell {
+    /* Ensure child selection works even if parent is draggable */
+    -webkit-user-drag: element;
+}
+
+.output-container * {
+    user-select: text !important;
+}
+
+/* Light Theme Sidebar Overrides */
+body.light-theme .credit-text a {
+    color: #666666 !important;
+    /* Muted gray for credit in light mode */
+    opacity: 0.8;
+}
+
+body.light-theme #btn-new-folder {
+    background-color: #b0adad !important;
+    /* More distinct button in light sidebar */
+    color: #1a1a1a !important;
+    border-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+body.light-theme #btn-new-folder:hover {
+    background-color: #a09d9d !important;
+}
+
+body.light-theme #nav-settings {
+    color: #000000 !important;
+}
+
+body.light-theme #add-folder-sidebar {
+    color: #1a1a1a !important;
 }

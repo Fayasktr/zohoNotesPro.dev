@@ -16,9 +16,11 @@ const crypto = require('crypto');
 const helmet = require('helmet');
 const csrf = require('csurf');
 const rateLimit = require('express-rate-limit');
+const cron = require('node-cron');
 
 // Models
 const User = require('./models/User');
+const SystemLog = require('./models/SystemLog');
 
 // Routes
 const adminRoutes = require('./routes/adminRoutes');
@@ -603,6 +605,38 @@ app.delete('/api/trash-all', isAuthenticated, async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to empty trash' });
+    }
+});
+
+// --- BACKGROUND CRON JOBS ---
+
+// Run every 10 minutes
+cron.schedule('*/10 * * * *', async () => {
+    try {
+        // 1. Cleanup expired password reset tokens
+        const result = await User.updateMany(
+            { resetPasswordExpires: { $lt: Date.now() } },
+            { $unset: { resetPasswordToken: 1, resetPasswordExpires: 1 } }
+        );
+
+        let maintenanceMsg = "10-minute refresh completed.";
+        if (result.modifiedCount > 0) {
+            maintenanceMsg += ` Cleaned up ${result.modifiedCount} expired reset tokens.`;
+        }
+
+        // 2. System Heartbeat
+        const userCount = await User.countDocuments({ role: { $ne: 'admin' } });
+        const noteCount = await Note.countDocuments();
+
+        await SystemLog.create({
+            type: 'info',
+            message: `${maintenanceMsg} System Status: ${userCount} Users, ${noteCount} Notes.`
+        });
+    } catch (err) {
+        await SystemLog.create({
+            type: 'error',
+            message: `Background Maintenance Error: ${err.message}`
+        });
     }
 });
 

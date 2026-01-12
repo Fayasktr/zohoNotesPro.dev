@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Note = require('../models/Note');
+const SystemLog = require('../models/SystemLog');
 const bcrypt = require('bcryptjs');
 
 exports.getDashboard = async (req, res) => {
@@ -105,5 +106,23 @@ exports.updateUserNote = async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to update note' });
+    }
+};
+
+exports.getSystemLogs = async (req, res) => {
+    try {
+        const logs = await SystemLog.find().sort({ timestamp: -1 }).limit(100);
+        res.json(logs);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch logs' });
+    }
+};
+
+exports.clearSystemLogs = async (req, res) => {
+    try {
+        await SystemLog.deleteMany({});
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to clear logs' });
     }
 };

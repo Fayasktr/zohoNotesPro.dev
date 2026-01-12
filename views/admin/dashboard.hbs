@@ -78,6 +78,11 @@
                         class="w-full bg-[#ffffff08] border border-[#ffffff1a] pl-11 pr-4 py-3 rounded-xl outline-none focus:border-[#6d5dfc] focus:ring-4 focus:ring-[#6d5dfc1a] transition-all text-sm"
                         oninput="filterUsers()">
                 </div>
+                <button onclick="showLogsModal()"
+                    class="w-full sm:w-auto bg-[#ffffff08] border border-[#ffffff1a] text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-[#ffffff1a] transition-all">
+                    <i data-lucide="terminal" class="w-5 h-5 text-[#6d5dfc]"></i>
+                    System Logs
+                </button>
                 <button onclick="showCreateModal()"
                     class="w-full sm:w-auto bg-[#6d5dfc] text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-[#6d5dfc4d]">
                     <i data-lucide="user-plus" class="w-5 h-5"></i>
@@ -227,6 +232,33 @@
                         <!-- Cells -->
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: SYSTEM LOGS -->
+    <div id="logsModal" class="fixed inset-0 z-[2000] hidden items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300"
+            id="logsOverlay"></div>
+        <div class="bg-[#151518] border border-[#ffffff1a] p-8 lg:p-10 rounded-[2rem] w-full max-w-2xl relative shadow-2xl scale-95 opacity-0 transition-all duration-300 transform"
+            id="logsBox">
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <h2 class="text-2xl font-bold mb-1">System Logs</h2>
+                    <p class="text-[#a0a0a5] text-sm italic">Automated maintenance events (Refreshes every 10 min)</p>
+                </div>
+                <button onclick="clearSystemLogs()"
+                    class="bg-[#ff3b301a] text-[#ff3b30] px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#ff3b30] hover:text-white transition-all">Clear
+                    All</button>
+            </div>
+
+            <div id="logsList" class="space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2 min-h-[200px]">
+                <!-- Logs here -->
+            </div>
+
+            <div class="flex gap-4 pt-8">
+                <button type="button" onclick="closeLogsModal()"
+                    class="w-full px-6 py-4 rounded-xl border border-[#ffffff1a] font-bold hover:bg-[#ffffff08] transition-all">Close</button>
             </div>
         </div>
     </div>
@@ -594,6 +626,77 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        function closeLogsModal() {
+            const modal = document.getElementById('logsModal');
+            const overlay = document.getElementById('logsOverlay');
+            const box = document.getElementById('logsBox');
+            overlay.classList.replace('opacity-100', 'opacity-0');
+            box.classList.replace('opacity-100', 'opacity-0');
+            box.classList.replace('scale-100', 'scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        async function showLogsModal() {
+            const modal = document.getElementById('logsModal');
+            const overlay = document.getElementById('logsOverlay');
+            const box = document.getElementById('logsBox');
+            const list = document.getElementById('logsList');
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            list.innerHTML = '<p class="text-center py-10 opacity-50">Checking history...</p>';
+
+            setTimeout(() => {
+                overlay.classList.replace('opacity-0', 'opacity-100');
+                box.classList.replace('opacity-0', 'opacity-100');
+                box.classList.replace('scale-95', 'scale-100');
+            }, 10);
+
+            try {
+                const res = await safeFetch('/admin/system-logs');
+                const logs = await res.json();
+                list.innerHTML = '';
+                if (logs.length === 0) {
+                    list.innerHTML = '<div class="py-10 text-center opacity-30 italic">No events recorded yet.</div>';
+                } else {
+                    logs.forEach(log => {
+                        const date = new Date(log.timestamp).toLocaleString(undefined, {
+                            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        });
+                        const item = document.createElement('div');
+                        item.className = 'bg-[#ffffff03] border border-[#ffffff08] p-4 rounded-xl flex items-start gap-4';
+
+                        const color = log.type === 'error' ? 'text-[#ff3b30]' : 'text-[#6d5dfc]';
+                        const icon = log.type === 'error' ? 'alert-circle' : 'activity';
+
+                        item.innerHTML = `
+                            <div class="p-2 bg-[#ffffff05] rounded-lg ${color}">
+                                <i data-lucide="${icon}" class="w-4 h-4"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm leading-relaxed">${log.message}</p>
+                                <span class="text-[10px] opacity-40 uppercase font-mono mt-2 block">${date}</span>
+                            </div>
+                        `;
+                        list.appendChild(item);
+                    });
+                }
+                lucide.createIcons();
+            } catch (err) {
+                list.innerHTML = '<p class="text-center py-10 text-[#ff3b30]">Failed to load logs.</p>';
+            }
+        }
+
+        async function clearSystemLogs() {
+            if (!confirm('Clear all system logs?')) return;
+            try {
+                const res = await safeFetch('/admin/system-logs/clear', { method: 'POST' });
+                if (res.ok) showLogsModal();
+            } catch (err) {
+                alert('Clear failed');
+            }
         }
 
         // Final check to ensure icons are rendered
