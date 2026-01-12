@@ -156,6 +156,57 @@
             text-align: center;
             border: 1px solid rgba(255, 59, 48, 0.2);
         }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 25px 0;
+            color: var(--text-dim);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .divider span {
+            padding: 0 15px;
+        }
+
+        .btn-google {
+            width: 100%;
+            background: white;
+            color: #1a1a1a;
+            border: none;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-google:hover {
+            transform: translateY(-2px);
+            background: #f8f8f8;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-google img {
+            width: 20px;
+            height: 20px;
+        }
     </style>
 </head>
 
@@ -187,6 +238,17 @@
             </div>
             <button type="submit" class="btn-login">Sign In</button>
         </form>
+
+        <div class="divider">
+            <span>OR</span>
+        </div>
+
+        <a href="/auth/google" style="text-decoration: none;">
+            <button class="btn-google">
+                <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google Logo">
+                Sign in with Google
+            </button>
+        </a>
 
         <div class="footer">
             Don't have an account? <a href="/signup">Create one</a>

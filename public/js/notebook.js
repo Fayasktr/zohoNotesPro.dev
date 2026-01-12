@@ -448,7 +448,7 @@ class NotebookApp {
             item.innerHTML = `
                 <i data-lucide="${nb.id === this.notebook.id ? 'edit-3' : 'file-code'}" 
                    style="width: 14px;"></i> 
-                <span style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${nb.title}</span>
+                <span style="flex: 1;">${nb.title}</span>
                 <div class="item-actions">
                     <button class="btn-icon-sm rename-notebook-btn" title="Rename File">
                         <i data-lucide="edit-2"></i>

@@ -17,6 +17,8 @@ const helmet = require('helmet');
 const csrf = require('csurf');
 const rateLimit = require('express-rate-limit');
 const cron = require('node-cron');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 
 // Models
 const User = require('./models/User');
@@ -78,6 +80,52 @@ app.use(session({
     cookie: { maxAge: 1000 * 60 * 60 * 24 } // 1 day
 }));
 
+// Passport Middleware
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Passport Serialization
+passport.serializeUser((user, done) => done(null, user.id));
+passport.deserializeUser(async (id, done) => {
+    try {
+        const user = await User.findById(id);
+        done(null, user);
+    } catch (err) {
+        done(err, null);
+    }
+});
+
+// Passport Google Strategy
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID || 'dummy_id',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'dummy_secret',
+    callbackURL: "/auth/google/callback",
+    proxy: true
+}, async (accessToken, refreshToken, profile, done) => {
+    try {
+        let user = await User.findOne({ googleId: profile.id });
+        if (!user) {
+            // Check if user exists with same email but no Google ID
+            user = await User.findOne({ email: profile.emails[0].value });
+            if (user) {
+                user.googleId = profile.id;
+                user.avatar = profile.photos[0].value;
+                await user.save();
+            } else {
+                user = await User.create({
+                    username: profile.displayName,
+                    email: profile.emails[0].value,
+                    googleId: profile.id,
+                    avatar: profile.photos[0].value
+                });
+            }
+        }
+        return done(null, user);
+    } catch (err) {
+        return done(err, null);
+    }
+}));
+
 // CSRF Protection
 const csrfProtection = csrf({ cookie: false });
 
@@ -106,6 +154,10 @@ app.use(async (req, res, next) => {
         } catch (err) {
             console.error('User sync error:', err);
         }
+    } else if (req.isAuthenticated()) {
+        // Sync Passport user to res.locals
+        res.locals.currentUser = req.user;
+        res.locals.username = req.user.username;
     }
     next();
 });
@@ -143,7 +195,7 @@ app.use((err, req, res, next) => {
 
 // Middleware: Check Authentication
 const isAuthenticated = (req, res, next) => {
-    if (req.session.userId) {
+    if (req.session.userId || req.isAuthenticated()) {
         return next();
     }
     res.redirect('/login');
@@ -174,6 +226,17 @@ app.post('/signup', async (req, res) => {
         res.render('signup', { error: 'Email already exists' });
     }
 });
+
+// Google Auth Routes (Directly in app.js for now or separate file)
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+app.get('/auth/google/callback',
+    passport.authenticate('google', { failureRedirect: '/login' }),
+    (req, res) => {
+        // Successful authentication
+        res.redirect('/');
+    }
+);
 
 app.get('/login', (req, res) => {
     if (req.session.userId) {

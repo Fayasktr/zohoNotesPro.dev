@@ -275,7 +275,7 @@ body.light-theme .nav-item.active {
     .cell-title-input {
         font-size: 14px;
         min-width: 150px;
-        max-width: 60%;
+        /* Removed max-width to prevent truncation of long labels */
         margin: 0;
     }
 }
@@ -604,9 +604,8 @@ body.light-theme .nav-item.active {
     align-items: center;
     gap: 10px;
     transition: all 0.2s;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    /* Allow wrapping for long notebook titles */
+    word-break: break-word;
 }
 
 body.light-theme .notebook-item {
