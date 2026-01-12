@@ -59,6 +59,10 @@ class NotebookApp {
         document.getElementById('btn-new-folder').addEventListener('click', () => this.createFolder());
         document.getElementById('run-all-cells').addEventListener('click', () => this.runAll());
         document.getElementById('clear-all-outputs').addEventListener('click', () => this.clearAllOutputs());
+        document.getElementById('scroll-to-bottom').addEventListener('click', () => {
+            const main = document.querySelector('main');
+            main.scrollTo({ top: main.scrollHeight, behavior: 'smooth' });
+        });
 
         document.getElementById('toggle-notebooks').addEventListener('click', (e) => {
             if (e.target.closest('#add-folder-sidebar')) return;

@@ -524,6 +524,48 @@ body.light-theme .nav-item.active {
     transform: scale(1.1) rotate(90deg);
 }
 
+/* Refined Scroll to Bottom (ChatGPT Style) */
+.scroll-to-bottom-btn {
+    position: sticky;
+    bottom: 7px;
+    margin-top: -50px;
+    /* Pull it up so it floats over the bottom padding */
+    align-self: center;
+    background: #6e6e6e;
+    color: #000000;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    z-index: 100;
+    transition: all 0.2s ease;
+}
+
+[data-theme="light"] .scroll-to-bottom-btn {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.scroll-to-bottom-btn:hover {
+    transform: scale(1.1) !important;
+    /* No rotation */
+    background: #f8f8f8;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.scroll-to-bottom-btn i {
+    width: 20px;
+    height: 20px;
+    stroke-width: 3px;
+    /* Highlight the arrow */
+}
+
 /* Notebook Explorer */
 .notebook-list {
     margin-left: 20px;
