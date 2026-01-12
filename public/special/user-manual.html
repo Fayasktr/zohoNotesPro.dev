@@ -136,7 +136,9 @@
 
                 <p class="px-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-6 mb-2">The Editor</p>
                 <a href="#cells" class="nav-link"><i data-lucide="box" class="w-4 h-4"></i> Cell Types</a>
+                <a href="#languages" class="nav-link"><i data-lucide="languages" class="w-4 h-4"></i> Multi-Language</a>
                 <a href="#execution" class="nav-link"><i data-lucide="play" class="w-4 h-4"></i> Running Code</a>
+                <a href="#docker" class="nav-link"><i data-lucide="container" class="w-4 h-4"></i> Docker Isolation</a>
                 <a href="#smart-output" class="nav-link"><i data-lucide="sparkles" class="w-4 h-4"></i> Smart Output</a>
 
                 <p class="px-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-6 mb-2">Security</p>
@@ -150,6 +152,10 @@
             <!-- Header -->
             <section id="intro" class="content-section text-center">
                 <h1 class="text-5xl font-black mb-6 tracking-tight">Zoho Notes: User Manual</h1>
+                <div class="flex justify-center gap-2 mb-6">
+                    <span class="badge badge-purple">v2.0 Update</span>
+                    <span class="badge badge-green">Docker Enabled</span>
+                </div>
                 <p class="text-xl text-gray-400">Your ultimate guide to mastering the world's most developer-friendly
                     note-taking platform.</p>
                 <div class="mt-12 p-8 glass rounded-3xl border border-white/5 bg-white/5 text-left">
@@ -204,7 +210,8 @@
                 <div class="flex items-center gap-4 mb-8">
                     <div
                         class="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
-                        <i data-lucide="folder-tree"></i></div>
+                        <i data-lucide="folder-tree"></i>
+                    </div>
                     <h2 class="text-3xl font-extrabold">2. The Hierarchy</h2>
                 </div>
                 <div class="space-y-6">
@@ -271,12 +278,13 @@
             <section id="cells" class="content-section">
                 <div class="flex items-center gap-4 mb-8">
                     <div class="w-12 h-12 rounded-2xl bg-green-500/10 flex items-center justify-center text-green-500">
-                        <i data-lucide="code-2"></i></div>
+                        <i data-lucide="code-2"></i>
+                    </div>
                     <h2 class="text-3xl font-extrabold">5. The Execution Engine</h2>
                 </div>
                 <div class="space-y-8">
                     <div class="feature-card">
-                        <h4 class="font-bold mb-2">Smart Output</h4>
+                        <h4 class="font-bold mb-2">Monaco Power (VS Code Core)</h4>
                         <p class="text-sm text-gray-400 mb-4">We use the same core engine that powers <strong>VS
                                 Code</strong>. This means you get:</p>
                         <div class="grid grid-cols-2 gap-4 text-xs">
@@ -291,17 +299,43 @@
                         </div>
                     </div>
 
-                    <div id="smart-output" class="feature-card">
+                    <div id="languages" class="feature-card border-l-4 border-purple-500">
                         <h4 class="font-bold mb-2 flex items-center gap-2">
-                            Smart Output <span class="badge badge-purple text-[10px]">Special Feature</span>
+                            Multi-Language Engine <span class="badge badge-purple text-[10px]">NEW</span>
+                        </h4>
+                        <p class="text-sm text-gray-400 mb-4">
+                            Zoho Notes is no longer just for JavaScript. We now support full execution for:
+                        </p>
+                        <ul class="text-xs space-y-2 text-gray-400">
+                            <li><strong>• JavaScript:</strong> Standard V8 Node.js runtime.</li>
+                            <li><strong>• Python 3:</strong> Full system Python 3 support.</li>
+                            <li><strong>• Java (JDK 17):</strong> Full compilation & execution. <em>Note: Use 'public
+                                    class Main' for entry points.</em></li>
+                            <li><strong>• C / C++:</strong> Compiled using GCC/G++ with full standard library support.
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div id="docker" class="feature-card border-l-4 border-blue-500">
+                        <h4 class="font-bold mb-2 flex items-center gap-2">
+                            Docker Isolation <i data-lucide="container" class="w-4 h-4 text-blue-400"></i>
                         </h4>
                         <p class="text-sm text-gray-400">
-                            <strong>Why?</strong> For fast prototyping. No one likes typing <code>console.log()</code>
-                            100 times.
-                            <br><br>
-                            <strong>How it works:</strong> If you turn it ON in Settings, our engine captures the
-                            <em>last expression</em> of your code and displays it as the result automatically. If you
-                            turn it OFF, we only show what you explicitly tell us to print.
+                            <strong>Security First:</strong> Every piece of code you run is executed inside a
+                            <strong>Docker Container</strong>. This means the code is completely isolated from the main
+                            server,
+                            ensuring maximum safety and consistency across different languages.
+                        </p>
+                    </div>
+
+                    <div id="smart-output" class="feature-card">
+                        <h4 class="font-bold mb-2 flex items-center gap-2">
+                            Smart Output <span class="badge badge-purple text-[10px]">Efficiency</span>
+                        </h4>
+                        <p class="text-sm text-gray-400">
+                            If turned ON, our engine captures the <em>last expression</em> of your code and displays it
+                            automatically (JS only). For other languages, use standard print commands like
+                            <code>printf</code> or <code>System.out.println</code>.
                         </p>
                     </div>
 
@@ -310,8 +344,7 @@
                         <p class="text-sm text-gray-400">
                             - <strong>Run All:</strong> Executes every cell in the file sequentially.
                             <br>
-                            - <strong>Clear All:</strong> Wipes all outputs if you want a clean slate for a fresh
-                            "prediction" session.
+                            - <strong>Clear All:</strong> Wipes all outputs if you want a clean slate.
                         </p>
                     </div>
                 </div>
@@ -322,7 +355,8 @@
                 <div class="flex items-center gap-4 mb-8">
                     <div
                         class="w-12 h-12 rounded-2xl bg-yellow-500/10 flex items-center justify-center text-yellow-500">
-                        <i data-lucide="shield-alert"></i></div>
+                        <i data-lucide="shield-alert"></i>
+                    </div>
                     <h2 class="text-3xl font-extrabold">6. Advanced Safety (Pro Protection)</h2>
                 </div>
                 <div class="space-y-4">
