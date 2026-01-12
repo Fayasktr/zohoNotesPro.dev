@@ -7,5 +7,3 @@ services:
         sync: false # Tells Render to keep your existing value from the dashboard
       - key: SESSION_SECRET
         sync: false
-      - key: PORT
-        value: 10000
