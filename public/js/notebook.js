@@ -360,13 +360,31 @@ class NotebookApp {
         const method = (options.method || 'GET').toUpperCase();
         const nonMutating = ['GET', 'HEAD', 'OPTIONS'];
 
+        // Enforce JSON acceptance
+        options.headers = {
+            'Accept': 'application/json',
+            ...(options.headers || {})
+        };
+
         if (csrfToken && !nonMutating.includes(method)) {
             options.headers = {
                 ...options.headers,
                 'X-CSRF-Token': csrfToken
             };
         }
-        return window.fetch(url, options);
+
+        const response = await window.fetch(url, options);
+
+        // Validation: Verify if response is JSON (not HTML error page)
+        const contentType = response.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json') && response.status >= 400) {
+            // If we got HTML but expected JSON for an error, it's likely a redirect or custom error page
+            if (response.status === 401) throw new Error('AUTH_EXPIRED');
+            if (response.status === 403) throw new Error('CSRF_ERROR');
+            throw new Error('Unexpected server response format');
+        }
+
+        return response;
     }
 
     // Modal Helpers
@@ -897,12 +915,31 @@ class NotebookApp {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code, lang: cell.lang || 'javascript' })
             });
+
             const data = await response.json();
+
+            if (!response.ok) {
+                // Handle specific JSON errors from backend
+                if (data.code === 'AUTH_EXPIRED') {
+                    alert('Session expired. Please refresh and login again.');
+                    return;
+                }
+                if (data.code === 'CSRF_ERROR') {
+                    alert('Security token mismatch. Please refresh the page.');
+                    return;
+                }
+                throw new Error(data.error || 'Execution failed');
+            }
+
             cell.output = data;
             this.displayOutput(cellId, data);
             this._autoSave();
         } catch (err) {
-            this.displayOutput(cellId, { success: false, error: err.message });
+            let userMsg = err.message;
+            if (err.message === 'AUTH_EXPIRED') userMsg = 'Session expired. Please login again.';
+            if (err.message === 'CSRF_ERROR') userMsg = 'Security validation failed. Please refresh the page.';
+
+            this.displayOutput(cellId, { success: false, error: userMsg });
         } finally {
             if (runBtn) {
                 runBtn.innerText = 'Run';

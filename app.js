@@ -220,6 +220,15 @@ app.use((req, res, next) => {
 // CSRF Error Handler
 app.use((err, req, res, next) => {
     if (err.code !== 'EBADCSRFTOKEN') return next(err);
+
+    // Check if it's an AJAX request
+    if (req.xhr || req.headers.accept?.includes('application/json') || req.path.startsWith('/api/')) {
+        return res.status(403).json({
+            error: 'Invalid or missing CSRF token. Please refresh the page.',
+            code: 'CSRF_ERROR'
+        });
+    }
+
     res.status(403).render('error', {
         title: 'Security Error',
         message: 'Invalid or missing CSRF token. Please refresh and try again.'
@@ -231,6 +240,15 @@ const isAuthenticated = (req, res, next) => {
     if (req.session.userId || req.isAuthenticated()) {
         return next();
     }
+
+    // Check if it's an AJAX request
+    if (req.xhr || req.headers.accept?.includes('application/json') || req.path.startsWith('/api/')) {
+        return res.status(401).json({
+            error: 'Session expired. Please login again.',
+            code: 'AUTH_EXPIRED'
+        });
+    }
+
     res.redirect('/login');
 };
 

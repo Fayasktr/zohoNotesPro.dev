@@ -46,9 +46,41 @@ class AntigravityEngine {
             info: (...args) => { logs.push(`INFO: ${args.map(a => this._serialize(a)).join(' ')}`); },
         };
 
+        // Activity tracking for async tasks
+        let activeTasks = 0;
+        const taskFinished = () => { activeTasks = Math.max(0, activeTasks - 1); };
+
+        const wrappedSetTimeout = (fn, delay, ...args) => {
+            activeTasks++;
+            return setTimeout(() => {
+                try {
+                    fn(...args);
+                } finally {
+                    taskFinished();
+                }
+            }, delay);
+        };
+
+        const wrappedSetInterval = (fn, delay, ...args) => {
+            // Intervals could run forever, so we don't increment activeTasks here 
+            // unless we want to wait for at least one execution.
+            // For now, let's treat intervals as non-blocking for engine shutdown.
+            return setInterval(fn, delay, ...args);
+        };
+
         const sandbox = {
             console: customConsole,
-            setTimeout, clearTimeout, setInterval, clearInterval,
+            setTimeout: wrappedSetTimeout,
+            clearTimeout: (id) => {
+                if (id) {
+                    clearTimeout(id);
+                    // Note: This is an edge case where we might decrement twice if the timer already fired.
+                    // But taskFinished() uses Math.max(0) to stay safe.
+                    taskFinished();
+                }
+            },
+            setInterval: wrappedSetInterval,
+            clearInterval,
             Buffer, URL, Promise,
             process: { env: {} },
             ...contextExtension,
@@ -59,7 +91,13 @@ class AntigravityEngine {
         try {
             const script = new vm.Script(code);
             const result = script.runInContext(context, { timeout: this.timeout });
-            const resolvedResult = (result && typeof result.then === 'function') ? await result : result;
+            let resolvedResult = (result && typeof result.then === 'function') ? await result : result;
+
+            // Wait for remaining async tasks (timers)
+            const startWait = Date.now();
+            while (activeTasks > 0 && (Date.now() - startWait) < this.timeout) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
 
             return {
                 id: resultId,
