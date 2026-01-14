@@ -1,0 +1,113 @@
+{
+  "users": [
+    {
+      "role": "user",
+      "_id": "695e9ca643977d48384b8f5b",
+      "username": "testuser",
+      "email": "test@example.com"
+    },
+    {
+      "_id": "695e9d0a43977d48384b8f65",
+      "username": "fayas kp",
+      "email": "Fayaskpktr@gmail.com",
+      "role": "user"
+    },
+    {
+      "role": "user",
+      "_id": "695fe57ef2c9b0849d034a1b",
+      "username": "zayn",
+      "email": "zayn@gamil.com"
+    },
+    {
+      "_id": "6960a82873de6bb63eb605f0",
+      "username": "fayas kk",
+      "email": "fayaskaykay@gmail.com",
+      "role": "user"
+    },
+    {
+      "role": "user",
+      "_id": "6961ea03293ce0d52414f4aa",
+      "username": "anawra",
+      "email": "anaswarasuresh333@gmail.com"
+    },
+    {
+      "_id": "6961f69df978ad41db232d1a",
+      "username": "Administrator",
+      "email": "admin@gmail.com",
+      "role": "admin"
+    },
+    {
+      "_id": "696210af598a1c15244d1315",
+      "username": "demo",
+      "email": "demo@gamil.com",
+      "role": "user"
+    }
+  ],
+  "notes": [
+    {
+      "id": "ntbk-1767724615654",
+      "title": "array of object",
+      "collaborators": []
+    },
+    {
+      "id": "ntbk-1767757822646",
+      "title": "string",
+      "collaborators": []
+    },
+    {
+      "id": "ntbk-1767762316684",
+      "title": "Untitled Notebook",
+      "collaborators": []
+    },
+    {
+      "id": "ntbk-1767808166691",
+      "title": "My Private Notebook",
+      "owner": {
+        "_id": "695e9ca643977d48384b8f5b",
+        "username": "testuser",
+        "email": "test@example.com"
+      },
+      "collaborators": []
+    },
+    {
+      "id": "ntbk-1767892411037",
+      "title": "array of objects",
+      "owner": {
+        "_id": "695fe57ef2c9b0849d034a1b",
+        "username": "zayn",
+        "email": "zayn@gamil.com"
+      },
+      "collaborators": []
+    },
+    {
+      "id": "ntbk-1768056227554",
+      "title": "New File",
+      "owner": {
+        "_id": "695e9d0a43977d48384b8f65",
+        "username": "fayas kp",
+        "email": "Fayaskpktr@gmail.com"
+      },
+      "collaborators": []
+    },
+    {
+      "id": "ntbk-1768117219330",
+      "title": "demo",
+      "owner": {
+        "_id": "695e9d0a43977d48384b8f65",
+        "username": "fayas kp",
+        "email": "Fayaskpktr@gmail.com"
+      },
+      "collaborators": []
+    },
+    {
+      "id": "ntbk-1768229706900",
+      "title": "New Note",
+      "owner": {
+        "_id": "6961f69df978ad41db232d1a",
+        "username": "Administrator",
+        "email": "admin@gmail.com"
+      },
+      "collaborators": []
+    }
+  ]
+}

@@ -557,17 +557,16 @@ app.post('/api/notebooks', isAuthenticated, async (req, res) => {
     if (!notebookData.id) return res.status(400).json({ error: 'No notebook ID provided' });
 
     try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
         const updateData = {
             id: notebookData.id,
             title: notebookData.title || 'Untitled',
             isStarred: !!notebookData.isStarred,
             content: notebookData,
             folder: notebookData.folder || 'root',
-            owner: req.session.userId,
             updatedAt: new Date()
         };
 
-        const userId = req.session.userId || (req.user ? req.user._id : null);
         const query = {
             id: notebookData.id,
             $or: [
@@ -578,8 +577,11 @@ app.post('/api/notebooks', isAuthenticated, async (req, res) => {
 
         const note = await Note.findOneAndUpdate(
             query,
-            updateData,
-            { upsert: true, new: true }
+            {
+                $set: updateData,
+                $setOnInsert: { owner: userId }
+            },
+            { upsert: true, new: true, runValidators: true }
         );
         res.json({ success: true });
     } catch (err) {

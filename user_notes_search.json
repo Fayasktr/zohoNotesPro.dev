@@ -1,0 +1,22 @@
+[
+  {
+    "id": "ntbk-1768056227554",
+    "title": "New File",
+    "owner": {
+      "_id": "695e9d0a43977d48384b8f65",
+      "username": "fayas kp",
+      "email": "Fayaskpktr@gmail.com"
+    },
+    "collaborators": []
+  },
+  {
+    "id": "ntbk-1768117219330",
+    "title": "demo",
+    "owner": {
+      "_id": "695e9d0a43977d48384b8f65",
+      "username": "fayas kp",
+      "email": "Fayaskpktr@gmail.com"
+    },
+    "collaborators": []
+  }
+]
