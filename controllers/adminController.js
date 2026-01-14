@@ -1,15 +1,18 @@
 const User = require('../models/User');
 const Note = require('../models/Note');
 const SystemLog = require('../models/SystemLog');
+const Feedback = require('../models/Feedback');
 const bcrypt = require('bcryptjs');
 
 exports.getDashboard = async (req, res) => {
     try {
         const users = await User.find({ role: { $ne: 'admin' } });
+        const unreadFeedbackCount = await Feedback.countDocuments({ isRead: false });
         res.render('admin/dashboard', {
             title: 'Admin Dashboard - Zoho Notes',
             adminName: req.session.username,
-            users: users
+            users: users,
+            unreadFeedbackCount: unreadFeedbackCount
         });
     } catch (err) {
         console.error('Dashboard error:', err);
@@ -124,5 +127,14 @@ exports.clearSystemLogs = async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to clear logs' });
+    }
+};
+
+exports.markFeedbackRead = async (req, res) => {
+    try {
+        await Feedback.updateMany({ isRead: false }, { isRead: true });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to mark feedback as read' });
     }
 };

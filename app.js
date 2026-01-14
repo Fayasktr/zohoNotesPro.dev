@@ -28,6 +28,7 @@ const SystemLog = require('./models/SystemLog');
 
 // Routes
 const adminRoutes = require('./routes/adminRoutes');
+const gameRoutes = require('./routes/gameRoutes');
 
 // Handlebars Helpers
 hbs.registerHelper('substring', function (str, start, len) {
@@ -48,6 +49,19 @@ hbs.registerHelper('formatDate', function (date) {
 
 hbs.registerHelper('eq', function (a, b) {
     return a === b;
+});
+
+hbs.registerHelper('add', function (a, b) {
+    return (a || 0) + b;
+});
+
+hbs.registerHelper('contains', function (arr, val) {
+    if (!Array.isArray(arr)) return false;
+    return arr.includes(String(val));
+});
+
+hbs.registerHelper('even', function (index) {
+    return index % 2 === 0;
 });
 
 // MongoDB Connection
@@ -224,6 +238,7 @@ const isAuthenticated = (req, res, next) => {
 
 // Admin Routes (MVC)
 app.use('/admin', adminRoutes);
+app.use('/', gameRoutes);
 
 // Auth Routes
 app.get('/signup', (req, res) => {
@@ -449,6 +464,7 @@ app.post('/api/feedback', isAuthenticated, async (req, res) => {
         res.status(500).json({ error: 'Failed to send feedback' });
     }
 });
+
 
 app.get('/api/feedback', isAuthenticated, async (req, res) => {
     // Only admin can see feedback

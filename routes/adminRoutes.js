@@ -22,5 +22,6 @@ router.get('/users/:id/notes', adminController.getUserNotes);
 router.put('/notes/:noteId', adminController.updateUserNote);
 router.get('/system-logs', adminController.getSystemLogs);
 router.post('/system-logs/clear', adminController.clearSystemLogs);
+router.put('/feedback/mark-read', adminController.markFeedbackRead);
 
 module.exports = router;

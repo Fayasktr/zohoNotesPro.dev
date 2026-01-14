@@ -213,6 +213,7 @@ class NotebookApp {
 
         document.getElementById('btn-send-feedback').addEventListener('click', () => this.sendFeedback());
 
+
         // Generic Modal Action Listeners
         document.getElementById('btn-modal-input-confirm').addEventListener('click', () => {
             if (this.currentInputCallback) {
@@ -605,6 +606,7 @@ class NotebookApp {
             btn.disabled = false;
         }
     }
+
 
 
     addCell(type, content = '') {

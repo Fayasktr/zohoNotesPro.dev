@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f0f12;
+            --card-bg: #1a1a20;
+            --accent: #6d5dfc;
+            --text-main: #ffffff;
+            --text-dim: #a0a0ab;
+            --gold: #ffcc00;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            overflow-x: hidden;
+        }
+
+        .map-container {
+            background-image: radial-gradient(rgba(109, 93, 252, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        .level-node {
+            width: 80px;
+            height: 80px;
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.5rem;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .level-node:hover {
+            transform: scale(1.15) rotate(5deg);
+        }
+
+        .level-node.locked {
+            filter: grayscale(1);
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .level-path {
+            position: absolute;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            z-index: 1;
+            transform-origin: left center;
+        }
+
+        .status-badge {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background: var(--gold);
+            color: black;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            box-shadow: 0 4px 10px rgba(255, 204, 0, 0.4);
+        }
+    </style>
+</head>
+
+<body class="min-h-screen">
+    <div class="fixed top-8 left-8 z-50">
+        <a href="/game"
+            class="p-3 bg-[#1a1a20]/80 backdrop-blur-md rounded-2xl flex items-center gap-2 hover:bg-[#25252e] border border-white/10 transition-all">
+            <i data-lucide="chevron-left"></i>
+            <span class="font-bold">Dashboard</span>
+        </a>
+    </div>
+
+    <div class="fixed top-8 right-8 z-50 flex items-center gap-4">
+        <div
+            class="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 px-6 py-2 rounded-2xl border border-yellow-500/30 flex items-center gap-3">
+            <i data-lucide="zap" class="text-yellow-500 fill-yellow-500"></i>
+            <span class="font-bold">{{user.points}} Points</span>
+        </div>
+        <div class="bg-blue-500/10 px-6 py-2 rounded-2xl border border-blue-500/30 flex items-center gap-3">
+            <i data-lucide="forward" class="text-blue-400"></i>
+            <span class="font-bold">{{user.skipCredits}} Skips</span>
+        </div>
+    </div>
+
+    <div class="map-container min-h-screen pt-32 pb-64 relative flex flex-col items-center">
+        <div class="text-center mb-24">
+            <h2 class="text-3xl font-black uppercase tracking-widest text-[#6d5dfc] opacity-80">{{topic}}</h2>
+            <h3 class="text-sm font-bold text-[var(--text-dim)] uppercase tracking-[0.3em]">{{difficulty}} Difficulty
+            </h3>
+        </div>
+
+        <div id="quest-path-container" class="relative w-full max-w-4xl mx-auto flex flex-col items-center gap-24">
+            {{#each quests}}
+            <div class="level-node-wrapper relative"
+                style="margin-left: {{#if (even @index)}}150px{{else}}-150px{{/if}};">
+                <div class="level-node {{#if (eq @index 0)}}active-level{{/if}}" style="background: {{#if (eq @index 0)}}linear-gradient(135deg, #6d5dfc, #9c5dfc){{else}}#1a1a20{{/if}}; 
+                            box-shadow: {{#if (eq @index 0)}}0 15px 35px rgba(109, 93, 252, 0.4){{else}}none{{/if}};
+                            {{#if (contains ../user.completedQuests this.id)}}border: 3px solid #30ff6a;{{/if}}"
+                    onclick="window.location.href='/game/play/{{this.id}}'">
+                    {{add @index 1}}
+                    {{#if (contains ../user.completedQuests this.id)}}
+                    <div class="status-badge" style="background: #30ff6a;">
+                        <i data-lucide="check" class="w-4 h-4 text-black font-bold"></i>
+                    </div>
+                    {{/if}}
+                </div>
+                <div
+                    class="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-bold text-[var(--text-dim)] uppercase tracking-widest">
+                    {{this.title}}
+                </div>
+            </div>
+            {{/each}}
+
+            <!-- Locked Levels Placeholder -->
+            <div class="level-node locked">
+                <i data-lucide="lock" class="w-6 h-6"></i>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

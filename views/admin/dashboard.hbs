@@ -94,9 +94,15 @@
                     Create User
                 </button>
                 <button onclick="showFeedbackModal()"
-                    class="w-full sm:w-auto bg-[#30ff6a] text-[#0a0a0c] px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-[#30ff6a4d]">
+                    class="relative w-full sm:w-auto bg-[#30ff6a] text-[#0a0a0c] px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-[#30ff6a4d]">
                     <i data-lucide="message-square" class="w-5 h-5"></i>
                     Feedbacks
+                    {{#if unreadFeedbackCount}}
+                    <span id="feedbackBadge"
+                        class="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0a0a0c] animate-bounce">
+                        {{unreadFeedbackCount}}
+                    </span>
+                    {{/if}}
                 </button>
             </div>
         </div>
@@ -730,6 +736,13 @@
             const overlay = document.getElementById('feedbackOverlay');
             const box = document.getElementById('feedbackBox');
             const list = document.getElementById('feedbackList');
+
+            // Mark as read immediately
+            safeFetch('/admin/feedback/mark-read', { method: 'PUT' })
+                .then(() => {
+                    const badge = document.getElementById('feedbackBadge');
+                    if (badge) badge.remove();
+                });
 
             modal.classList.remove('hidden');
             modal.classList.add('flex');

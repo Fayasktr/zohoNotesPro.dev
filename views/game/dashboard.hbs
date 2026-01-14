@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f0f12;
+            --card-bg: #1a1a20;
+            --accent: #6d5dfc;
+            --text-main: #ffffff;
+            --text-dim: #a0a0ab;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+        }
+
+        .glass {
+            background: rgba(26, 26, 32, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .topic-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent);
+            box-shadow: 0 10px 30px rgba(109, 93, 252, 0.2);
+        }
+    </style>
+</head>
+
+<body class="min-h-screen p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="flex justify-between items-center mb-12">
+            <div>
+                <h1
+                    class="text-4xl font-extrabold bg-gradient-to-r from-[#6d5dfc] to-[#9c5dfc] bg-clip-text text-transparent">
+                    The New World
+                </h1>
+                <p class="text-[var(--text-dim)] mt-2">Level up your coding skills in a gamified adventure.</p>
+            </div>
+            <a href="/" class="px-6 py-2 glass rounded-xl hover:bg-[#ffffff0a] transition-all flex items-center gap-2">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                Back to Notes
+            </a>
+        </header>
+
+        <section class="mb-12">
+            <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+                <i data-lucide="layers" class="text-[var(--accent)]"></i>
+                Select Topic
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="topic-card glass p-6 rounded-3xl cursor-pointer transition-all border border-transparent active-topic"
+                    data-topic="javascript">
+                    <div class="w-12 h-12 bg-yellow-400/10 rounded-2xl flex items-center justify-center mb-4">
+                        <i data-lucide="code" class="text-yellow-400"></i>
+                    </div>
+                    <h3 class="text-lg font-bold">JavaScript</h3>
+                    <p class="text-sm text-[var(--text-dim)] mt-1">Master the language of the web.</p>
+                </div>
+                <!-- Future Topics -->
+                <div class="topic-card glass p-6 rounded-3xl opacity-50 cursor-not-allowed">
+                    <div class="w-12 h-12 bg-blue-400/10 rounded-2xl flex items-center justify-center mb-4">
+                        <i data-lucide="terminal" class="text-blue-400"></i>
+                    </div>
+                    <h3 class="text-lg font-bold">Python (Coming Soon)</h3>
+                </div>
+                <div class="topic-card glass p-6 rounded-3xl opacity-50 cursor-not-allowed">
+                    <div class="w-12 h-12 bg-orange-400/10 rounded-2xl flex items-center justify-center mb-4">
+                        <i data-lucide="database" class="text-orange-400"></i>
+                    </div>
+                    <h3 class="text-lg font-bold">SQL (Coming Soon)</h3>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+                <i data-lucide="gauge" class="text-[var(--accent)]"></i>
+                Select Difficulty
+            </h2>
+            <div class="flex flex-wrap gap-4">
+                <button
+                    class="diff-btn glass px-8 py-3 rounded-2xl hover:border-[var(--accent)] transition-all font-semibold"
+                    data-diff="basic">Basic</button>
+                <button
+                    class="diff-btn glass px-8 py-3 rounded-2xl hover:border-[var(--accent)] transition-all font-semibold"
+                    data-diff="medium">Medium</button>
+                <button
+                    class="diff-btn glass px-8 py-3 rounded-2xl hover:border-[var(--accent)] transition-all font-semibold"
+                    data-diff="intermediate">Intermediate</button>
+                <button
+                    class="diff-btn glass px-8 py-3 rounded-2xl hover:border-[var(--accent)] transition-all font-semibold"
+                    data-diff="advanced">Advanced</button>
+                <button
+                    class="diff-btn glass px-8 py-3 rounded-2xl hover:border-[var(--accent)] transition-all font-semibold"
+                    data-diff="hard">Hard</button>
+            </div>
+        </section>
+
+        <div class="flex justify-center mt-12">
+            <button id="start-journey"
+                class="px-12 py-4 bg-[var(--accent)] text-white font-bold rounded-2xl shadow-xl shadow-[#6d5dfc44] hover:scale-105 transition-all">
+                Enter the Map
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let selectedTopic = 'javascript';
+        let selectedDiff = 'basic';
+
+        document.querySelectorAll('.topic-card[data-topic]').forEach(card => {
+            card.onclick = () => {
+                document.querySelectorAll('.topic-card').forEach(c => c.style.borderColor = 'transparent');
+                card.style.borderColor = '#6d5dfc';
+                selectedTopic = card.dataset.topic;
+            };
+        });
+
+        document.querySelectorAll('.diff-btn').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('.diff-btn').forEach(b => b.style.borderColor = 'transparent');
+                btn.style.borderColor = '#6d5dfc';
+                selectedDiff = btn.dataset.diff;
+            };
+        });
+
+        document.getElementById('start-journey').onclick = () => {
+            window.location.href = `/game/map/${selectedTopic}/${selectedDiff}`;
+        };
+
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

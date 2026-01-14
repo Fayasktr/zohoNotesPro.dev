@@ -91,9 +91,16 @@
             </div>
 
             <a href="/sharing-notes"
-                class="w-full p-3 mb-5 border border-[#ffffff1a] bg-[#6d5dfc1a] text-[#6d5dfc] rounded-xl flex items-center justify-center gap-2 font-bold hover:scale-[1.02] transition-all decoration-none no-underline">
+                class="w-full p-3 mb-3 border border-[#ffffff1a] bg-[#6d5dfc1a] text-[#6d5dfc] rounded-xl flex items-center justify-center gap-2 font-bold hover:scale-[1.02] transition-all decoration-none no-underline">
                 <i data-lucide="users" class="w-5 h-5"></i>
                 Sharing Notes
+            </a>
+
+            <!-- New World Button -->
+            <a href="/game"
+                class="w-full p-3 mb-5 bg-gradient-to-r from-[#6d5dfc] to-[#9c5dfc] text-white rounded-xl flex items-center justify-center gap-2 font-bold hover:scale-[1.05] transition-all shadow-lg shadow-[#6d5dfc44] decoration-none no-underline">
+                <i data-lucide="globe" class="w-5 h-5"></i>
+                New World
             </a>
 
             <button
@@ -295,6 +302,7 @@
                         Feedback to Admin</label>
                     <textarea id="feedback-message" placeholder="Found a bug? Have a suggestion?"
                         style="width: 100%; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-main); padding: 10px; border-radius: 8px; font-size: 13px; outline: none; resize: none; min-height: 60px; margin-bottom: 10px;"></textarea>
+
                     <button class="btn-primary" id="btn-send-feedback"
                         style="width: 100%; font-size: 12px; padding: 10px;">Send Feedback</button>
 

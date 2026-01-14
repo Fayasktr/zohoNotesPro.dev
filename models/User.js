@@ -14,7 +14,12 @@ const userSchema = new mongoose.Schema({
     lastLogout: Date,
     settings: {
         defaultLanguage: { type: String, default: 'javascript' }
-    }
+    },
+    // Game Progress
+    points: { type: Number, default: 0 },
+    completedQuests: { type: [String], default: [] },
+    skipCredits: { type: Number, default: 0 },
+    correctAnswersCount: { type: Number, default: 0 }
 });
 
 module.exports = mongoose.model('User', userSchema);
