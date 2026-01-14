@@ -681,10 +681,52 @@ class NotebookApp {
         if (cell.output) this.displayOutput(cell.id, cell.output);
 
         require(['vs/editor/editor.main'], () => {
+            // Global Monaco Configuration (Only once)
+            if (!this._monacoConfigured) {
+                // Define VS Code Dark+ Theme
+                monaco.editor.defineTheme('vs-dark-plus', {
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: 'variable', foreground: '9CDCFE' },
+                        { token: 'variable.predefined', foreground: '9CDCFE' },
+                        { token: 'variable.parameter', foreground: '9CDCFE' },
+                        { token: 'function', foreground: 'DCDCAA' },
+                        { token: 'method', foreground: 'DCDCAA' },
+                        { token: 'property', foreground: 'DCDCAA' },
+                        { token: 'identifier', foreground: '9CDCFE' },
+                        { token: 'type', foreground: '4EC9B0' },
+                        { token: 'keyword', foreground: 'C586C0' },
+                        { token: 'string', foreground: 'CE9178' },
+                        { token: 'number', foreground: 'B5CEA8' },
+                        { token: 'comment', foreground: '6A9955' }
+                    ],
+                    colors: {
+                        'editor.background': '#1e1e1e',
+                        'editor.foreground': '#D4D4D4',
+                        'editorLineNumber.foreground': '#858585',
+                        'editorCursor.foreground': '#AEAFAD',
+                        'editor.selectionBackground': '#264F78',
+                        'editor.inactiveSelectionBackground': '#3A3D41'
+                    }
+                });
+
+                monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+                    noSemanticValidation: false,
+                    noSyntaxValidation: false
+                });
+                monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+                    target: monaco.languages.typescript.ScriptTarget.ESNext,
+                    allowNonTsExtensions: true,
+                    checkJs: true
+                });
+                this._monacoConfigured = true;
+            }
+
             const editor = monaco.editor.create(document.getElementById(`editor-${cell.id}`), {
                 value: cell.content,
                 language: isMark ? 'markdown' : (cell.lang === 'cpp' ? 'cpp' : (cell.lang === 'c' ? 'c' : (cell.lang === 'python' ? 'python' : (cell.lang === 'java' ? 'java' : 'javascript')))),
-                theme: 'vs-dark',
+                theme: 'vs-dark-plus',
                 automaticLayout: true,
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
@@ -698,7 +740,6 @@ class NotebookApp {
                     handleMouseWheel: false,
                     alwaysConsumeMouseWheel: false
                 },
-                scrollBeyondLastLine: false,
                 wordWrap: 'on',
                 wrappingStrategy: 'advanced',
                 overviewRulerLanes: 0,
@@ -714,7 +755,23 @@ class NotebookApp {
                 },
                 acceptSuggestionOnEnter: 'on',
                 snippetSuggestions: 'top',
-                wordBasedSuggestions: true
+                wordBasedSuggestions: true,
+
+                // Advanced Visuals & UX
+                semanticHighlighting: { enabled: true },
+                'bracketPairColorization.enabled': true,
+                autoClosingBrackets: 'always',
+                autoClosingQuotes: 'always',
+                autoClosingDelete: 'always',
+                formatOnPaste: true,
+                formatOnType: true,
+                suggest: {
+                    snippetsPreventQuickSuggestions: false,
+                },
+                unicodeHighlight: {
+                    ambiguousCharacters: false,
+                    invisibleCharacters: false,
+                }
             });
 
             this.editors[cell.id] = editor;

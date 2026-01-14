@@ -38,3 +38,7 @@ async function dumpData() {
 }
 
 dumpData();
+
+
+let arr = [1, 2, 3];
+arr.filter(item=>item%2!=0)
