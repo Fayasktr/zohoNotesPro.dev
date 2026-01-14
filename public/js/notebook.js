@@ -712,7 +712,7 @@ class NotebookApp {
                 });
 
                 monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
-                    noSemanticValidation: false,
+                    noSemanticValidation: true, // Fixes redeclaration errors across cells
                     noSyntaxValidation: false
                 });
                 monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
@@ -723,9 +723,18 @@ class NotebookApp {
                 this._monacoConfigured = true;
             }
 
+            const lang = isMark ? 'markdown' : (cell.lang === 'cpp' ? 'cpp' : (cell.lang === 'c' ? 'c' : (cell.lang === 'python' ? 'python' : (cell.lang === 'java' ? 'java' : 'javascript'))));
+            const modelUri = monaco.Uri.parse(`inmemory://model/${cell.id}.${lang === 'javascript' ? 'js' : lang}`);
+
+            let model = monaco.editor.getModel(modelUri);
+            if (!model) {
+                model = monaco.editor.createModel(cell.content, lang, modelUri);
+            } else {
+                model.setValue(cell.content);
+            }
+
             const editor = monaco.editor.create(document.getElementById(`editor-${cell.id}`), {
-                value: cell.content,
-                language: isMark ? 'markdown' : (cell.lang === 'cpp' ? 'cpp' : (cell.lang === 'c' ? 'c' : (cell.lang === 'python' ? 'python' : (cell.lang === 'java' ? 'java' : 'javascript')))),
+                model: model,
                 theme: 'vs-dark-plus',
                 automaticLayout: true,
                 minimap: { enabled: false },

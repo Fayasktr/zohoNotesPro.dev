@@ -141,6 +141,10 @@ passport.use(new GoogleStrategy({
     }
 }));
 
+// Public Ping Endpoint (for keep-alive)
+// Defined before CSRF to allow external health checks
+app.get('/api/ping', (req, res) => res.status(200).send('pong'));
+
 // CSRF Protection
 const csrfProtection = csrf({ cookie: false });
 
@@ -922,7 +926,7 @@ cron.schedule('*/10 * * * *', async () => {
 cron.schedule('*/5 * * * *', async () => {
     const APP_URL = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
 
-    http.get(`${APP_URL}/api/health`, (res) => {
+    http.get(`${APP_URL}/api/ping`, (res) => {
         if (res.statusCode === 200) {
             console.log(`[Cron] Keep-Alive: Ping successful (${new Date().toLocaleTimeString()})`);
         } else {
