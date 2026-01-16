@@ -10,12 +10,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-dark: #0f0f12;
-            --card-bg: #1a1a20;
+            --bg-dark: #0a0a0c;
+            --card-bg: #111114;
             --accent: #6d5dfc;
-            --text-main: #ffffff;
-            --text-dim: #a0a0ab;
-            --gold: #ffcc00;
+            --text-main: #e1e1e6;
+            --text-dim: #8e8e99;
         }
 
         body {
@@ -25,121 +24,123 @@
             overflow-x: hidden;
         }
 
-        .map-container {
-            background-image: radial-gradient(rgba(109, 93, 252, 0.05) 1px, transparent 1px);
-            background-size: 40px 40px;
+        .map-grid {
+            background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
         }
 
         .level-node {
-            width: 80px;
-            height: 80px;
-            border-radius: 24px;
+            width: 70px;
+            height: 70px;
+            border-radius: 20px;
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.05);
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
-            font-size: 1.5rem;
-            position: relative;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
             z-index: 10;
         }
 
         .level-node:hover {
-            transform: scale(1.15) rotate(5deg);
+            transform: translateY(-5px);
+            border-color: var(--accent);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
         }
 
-        .level-node.locked {
-            filter: grayscale(1);
-            opacity: 0.5;
-            cursor: not-allowed;
+        .level-node.completed {
+            border-color: #30ff6a;
+            color: #30ff6a;
         }
 
-        .level-path {
+        .level-node.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+            box-shadow: 0 0 20px rgba(109, 93, 252, 0.3);
+        }
+
+        .connection-line {
             position: absolute;
-            height: 4px;
+            width: 2px;
             background: rgba(255, 255, 255, 0.05);
             z-index: 1;
-            transform-origin: left center;
-        }
-
-        .status-badge {
-            position: absolute;
-            top: -10px;
-            right: -10px;
-            background: var(--gold);
-            color: black;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            box-shadow: 0 4px 10px rgba(255, 204, 0, 0.4);
         }
     </style>
 </head>
 
-<body class="min-h-screen">
-    <div class="fixed top-8 left-8 z-50">
+<body class="min-h-screen map-grid pb-32">
+    <!-- Nav -->
+    <nav class="fixed top-0 left-0 w-full p-8 flex justify-between items-center z-50 pointer-events-none">
         <a href="/game"
-            class="p-3 bg-[#1a1a20]/80 backdrop-blur-md rounded-2xl flex items-center gap-2 hover:bg-[#25252e] border border-white/10 transition-all">
-            <i data-lucide="chevron-left"></i>
-            <span class="font-bold">Dashboard</span>
+            class="pointer-events-auto p-3 bg-white/5 backdrop-blur-md rounded-xl border border-white/5 hover:bg-white/10 transition-all">
+            <i data-lucide="chevron-left" class="w-5 h-5"></i>
         </a>
-    </div>
-
-    <div class="fixed top-8 right-8 z-50 flex items-center gap-4">
-        <div
-            class="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 px-6 py-2 rounded-2xl border border-yellow-500/30 flex items-center gap-3">
-            <i data-lucide="zap" class="text-yellow-500 fill-yellow-500"></i>
-            <span class="font-bold">{{user.points}} Points</span>
+        <div class="pointer-events-auto glass px-6 py-2 rounded-2xl border border-white/5 bg-white/5">
+            <div class="text-[10px] font-black text-[var(--text-dim)] uppercase text-center">Current Points</div>
+            <div class="text-lg font-black text-yellow-500 text-center">{{user.points}}</div>
         </div>
-        <div class="bg-blue-500/10 px-6 py-2 rounded-2xl border border-blue-500/30 flex items-center gap-3">
-            <i data-lucide="forward" class="text-blue-400"></i>
-            <span class="font-bold">{{user.skipCredits}} Skips</span>
-        </div>
-    </div>
+    </nav>
 
-    <div class="map-container min-h-screen pt-32 pb-64 relative flex flex-col items-center">
-        <div class="text-center mb-24">
-            <h2 class="text-3xl font-black uppercase tracking-widest text-[#6d5dfc] opacity-80">{{topic}}</h2>
-            <h3 class="text-sm font-bold text-[var(--text-dim)] uppercase tracking-[0.3em]">{{difficulty}} Difficulty
-            </h3>
-        </div>
+    <!-- Header -->
+    <header class="pt-32 pb-16 text-center space-y-2">
+        <div class="text-[10px] font-black text-[var(--accent)] uppercase tracking-widest">PHASE: {{topic}}</div>
+        <h1 class="text-4xl font-black text-white capitalize">{{topic}}</h1>
+        <p class="text-[var(--text-dim)] font-medium">Path to Level 100 Mastery</p>
+    </header>
 
-        <div id="quest-path-container" class="relative w-full max-w-4xl mx-auto flex flex-col items-center gap-24">
-            {{#each quests}}
-            <div class="level-node-wrapper relative"
-                style="margin-left: {{#if (even @index)}}150px{{else}}-150px{{/if}};">
-                <div class="level-node {{#if (eq @index 0)}}active-level{{/if}}" style="background: {{#if (eq @index 0)}}linear-gradient(135deg, #6d5dfc, #9c5dfc){{else}}#1a1a20{{/if}}; 
-                            box-shadow: {{#if (eq @index 0)}}0 15px 35px rgba(109, 93, 252, 0.4){{else}}none{{/if}};
-                            {{#if (contains ../user.completedQuests this.id)}}border: 3px solid #30ff6a;{{/if}}"
-                    onclick="window.location.href='/game/play/{{this.id}}'">
-                    {{add @index 1}}
-                    {{#if (contains ../user.completedQuests this.id)}}
-                    <div class="status-badge" style="background: #30ff6a;">
-                        <i data-lucide="check" class="w-4 h-4 text-black font-bold"></i>
-                    </div>
-                    {{/if}}
-                </div>
-                <div
-                    class="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-bold text-[var(--text-dim)] uppercase tracking-widest">
-                    {{this.title}}
-                </div>
+    <!-- Map Layout -->
+    <div class="max-w-md mx-auto relative px-4 flex flex-col items-center gap-20">
+        {{#each quests}}
+        <div class="relative flex flex-col items-center">
+            {{#unless @last}}
+            <div class="connection-line h-20 top-full"></div>
+            {{/unless}}
+
+            <div class="level-node {{#if (contains ../user.completedQuests this.id)}}completed{{/if}}"
+                onclick="window.location.href='/game/play/{{this.id}}'">
+                {{#if (contains ../user.completedQuests this.id)}}
+                <i data-lucide="check" class="w-6 h-6"></i>
+                {{else}}
+                {{add @index 1}}
+                {{/if}}
             </div>
-            {{/each}}
 
-            <!-- Locked Levels Placeholder -->
-            <div class="level-node locked">
-                <i data-lucide="lock" class="w-6 h-6"></i>
+            <div class="absolute -right-32 top-1/2 -translate-y-1/2 w-28 text-left">
+                <div class="text-[10px] font-black text-[var(--text-dim)] uppercase leading-none mb-1">Mission</div>
+                <div class="text-sm font-bold truncate">{{this.title}}</div>
             </div>
+        </div>
+        {{/each}}
+
+        {{#unless quests}}
+        <div class="py-20 flex flex-col items-center gap-4 opacity-30">
+            <i data-lucide="loader-2" class="w-12 h-12 animate-spin"></i>
+            <p class="font-black text-xs uppercase tracking-tighter">Preparing The Mission Area...</p>
+        </div>
+        {{/unless}}
+
+        <!-- Locked Level -->
+        <div class="level-node opacity-20 cursor-not-allowed">
+            <i data-lucide="lock" class="w-5 h-5 text-[var(--text-dim)]"></i>
         </div>
     </div>
 
     <script>
         lucide.createIcons();
+        window.onload = () => {
+            const nodes = document.querySelectorAll('.level-node');
+            const firstUncompleted = Array.from(nodes).find(node => !node.classList.contains('completed'));
+            if (firstUncompleted) {
+                firstUncompleted.classList.add('active');
+                setTimeout(() => {
+                    firstUncompleted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+            }
+        };
     </script>
 </body>
 

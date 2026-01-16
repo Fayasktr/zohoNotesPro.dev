@@ -1,6 +1,7 @@
 const quests = [
     {
         id: 'js-basic-1',
+        lang: 'javascript',
         topic: 'javascript',
         difficulty: 'basic',
         title: 'Simple Addition',
@@ -16,6 +17,7 @@ const quests = [
     },
     {
         id: 'js-basic-2',
+        lang: 'javascript',
         topic: 'javascript',
         difficulty: 'basic',
         title: 'String Length',
