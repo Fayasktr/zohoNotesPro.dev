@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         :root {
             --bg-dark: #0a0a0c;
@@ -110,6 +111,36 @@
             border-color: var(--accent);
             background: rgba(255, 255, 255, 0.08);
             box-shadow: 0 0 0 4px rgba(109, 93, 252, 0.1);
+        }
+
+        .password-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .toggle-password {
+            position: absolute;
+            right: 12px;
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.3s;
+            z-index: 10;
+        }
+
+        .toggle-password:hover {
+            color: var(--text-main);
+        }
+
+        .toggle-password i {
+            width: 18px;
+            height: 18px;
         }
 
         .btn-login {
@@ -234,7 +265,12 @@
                         style="font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 600;">Forgot
                         Password?</a>
                 </div>
-                <input type="password" name="password" placeholder="••••••••" required>
+                <div class="password-container">
+                    <input type="password" name="password" id="password" placeholder="••••••••" required>
+                    <button type="button" class="toggle-password" onclick="togglePassword('password', this)">
+                        <i data-lucide="eye"></i>
+                    </button>
+                </div>
             </div>
             <button type="submit" class="btn-login">Sign In</button>
         </form>
@@ -254,6 +290,25 @@
             Don't have an account? <a href="/signup">Create one</a>
         </div>
     </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        function togglePassword(inputId, button) {
+            const input = document.getElementById(inputId);
+            const icon = button.querySelector('i');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                button.innerHTML = '<i data-lucide="eye-off"></i>';
+            } else {
+                input.type = 'password';
+                button.innerHTML = '<i data-lucide="eye"></i>';
+            }
+            lucide.createIcons();
+        }
+    </script>
 </body>
 
 </html>

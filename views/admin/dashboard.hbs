@@ -306,9 +306,15 @@
                 </div>
                 <div class="space-y-2">
                     <label class="text-xs font-bold text-[#a0a0a5] uppercase tracking-wider ml-1">Password</label>
-                    <input type="password" id="modalPassword"
-                        class="w-full bg-[#ffffff08] border border-[#ffffff1a] p-4 rounded-xl outline-none focus:border-[#6d5dfc] focus:ring-4 focus:ring-[#6d5dfc1a] transition-all"
-                        placeholder="••••••••">
+                    <div class="relative flex items-center">
+                        <input type="password" id="modalPassword"
+                            class="w-full bg-[#ffffff08] border border-[#ffffff1a] p-4 pr-12 rounded-xl outline-none focus:border-[#6d5dfc] focus:ring-4 focus:ring-[#6d5dfc1a] transition-all"
+                            placeholder="••••••••">
+                        <button type="button" class="absolute right-4 text-[#a0a0a5] hover:text-white transition-colors"
+                            onclick="toggleAdminPassword()">
+                            <i data-lucide="eye" id="toggleIcon" class="w-5 h-5"></i>
+                        </button>
+                    </div>
                     <p class="text-[10px] text-[#a0a0a5] mt-1 ml-1" id="pwdHint">Leave blank for no change</p>
                 </div>
 
@@ -445,6 +451,13 @@
             const overlay = document.getElementById('modalOverlay');
             const box = document.getElementById('modalBox');
 
+            // Reset password field to password type when closing
+            const pwdInput = document.getElementById('modalPassword');
+            pwdInput.type = 'password';
+            const icon = document.getElementById('toggleIcon');
+            if (icon) icon.setAttribute('data-lucide', 'eye');
+            lucide.createIcons();
+
             overlay.classList.replace('opacity-100', 'opacity-0');
             box.classList.replace('opacity-100', 'opacity-0');
             box.classList.replace('scale-100', 'scale-95');
@@ -452,6 +465,20 @@
             setTimeout(() => {
                 modal.classList.replace('flex', 'hidden');
             }, 300);
+        }
+
+        function toggleAdminPassword() {
+            const input = document.getElementById('modalPassword');
+            const icon = document.getElementById('toggleIcon');
+
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.setAttribute('data-lucide', 'eye-off');
+            } else {
+                input.type = 'password';
+                icon.setAttribute('data-lucide', 'eye');
+            }
+            lucide.createIcons();
         }
 
         function closeDetail() {
