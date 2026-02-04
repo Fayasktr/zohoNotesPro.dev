@@ -92,9 +92,8 @@ app.use((req, res, next) => {
 });
 
 // Session Configuration
-if (process.env.NODE_ENV === 'production') {
-    app.set('trust proxy', 1); // trust first proxy
-}
+app.set('trust proxy', 1); // Trust first proxy (required for Render/Heroku)
+
 
 app.use(session({
     secret: process.env.SESSION_SECRET || 'zoho-secret-key-123',
