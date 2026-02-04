@@ -29,6 +29,10 @@ const SystemLog = require('./models/SystemLog');
 // Routes
 const adminRoutes = require('./routes/adminRoutes');
 const gameRoutes = require('./routes/gameRoutes');
+const cronService = require('./services/cronService');
+
+// Start Cron Jobs
+cronService.start();
 
 // Handlebars Helpers
 hbs.registerHelper('substring', function (str, start, len) {
@@ -716,7 +720,10 @@ app.delete('/api/trash/cell/:id', isAuthenticated, async (req, res) => {
 app.delete(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
     const notebookId = req.params[0];
     try {
-        const result = await Note.updateOne({ id: notebookId, owner: req.session.userId }, { isTrashed: true });
+        const result = await Note.updateOne(
+            { id: notebookId, owner: req.session.userId },
+            { isTrashed: true, trashedAt: new Date() }
+        );
         if (result.matchedCount === 0) return res.status(404).json({ error: 'Notebook not found' });
         res.json({ success: true });
     } catch (err) {
@@ -789,7 +796,10 @@ app.delete(/^\/api\/folders\/(.+)$/, isAuthenticated, async (req, res) => {
 app.post(/^\/api\/trash\/restore\/(.+)$/, isAuthenticated, async (req, res) => {
     const notebookId = req.params[0];
     try {
-        const result = await Note.updateOne({ id: notebookId, owner: req.session.userId }, { isTrashed: false });
+        const result = await Note.updateOne(
+            { id: notebookId, owner: req.session.userId },
+            { isTrashed: false, $unset: { trashedAt: "" } }
+        );
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to restore notebook' });
@@ -955,25 +965,6 @@ cron.schedule('*/10 * * * *', async () => {
     }
 });
 
-// Self-Ping Keep-Alive Job (Every 5 minutes)
-cron.schedule('*/5 * * * *', async () => {
-    const APP_URL = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
-
-    http.get(`${APP_URL}/api/ping`, (res) => {
-        if (res.statusCode === 200) {
-            console.log(`[Cron] Keep-Alive: Ping successful (${new Date().toLocaleTimeString()})`);
-        } else {
-            console.error(`[Cron] Keep-Alive: Ping failed with status ${res.statusCode}`);
-        }
-    }).on('error', (err) => {
-        console.error('[Cron] Keep-Alive Error:', err.message);
-    });
-});
-
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server on http://localhost:${PORT}`);
-
-    // Start background AI quest population
-    const aiService = require('./services/aiService');
-    aiService.startSuperSeeding().catch(err => console.error("SuperSeeder Start Error:", err));
 });

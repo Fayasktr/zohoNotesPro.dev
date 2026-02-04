@@ -19,10 +19,11 @@ const systemLogSchema = new mongoose.Schema({
         default: false
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    capped: { size: 1024, max: 20 } // Limit to 20 documents, max size 1KB (approximation)
 });
 
-// Auto-delete logs older than 7 days to keep DB clean
-systemLogSchema.index({ timestamp: 1 }, { expireAfterSeconds: 604800 });
+// Remove explicit index as capped manages size
+// systemLogSchema.index({ timestamp: 1 }, { expireAfterSeconds: 604800 });
 
 module.exports = mongoose.model('SystemLog', systemLogSchema);

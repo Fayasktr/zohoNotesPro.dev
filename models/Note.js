@@ -14,7 +14,8 @@ const noteSchema = new mongoose.Schema({
         status: { type: String, enum: ['pending', 'accepted'], default: 'pending' },
         joinedAt: { type: Date, default: Date.now }
     }],
-    updatedAt: { type: Date, default: Date.now }
+    updatedAt: { type: Date, default: Date.now },
+    trashedAt: { type: Date } // Date when the note was moved to trash
 }, { collection: 'notes' });
 
 module.exports = mongoose.model('Note', noteSchema);
