@@ -593,7 +593,7 @@ class NotebookApp {
 
                 const item = document.createElement('div');
                 item.innerHTML = `
-                    <div class="tree-item is-folder" data-path="${child.name}" onclick="this.nextElementSibling.classList.toggle('collapsed'); this.querySelector('.tree-arrow').classList.toggle('rotated');">
+                    <div class="tree-item is-folder" data-path="${child.name}">
                         <i data-lucide="chevron-right" class="tree-arrow"></i>
                         <i data-lucide="folder" class="tree-icon" style="color: #6d5dfc;"></i>
                         <span class="tree-label">${child.name}</span>
