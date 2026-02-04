@@ -167,6 +167,8 @@ class NotebookApp {
         document.getElementById('nav-starred-cells').addEventListener('click', () => this.loadStarredNotes());
         document.getElementById('nav-trash').addEventListener('click', () => this.loadTrash());
 
+        this.setupSidebarResizer();
+
         // Event Delegation for Sidebar
         document.getElementById('notebook-list').addEventListener('click', (e) => {
             // 1. Folder Actions (Buttons)
@@ -541,6 +543,38 @@ class NotebookApp {
         await this.saveToBackend();
         await this.refreshNotebookList();
         await this.loadNotebook(this.notebook.id);
+    }
+
+    setupSidebarResizer() {
+        const resizer = document.getElementById('sidebar-resizer');
+        const sidebar = document.getElementById('main-sidebar');
+
+        if (!resizer || !sidebar) return;
+
+        resizer.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            document.body.style.cursor = 'col-resize';
+
+            const startX = e.clientX;
+            const startWidth = sidebar.getBoundingClientRect().width;
+
+            const doDrag = (e) => {
+                // Limit width between 200px and 600px
+                const newWidth = Math.max(200, Math.min(600, startWidth + e.clientX - startX));
+                sidebar.style.width = `${newWidth}px`;
+                sidebar.style.minWidth = `${newWidth}px`;
+                sidebar.style.flexBasis = `${newWidth}px`;
+            };
+
+            const stopDrag = () => {
+                document.body.style.cursor = '';
+                document.documentElement.removeEventListener('mousemove', doDrag);
+                document.documentElement.removeEventListener('mouseup', stopDrag);
+            };
+
+            document.documentElement.addEventListener('mousemove', doDrag);
+            document.documentElement.addEventListener('mouseup', stopDrag);
+        });
     }
 
     async refreshNotebookList() {
