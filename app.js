@@ -69,10 +69,23 @@ hbs.registerHelper('even', function (index) {
 });
 
 // MongoDB Connection
+// MongoDB Connection
 const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/zoho';
+
+// Debug Log (Masked)
+const maskedURI = mongoURI.replace(/:([^:@]+)@/, ':****@');
+console.log(`[Startup] Attempting to connect to MongoDB at: ${maskedURI}`);
+
+if (process.env.NODE_ENV === 'production' && !process.env.MONGODB_URI) {
+    console.warn('[WARNING] NODE_ENV is production but MONGODB_URI is not set! Defaulting to localhost (likely to fail on Render).');
+}
+
 mongoose.connect(mongoURI)
-    .then(() => console.log('Connected to MongoDB'))
-    .catch(err => console.error('MongoDB connection error:', err));
+    .then(() => console.log('[Startup] Connected to MongoDB Successfully'))
+    .catch(err => {
+        console.error('[Startup] MongoDB connection error:', err);
+        process.exit(1); // Fail fast so Render knows
+    });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
