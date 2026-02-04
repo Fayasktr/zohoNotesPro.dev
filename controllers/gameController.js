@@ -25,7 +25,10 @@ exports.renderGameMap = async (req, res) => {
     const { topic, difficulty } = req.params;
     try {
         // Map URL param 'topic' to Schema field 'language'
-        const quests = await Quest.find({ language: topic, difficulty });
+        const query = { language: topic };
+        if (difficulty) query.difficulty = difficulty;
+
+        const quests = await Quest.find(query);
 
         res.render('game/map', {
             title: `Map: ${topic} - ${difficulty}`,
