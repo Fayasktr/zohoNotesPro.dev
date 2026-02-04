@@ -973,4 +973,8 @@ cron.schedule('*/5 * * * *', async () => {
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server on http://localhost:${PORT}`);
+
+    // Start background AI quest population
+    const aiService = require('./services/aiService');
+    aiService.startSuperSeeding().catch(err => console.error("SuperSeeder Start Error:", err));
 });

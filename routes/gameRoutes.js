@@ -9,10 +9,11 @@ const isAuthenticated = (req, res, next) => {
 };
 
 router.get('/game', isAuthenticated, gameController.renderGameDashboard);
-router.get('/game/map/:topic/:difficulty', isAuthenticated, gameController.renderGameMap);
+router.get('/game/map/:topic', isAuthenticated, gameController.renderGameMap);
+router.get('/game/resume/:topic', isAuthenticated, gameController.resumeTopic);
 router.get('/game/play/:questId', isAuthenticated, gameController.renderPlayPage);
 router.post('/api/game/verify', isAuthenticated, gameController.verifySolution);
 router.post('/api/game/skip', isAuthenticated, gameController.skipQuest);
-router.post('/api/game/hint', isAuthenticated, gameController.askProfessor);
+router.post('/api/game/master', isAuthenticated, gameController.askMaster);
 
 module.exports = router;

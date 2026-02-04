@@ -13,7 +13,9 @@ exports.renderGameDashboard = (req, res) => {
 exports.renderGameMap = async (req, res) => {
     const { topic, difficulty } = req.params;
     try {
-        const quests = await Quest.find({ topic, difficulty });
+        // Map URL param 'topic' to Schema field 'language'
+        const quests = await Quest.find({ language: topic, difficulty });
+
         res.render('game/map', {
             title: `Map: ${topic} - ${difficulty}`,
             topic,
@@ -57,7 +59,7 @@ exports.verifySolution = async (req, res) => {
             let actual = null;
             let error = null;
 
-            if (quest.topic === 'javascript') {
+            if (quest.language === 'javascript') {
                 // JS: Wrap in function call
                 const funcName = quest.functionName || 'main';
                 const inputArgs = testCase.input.map(arg => JSON.stringify(arg)).join(', ');
@@ -73,7 +75,7 @@ exports.verifySolution = async (req, res) => {
                     error = execResult.error;
                 }
             }
-            else if (quest.topic === 'python') {
+            else if (quest.language === 'python') {
                 // Python: Append print call
                 const funcName = quest.functionName;
                 if (funcName) {
@@ -83,16 +85,14 @@ exports.verifySolution = async (req, res) => {
 
                     const execResult = await engine.execute(fullCode, 'python');
                     if (execResult.success) {
-                        // Check stdout (last line usually)
                         const output = execResult.logs.join('').trim();
                         actual = output;
-                        // Loose check: string comparison
                         passed = output == String(testCase.expected);
                     } else {
                         error = execResult.error;
                     }
                 } else {
-                    // Script mode (e.g. print hello world)
+                    // Script mode
                     const execResult = await engine.execute(code, 'python');
                     if (execResult.success) {
                         const output = execResult.logs.join('').trim();
@@ -103,10 +103,9 @@ exports.verifySolution = async (req, res) => {
                     }
                 }
             }
-            else if (['c', 'java', 'cpp'].includes(quest.topic)) {
+            else if (['c', 'java', 'cpp'].includes(quest.language)) {
                 // Compiled languages: Check STDOUT
-                // For Hello World type quests
-                const execResult = await engine.execute(code, quest.topic);
+                const execResult = await engine.execute(code, quest.language);
                 if (execResult.success) {
                     const output = execResult.logs.join('').trim();
                     actual = output;
@@ -182,4 +181,3 @@ exports.askProfessor = async (req, res) => {
         res.status(500).json({ error: 'Professor is busy right now.' });
     }
 };
-

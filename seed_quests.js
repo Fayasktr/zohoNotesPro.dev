@@ -6,7 +6,8 @@ const quests = [
     // --- JAVASCRIPT ---
     {
         id: 'js-basic-1',
-        topic: 'javascript',
+        language: 'javascript',
+        topic: 'algorithms',
         difficulty: 'basic',
         title: 'Simple Addition',
         functionName: 'add',
@@ -21,7 +22,8 @@ const quests = [
     },
     {
         id: 'js-basic-2',
-        topic: 'javascript',
+        language: 'javascript',
+        topic: 'algorithms',
         difficulty: 'basic',
         title: 'String Length',
         functionName: 'getLength',
@@ -36,7 +38,8 @@ const quests = [
     },
     {
         id: 'js-int-1',
-        topic: 'javascript',
+        language: 'javascript',
+        topic: 'algorithms',
         difficulty: 'intermediate',
         title: 'Find Maximum',
         functionName: 'findMax',
@@ -51,7 +54,8 @@ const quests = [
     },
     {
         id: 'js-int-2',
-        topic: 'javascript',
+        language: 'javascript',
+        topic: 'algorithms',
         difficulty: 'intermediate',
         title: 'Reverse String',
         functionName: 'reverseString',
@@ -64,10 +68,37 @@ const quests = [
         points: 20
     },
 
+    // --- FROM LEARNING-GAME ---
+    {
+        id: 'javascript-fundamentals-basic-1',
+        language: 'javascript',
+        topic: 'fundamentals',
+        difficulty: 'basic',
+        title: 'Variable Declaration',
+        functionName: 'declareVariables',
+        description: 'Complete the function to declare a constant named "score" with value 100 inside the function and return it.',
+        template: 'function declareVariables() {\n    // Your code here\n}',
+        testCases: [{ input: [], expected: 100 }],
+        points: 10
+    },
+    {
+        id: 'javascript-fundamentals-basic-3',
+        language: 'javascript',
+        topic: 'fundamentals',
+        difficulty: 'basic',
+        title: 'Check Even',
+        functionName: 'isEven',
+        description: 'Return true if the number is even, false otherwise.',
+        template: 'function isEven(n) {\n    // Your code here\n}',
+        testCases: [{ input: [4], expected: true }, { input: [7], expected: false }],
+        points: 10
+    },
+
     // --- PYTHON ---
     {
         id: 'py-basic-1',
-        topic: 'python',
+        language: 'python',
+        topic: 'algorithms',
         difficulty: 'basic',
         title: 'Python Addition',
         functionName: 'add',
@@ -81,7 +112,8 @@ const quests = [
     },
     {
         id: 'py-int-1',
-        topic: 'python',
+        language: 'python',
+        topic: 'algorithms',
         difficulty: 'intermediate',
         title: 'Square List',
         functionName: 'square_list',
@@ -97,18 +129,14 @@ const quests = [
     // --- C ---
     {
         id: 'c-basic-1',
-        topic: 'c',
+        language: 'c',
+        topic: 'algorithms',
         difficulty: 'basic',
         title: 'Sum in C',
-        functionName: 'main', // Not used typically in C exec unless structured, but required by schema
+        functionName: 'main',
         description: 'Write a C program that prints "Hello World". (Test case checks stdout)',
         template: '#include <stdio.h>\n\nint main() {\n    // Your code here\n    return 0;\n}',
         testCases: [
-            // Note: C execution in engine usually returns nothing or stdout logic. 
-            // For simplicity in this seed, let's assume we want a standard output match.
-            // However, the current generic validation logic in gameController might need tweeking for C/Java which returns STDOUT vs Return Value.
-            // Since gameController.js uses vm.runInContext for JS, we need to UPDATE verification logic for other languages too.
-            // For now, let's stick to adding the data, but acknowledge verifySolution needs an update.
             { input: [], expected: "Hello World" }
         ],
         points: 10
@@ -117,7 +145,8 @@ const quests = [
     // --- JAVA ---
     {
         id: 'java-basic-1',
-        topic: 'java',
+        language: 'java',
+        topic: 'algorithms',
         difficulty: 'basic',
         title: 'Java Hello',
         functionName: 'Main',
@@ -130,24 +159,15 @@ const quests = [
     }
 ];
 
-// Note: This seed script assumes the DB is accessible. 
-// For C/Java/Python verification, we need to ensure gameController handles them.
-// The current gameController.js ONLY handles JS via vm.runInContext.
-// I will need to update gameController.js to use engine.execute() which handles all languages.
-
 const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/zoho';
 
 mongoose.connect(mongoURI)
     .then(async () => {
         console.log('Connected to MongoDB');
-
-        // Clear existing quests if you want a fresh start, or upsert.
-        // Let's upsert.
         for (const quest of quests) {
             await Quest.findOneAndUpdate({ id: quest.id }, quest, { upsert: true, new: true });
             console.log(`Seeded: ${quest.title}`);
         }
-
         console.log('Done!');
         process.exit(0);
     })

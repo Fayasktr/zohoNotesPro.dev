@@ -273,10 +273,18 @@ class AntigravityEngine {
         });
     }
 
-    _serialize(obj) {
+    _serialize(obj, depth = 5, seen = new WeakSet()) {
         if (obj === undefined) return 'undefined';
         if (obj === null) return 'null';
         if (typeof obj === 'string') return obj;
+        if (typeof obj === 'boolean' || typeof obj === 'number') return String(obj);
+
+        if (depth < 0) return '[...]';
+        if (typeof obj === 'object' && obj !== null) {
+            if (seen.has(obj)) return '[Circular]';
+            seen.add(obj);
+        }
+
         if (typeof obj === 'function') return `[Function: ${obj.name || 'anonymous'}]`;
 
         if (obj instanceof Error || (obj && obj.message && obj.stack)) {
@@ -285,13 +293,34 @@ class AntigravityEngine {
 
         if (obj && typeof obj.then === 'function') return '[Promise]';
 
+        if (Array.isArray(obj)) {
+            let parts = [];
+            let emptyCount = 0;
+            for (let i = 0; i < obj.length; i++) {
+                if (i in obj) {
+                    if (emptyCount > 0) {
+                        parts.push(`<${emptyCount} empty items>`);
+                        emptyCount = 0;
+                    }
+                    parts.push(this._serialize(obj[i], depth - 1, seen));
+                } else {
+                    emptyCount++;
+                }
+            }
+            if (emptyCount > 0) {
+                parts.push(`<${emptyCount} empty items>`);
+            }
+            return `[${parts.join(', ')}]`;
+        }
+
         try {
             if (typeof obj === 'object') {
-                return JSON.stringify(obj, (key, value) => {
-                    if (typeof value === 'function') return `[Function: ${value.name || 'anonymous'}]`;
-                    if (value instanceof Error) return `${value.name}: ${value.message}`;
-                    return value;
-                }, 2);
+                const entries = Object.entries(obj);
+                if (entries.length === 0) return '{}';
+                const content = entries
+                    .map(([k, v]) => `${k}: ${this._serialize(v, depth - 1, seen)}`)
+                    .join(', ');
+                return `{ ${content} }`;
             }
             return String(obj);
         } catch (e) {

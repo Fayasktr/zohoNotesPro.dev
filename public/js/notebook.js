@@ -32,8 +32,87 @@ class NotebookApp {
         this.setupEventListeners();
         this.setupMobileSidebar();
         this.setupResizableSidebar();
+        this.setupConsoleInterception();
 
         this.init();
+    }
+
+    setupConsoleInterception() {
+        this.smartStringify = (val, maxDepth = 5, seen = new WeakSet()) => {
+            if (val === null) return "null";
+            if (val === undefined) return "undefined";
+            if (typeof val === "string") return `"${val}"`;
+            if (typeof val !== "object" && typeof val !== "function") return String(val);
+
+            if (maxDepth < 0) return "[...]";
+            if (seen.has(val)) return "[Circular]";
+            seen.add(val);
+
+            if (Array.isArray(val)) {
+                let parts = [];
+                let emptyCount = 0;
+                for (let i = 0; i < val.length; i++) {
+                    if (i in val) {
+                        if (emptyCount > 0) {
+                            parts.push(`<${emptyCount} empty items>`);
+                            emptyCount = 0;
+                        }
+                        parts.push(this.smartStringify(val[i], maxDepth - 1, seen));
+                    } else {
+                        emptyCount++;
+                    }
+                }
+                if (emptyCount > 0) {
+                    parts.push(`<${emptyCount} empty items>`);
+                }
+                return `[${parts.join(", ")}]`;
+            }
+
+            if (typeof val === "function") return `[Function: ${val.name || "(anonymous)"}]`;
+
+            // Regular Object
+            try {
+                const entries = Object.entries(val);
+                if (entries.length === 0) return "{}";
+                if (maxDepth === 0) return "{...}";
+                const content = entries
+                    .map(([k, v]) => `${k}: ${this.smartStringify(v, maxDepth - 1, seen)}`)
+                    .join(", ");
+                return `{ ${content} }`;
+            } catch (e) {
+                return "[Object]";
+            }
+        };
+
+        this.originalLog = console.log;
+        console.log = (...args) => {
+            this.originalLog(...args);
+            if (this.currentRunningCellId) {
+                const outputDiv = document.getElementById(`output-${this.currentRunningCellId}`);
+                if (outputDiv) {
+                    outputDiv.classList.remove('hidden');
+                    args.forEach(arg => {
+                        const logElem = document.createElement('div');
+                        logElem.className = 'output-log';
+                        logElem.textContent = this.smartStringify(arg);
+                        outputDiv.appendChild(logElem);
+                    });
+                }
+            }
+        };
+
+        window.addEventListener('error', (e) => {
+            if (this.currentRunningCellId) {
+                const outputDiv = document.getElementById(`output-${this.currentRunningCellId}`);
+                if (outputDiv) {
+                    outputDiv.classList.remove('hidden');
+                    const errElem = document.createElement('div');
+                    errElem.className = 'output-error';
+                    errElem.textContent = `Runtime Error: ${e.message}`;
+                    outputDiv.appendChild(errElem);
+                }
+            }
+        });
     }
 
     async init() {
@@ -440,7 +519,7 @@ class NotebookApp {
         this.addCell('code');
         await this.saveToBackend();
         await this.refreshNotebookList();
-        this.setActiveNotebookUI(this.notebook.id);
+        await this.loadNotebook(this.notebook.id);
     }
 
     async refreshNotebookList() {
@@ -572,10 +651,40 @@ class NotebookApp {
     }
 
     setActiveNotebookUI(id) {
+        let activeEl = null;
         document.querySelectorAll('.notebook-item').forEach(el => {
             el.classList.remove('active');
-            if (el.getAttribute('data-id') === id) el.classList.add('active');
+            if (el.getAttribute('data-id') === id) {
+                el.classList.add('active');
+                activeEl = el;
+            }
         });
+
+        if (activeEl) {
+            // Expand parent folder if collapsed
+            const parentFolder = activeEl.closest('.folder-content');
+            if (parentFolder && parentFolder.classList.contains('collapsed')) {
+                parentFolder.classList.remove('collapsed');
+                const header = parentFolder.previousElementSibling;
+                if (header && header.classList.contains('folder-header')) {
+                    const icon = header.querySelector('.folder-chevron');
+                    if (icon) icon.classList.remove('collapsed-chevron');
+                }
+            }
+
+            // Expand notebook list if collapsed
+            const list = document.getElementById('notebook-list');
+            if (list && list.classList.contains('collapsed')) {
+                list.classList.remove('collapsed');
+                const chevron = document.getElementById('chevron-notebooks');
+                if (chevron) chevron.classList.remove('collapsed-chevron');
+            }
+
+            // Use a slight delay to ensure the DOM is ready for scrolling
+            setTimeout(() => {
+                activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
         lucide.createIcons();
     }
 
@@ -651,6 +760,12 @@ class NotebookApp {
         this.notebook.cells.push(cell);
         this.renderCell(cell, this.notebook.cells.length);
         this._autoSave();
+
+        // Auto-scroll to the new cell
+        setTimeout(() => {
+            const el = document.getElementById(`container-${cell.id}`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
     }
 
     renderCell(cell, index = 1) {
@@ -909,7 +1024,30 @@ class NotebookApp {
             runBtn.innerText = 'Running...';
             runBtn.disabled = true;
         }
+
+        const outputDiv = document.getElementById(`output-${cellId}`);
+        if (outputDiv) {
+            outputDiv.innerHTML = '<div class="output-label" style="font-size: 10px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase; font-weight: bold; opacity: 0.7;">output:</div>';
+            outputDiv.classList.remove('hidden');
+        }
+
+        this.currentRunningCellId = cellId;
+
         try {
+            // 1. Local execution for JS logs
+            if (cell.lang === 'javascript' || !cell.lang) {
+                try {
+                    const wrappedCode = `(function() {\n${code}\n})()`;
+                    const result = eval(wrappedCode);
+                    if (result !== undefined) {
+                        console.log(result);
+                    }
+                } catch (e) {
+                    console.log('Execution Error:', e.message);
+                }
+            }
+
+            // 2. Server execution for formal results
             const response = await this.safeFetch('/api/execute', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -945,6 +1083,10 @@ class NotebookApp {
                 runBtn.innerText = 'Run';
                 runBtn.disabled = false;
             }
+            // Keep currentRunningCellId for a short while longer to catch late async logs
+            setTimeout(() => {
+                if (this.currentRunningCellId === cellId) this.currentRunningCellId = null;
+            }, 5000);
         }
     }
 
