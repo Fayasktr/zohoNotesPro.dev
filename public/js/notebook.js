@@ -538,70 +538,79 @@ class NotebookApp {
         const listContainer = document.getElementById('notebook-list');
         listContainer.innerHTML = '';
 
-        const groups = {};
+        // 1. Build Tree Structure from Paths
+        const tree = { name: 'root', type: 'folder', children: {}, files: [] };
 
         notebooks.forEach(nb => {
-            const folder = nb.folder || 'root';
-            if (!groups[folder]) groups[folder] = [];
-            groups[folder].push(nb);
+            let path = nb.folder && nb.folder !== 'root' ? nb.folder.split('/') : [];
+            let currentLevel = tree;
+
+            // Navigate/Build path
+            path.forEach(part => {
+                if (!currentLevel.children[part]) {
+                    currentLevel.children[part] = { name: part, type: 'folder', children: {}, files: [] };
+                }
+                currentLevel = currentLevel.children[part];
+            });
+
+            currentLevel.files.push(nb);
         });
 
-        const renderItem = (nb, container) => {
-            const item = document.createElement('div');
-            item.className = `notebook-item ${nb.id === this.notebook.id ? 'active' : ''} ${nb.isShared ? 'shared-item' : ''}`;
-            item.setAttribute('data-id', nb.id);
-            item.innerHTML = `
-                <i data-lucide="${nb.isShared ? 'users' : (nb.id === this.notebook.id ? 'edit-3' : 'file-code')}" 
-                   style="width: 14px; ${nb.isShared ? 'color: #6d5dfc;' : ''}"></i> 
-                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
-                    <span class="truncate" style="font-size: 13px;">${nb.title}</span>
-                    ${nb.isShared ? `<span style="font-size: 8px; opacity: 0.5;">Shared by ${nb.ownerName}</span>` : ''}
-                </div>
-                ${!nb.isShared ? `
-                <div class="item-actions">
-                    <button class="btn-icon-sm rename-notebook-btn" title="Rename File">
-                        <i data-lucide="edit-2"></i>
-                    </button>
-                    <button class="btn-icon-sm delete-notebook-btn" title="Delete File">
-                        <i data-lucide="trash-2"></i>
-                    </button>
-                </div>
-                ` : ''}
-            `;
-            container.appendChild(item);
+        // 2. Recursive Render Function
+        const renderTreeLevel = (node, container, level = 0) => {
+            // Render Folders First (Alphabetical)
+            Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name)).forEach(child => {
+                const folderId = `folder-${Math.random().toString(36).substr(2, 9)}`;
+
+                const item = document.createElement('div');
+                item.innerHTML = `
+                    <div class="tree-item is-folder" data-path="${child.name}" onclick="this.nextElementSibling.classList.toggle('collapsed'); this.querySelector('.tree-arrow').classList.toggle('rotated');">
+                        <i data-lucide="chevron-right" class="tree-arrow"></i>
+                        <i data-lucide="folder" class="tree-icon" style="color: #6d5dfc;"></i>
+                        <span class="tree-label">${child.name}</span>
+                        <div class="tree-actions">
+                            <button class="tree-action-btn btn-add-file" title="New File" data-folder="${child.name}">
+                                <i data-lucide="plus" style="width:14px;"></i>
+                            </button>
+                            <!-- FUTURE: Rename/Delete folder logic needs path awareness -->
+                        </div>
+                    </div>
+                    <div class="tree-children collapsed" id="${folderId}"></div>
+                `;
+                container.appendChild(item);
+
+                // Recursively render children
+                const childrenContainer = item.querySelector('.tree-children');
+                renderTreeLevel(child, childrenContainer, level + 1);
+            });
+
+            // Render Files (Alphabetical)
+            node.files.sort((a, b) => a.title.localeCompare(b.title)).forEach(file => {
+                const isActive = file.id === this.notebook.id;
+                const fileItem = document.createElement('div');
+                fileItem.className = `tree-item is-file ${isActive ? 'active' : ''} notebook-item`; // notebook-item class kept for event delegation
+                fileItem.setAttribute('data-id', file.id);
+                fileItem.innerHTML = `
+                    <div class="tree-arrow invisible"></div> <!-- Spacer -->
+                    <i data-lucide="${file.isShared ? 'users' : 'file-code'}" class="tree-icon" style="${file.isShared ? 'color: #ffcc00;' : ''}"></i>
+                    <span class="tree-label">${file.title}</span>
+                    ${!file.isShared ? `
+                    <div class="tree-actions">
+                        <button class="tree-action-btn rename-notebook-btn"><i data-lucide="edit-2" style="width:12px;"></i></button>
+                        <button class="tree-action-btn danger delete-notebook-btn"><i data-lucide="trash-2" style="width:12px;"></i></button>
+                    </div>
+                    ` : ''}
+                `;
+                container.appendChild(fileItem);
+            });
         };
 
-        // Render Main List with Folders
-        Object.keys(groups).sort().forEach(folder => {
-            if (folder !== 'root') {
-                const folderHeader = document.createElement('div');
-                folderHeader.className = 'folder-header';
-                folderHeader.setAttribute('data-folder', folder);
-                folderHeader.innerHTML = `
-                    <i data-lucide="chevron-down" class="folder-chevron" style="width: 12px;"></i>
-                    <i data-lucide="folder" style="width: 14px;"></i> 
-                    <span style="flex: 1;">${folder}</span>
-                    <div class="folder-actions" style="display: flex; gap: 4px;">
-                        <button class="btn-icon-sm btn-rename-folder" title="Rename Folder">
-                            <i data-lucide="edit-2"></i>
-                        </button>
-                        <button class="btn-icon-sm btn-delete-folder" title="Delete Folder">
-                            <i data-lucide="trash-2"></i>
-                        </button>
-                        <button class="btn-icon-sm btn-add-file" data-folder="${folder}" title="Add File">
-                            <i data-lucide="file-plus"></i>
-                        </button>
-                    </div>
-                `;
-                listContainer.appendChild(folderHeader);
-            }
+        // Start Rendering
+        const rootContainer = document.createElement('div');
+        rootContainer.className = 'tree-root';
+        renderTreeLevel(tree, rootContainer);
+        listContainer.appendChild(rootContainer);
 
-            const folderContent = document.createElement('div');
-            folderContent.className = folder === 'root' ? '' : 'folder-content';
-
-            groups[folder].forEach(nb => renderItem(nb, folderContent));
-            listContainer.appendChild(folderContent);
-        });
         lucide.createIcons();
     }
 

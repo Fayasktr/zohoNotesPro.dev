@@ -566,130 +566,150 @@ body.light-theme .nav-item.active {
     /* Highlight the arrow */
 }
 
-/* Notebook Explorer */
+/* Tree View File System */
 .notebook-list {
-    margin-left: 20px;
-    border-left: 1px solid var(--border-color);
-    padding-left: 5px;
+    margin-left: 0;
+    border-left: none;
+    padding-left: 0;
     margin-top: 10px;
-    margin-bottom: 20px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    opacity: 1;
-    /* Removed individual scrollbar to let sidebar handle it */
+    font-family: 'Inter', sans-serif;
 }
 
-.notebook-list.collapsed {
+.tree-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 13px;
+    border-radius: 6px;
+    margin-bottom: 2px;
+    transition: all 0.15s ease;
+    user-select: none;
+    text-decoration: none;
+    position: relative;
+    border: 1px solid transparent;
+}
+
+.tree-item:hover {
+    background: rgba(109, 93, 252, 0.1); /* Semi-transparent purple */
+    color: var(--text-main);
+}
+
+.tree-item.active {
+    background: rgba(109, 93, 252, 0.2);
+    color: #fff;
+    border-color: rgba(109, 93, 252, 0.3);
+    font-weight: 500;
+}
+
+/* Indentation Guide Lines */
+.tree-children {
+    margin-left: 18px;
+    padding-left: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tree-children.collapsed {
     max-height: 0;
+    opacity: 0;
+    pointer-events: none;
     margin-top: 0;
     margin-bottom: 0;
-    opacity: 0;
-    pointer-events: none;
 }
 
-#chevron-notebooks {
-    transition: transform 0.3s ease;
-}
-
-.collapsed-chevron {
-    transform: rotate(-90deg);
-}
-
-.notebook-item {
-    padding: 10px 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
-    color: var(--text-dim);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    transition: all 0.2s;
-    /* Allow wrapping for long notebook titles */
-    word-break: break-word;
-}
-
-body.light-theme .notebook-item {
-    color: #111111;
-    /* Improved contrast for light mode */
-}
-
-.notebook-item:hover {
-    background: var(--card-bg);
-    color: var(--text-main);
-}
-
-.notebook-item.active {
-    background: rgba(109, 93, 252, 0.1);
-    color: var(--accent);
-    border-left: 3px solid var(--accent);
-    border-radius: 0 8px 8px 0;
-}
-
-.folder-header {
-    padding: 8px 16px;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text-dim);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 15px;
+/* Icons */
+.tree-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    flex-shrink: 0;
+    opacity: 0.7;
     transition: color 0.2s;
-    user-select: none;
 }
 
-body.light-theme .folder-header {
-    color: #000000;
+.tree-item:hover .tree-icon {
+    opacity: 1;
+    color: var(--accent);
 }
 
-.folder-header:hover {
-    color: var(--text-main);
+.tree-arrow {
+    width: 14px;
+    height: 14px;
+    margin-right: 4px;
+    color: var(--text-dim);
+    transition: transform 0.2s ease;
+    opacity: 0.5;
 }
 
-.folder-chevron {
-    transition: transform 0.3s ease;
-}
-
-.folder-chevron.collapsed-chevron {
-    transform: rotate(-90deg);
-}
-
-.btn-add-file,
-.btn-rename-folder,
-.btn-delete-folder {
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.folder-header:hover .btn-add-file,
-.folder-header:hover .btn-rename-folder,
-.folder-header:hover .btn-delete-folder {
+.tree-arrow:hover {
+    color: #fff;
     opacity: 1;
 }
 
-.btn-delete-folder:hover {
-    color: #ff3b30;
+.tree-arrow.rotated {
+    transform: rotate(90deg);
 }
 
-.btn-rename-folder:hover {
-    color: var(--accent);
-}
-
-.folder-content {
-    margin-left: 12px;
-    border-left: 1px solid var(--border-color);
-    padding-left: 4px;
-    overflow: hidden;
-    transition: max-height 0.4s cubic-bezier(0, 1, 0, 1), opacity 0.3s;
-    max-height: 1000px;
-    /* Large enough for content */
-}
-
-.folder-content.collapsed {
-    max-height: 0;
+.tree-arrow.invisible {
     opacity: 0;
     pointer-events: none;
+}
+
+/* File/Folder Specifics */
+.is-folder {
+    font-weight: 600;
+    color: #e1e1e6;
+}
+
+.is-file {
+    font-weight: 400;
+}
+
+.tree-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+
+/* Actions (Hover only) */
+.tree-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    margin-left: auto;
+}
+
+.tree-item:hover .tree-actions {
+    opacity: 1;
+}
+
+.tree-action-btn {
+    padding: 2px;
+    border-radius: 4px;
+    color: var(--text-dim);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+.tree-action-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.tree-action-btn:hover.danger {
+    color: #ff3b30;
+    background: rgba(255, 59, 48, 0.1);
+}
+
+/* Root level spacing */
+.tree-root {
+    margin-top: 5px;
 }
 
 .btn-new {

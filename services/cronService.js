@@ -1,19 +1,38 @@
 const cron = require('node-cron');
+const axios = require('axios');
 const Note = require('../models/Note');
 const TrashedCell = require('../models/TrashedCell');
 
 class CronService {
     constructor() {
-        // Run every day at midnight (00:00)
-        // Schedule: "0 0 * * *"
-        this.job = cron.schedule('0 0 * * *', this.cleanupTrash.bind(this), {
-            scheduled: false // Don't start immediately, wait for init()
+        // 1. Trash Cleanup: Daily at midnight (00:00)
+        this.trashJob = cron.schedule('0 0 * * *', this.cleanupTrash.bind(this), {
+            scheduled: false
+        });
+
+        // 2. Birthday Site Ping: Every 14 minutes
+        // (Render sleeps after 15 mins of inactivity)
+        this.pingJob = cron.schedule('*/14 * * * *', this.pingBirthdaySite.bind(this), {
+            scheduled: false
         });
     }
 
     start() {
-        console.log('[CRON] Trash cleanup service started (Runs Daily at 00:00)');
-        this.job.start();
+        console.log('[CRON] Trash cleanup service scheduled (Runs Daily at 00:00)');
+        this.trashJob.start();
+
+        console.log('[CRON] Birthday Site Keep-Alive scheduled (Runs every 14 mins)');
+        this.pingJob.start();
+    }
+
+    async pingBirthdaySite() {
+        const url = 'https://safeena-birthday.onrender.com/';
+        try {
+            const response = await axios.get(url);
+            console.log(`[CRON] Birthday Ping Success: ${response.status} (${new Date().toLocaleTimeString()})`);
+        } catch (err) {
+            console.error(`[CRON] Birthday Ping Failed: ${err.message} (${new Date().toLocaleTimeString()})`);
+        }
     }
 
     async cleanupTrash() {
