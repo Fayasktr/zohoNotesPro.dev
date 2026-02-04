@@ -181,3 +181,13 @@ exports.askProfessor = async (req, res) => {
         res.status(500).json({ error: 'Professor is busy right now.' });
     }
 };
+
+// Aliases for route compatibility
+exports.askMaster = exports.askProfessor;
+
+exports.resumeTopic = (req, res) => {
+    const { topic } = req.params;
+    // For now, just redirect to the map view for that topic
+    res.redirect(`/game/map/${topic}`);
+};
+
