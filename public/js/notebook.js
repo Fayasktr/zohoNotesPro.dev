@@ -169,54 +169,75 @@ class NotebookApp {
 
         // Event Delegation for Sidebar
         document.getElementById('notebook-list').addEventListener('click', (e) => {
-            const item = e.target.closest('.notebook-item');
-            const folderHeader = e.target.closest('.folder-header');
+            // 1. Folder Actions (Buttons)
             const addFileBtn = e.target.closest('.btn-add-file');
-
             if (addFileBtn) {
+                e.preventDefault();
                 e.stopPropagation();
                 const folder = addFileBtn.getAttribute('data-folder');
                 this.createNewNotebook(folder);
                 return;
             }
 
-            if (item) {
-                const id = item.getAttribute('data-id');
-                const title = item.querySelector('span').innerText;
+            const deleteFolderBtn = e.target.closest('.btn-delete-folder');
+            if (deleteFolderBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const path = deleteFolderBtn.getAttribute('data-full-path');
+                this.deleteFolder(path);
+                return;
+            }
 
-                if (e.target.closest('.delete-notebook-btn')) {
-                    e.stopPropagation();
-                    this.deleteNotebook(id);
-                } else if (e.target.closest('.rename-notebook-btn')) {
-                    e.stopPropagation();
-                    this.renameNotebook(id, title);
-                } else {
-                    this.loadNotebook(id);
+            const renameFolderBtn = e.target.closest('.btn-rename-folder');
+            if (renameFolderBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const path = renameFolderBtn.getAttribute('data-full-path');
+                this.renameFolder(path);
+                return;
+            }
+
+            // 2. File Actions (Buttons)
+            const deleteNoteBtn = e.target.closest('.delete-notebook-btn');
+            if (deleteNoteBtn) { // Changed priority
+                e.stopPropagation();
+                const item = deleteNoteBtn.closest('.notebook-item');
+                if (item) this.deleteNotebook(item.getAttribute('data-id'));
+                return;
+            }
+
+            const renameNoteBtn = e.target.closest('.rename-notebook-btn');
+            if (renameNoteBtn) {
+                e.stopPropagation();
+                const item = renameNoteBtn.closest('.notebook-item');
+                // For file rename, we might want a modal or prompt. 
+                // Existing logic used renameNotebook(id, title) which might need checking.
+                // Assuming it works or prompts? 
+                // Looking at old code, it called renameNotebook(id, title).
+                if (item) {
+                    const title = item.querySelector('.tree-label').innerText;
+                    this.renameNotebook(item.getAttribute('data-id'), title);
                 }
                 return;
             }
 
-            if (folderHeader) {
-                const folder = folderHeader.getAttribute('data-folder');
-
-                if (e.target.closest('.btn-delete-folder')) {
-                    e.stopPropagation();
-                    this.deleteFolder(folder);
-                    return;
+            // 3. Tree Navigation (Folders & File Selection)
+            const folderItem = e.target.closest('.tree-item.is-folder');
+            if (folderItem) {
+                // Toggle Collapse
+                const children = folderItem.nextElementSibling;
+                const arrow = folderItem.querySelector('.tree-arrow');
+                if (children && children.classList.contains('tree-children')) {
+                    children.classList.toggle('collapsed');
+                    if (arrow) arrow.classList.toggle('rotated');
                 }
+                return;
+            }
 
-                if (e.target.closest('.btn-rename-folder')) {
-                    e.stopPropagation();
-                    this.renameFolder(folder);
-                    return;
-                }
-
-                const content = folderHeader.nextElementSibling;
-                if (content && content.classList.contains('folder-content')) {
-                    content.classList.toggle('collapsed');
-                    const icon = folderHeader.querySelector('.folder-chevron');
-                    if (icon) icon.classList.toggle('collapsed-chevron');
-                }
+            const fileItem = e.target.closest('.tree-item.is-file');
+            if (fileItem) {
+                const id = fileItem.getAttribute('data-id');
+                this.loadNotebook(id);
                 return;
             }
         });
@@ -544,11 +565,19 @@ class NotebookApp {
         notebooks.forEach(nb => {
             let path = nb.folder && nb.folder !== 'root' ? nb.folder.split('/') : [];
             let currentLevel = tree;
+            let currentPath = '';
 
             // Navigate/Build path
             path.forEach(part => {
+                currentPath = currentPath ? `${currentPath}/${part}` : part;
                 if (!currentLevel.children[part]) {
-                    currentLevel.children[part] = { name: part, type: 'folder', children: {}, files: [] };
+                    currentLevel.children[part] = {
+                        name: part,
+                        fullPath: currentPath,
+                        type: 'folder',
+                        children: {},
+                        files: []
+                    };
                 }
                 currentLevel = currentLevel.children[part];
             });
@@ -612,6 +641,58 @@ class NotebookApp {
         listContainer.appendChild(rootContainer);
 
         lucide.createIcons();
+    }
+
+    async renameFolder(oldPath) {
+        this.inputAction('Rename Folder', `Renaming "${oldPath}"`, oldPath, async (newPath) => {
+            if (!newPath || newPath === oldPath) return;
+            try {
+                // Find all notes starting with oldPath
+                const res = await this.safeFetch('/api/notebooks');
+                const notebooks = await res.json();
+
+                const toUpdate = notebooks.filter(nb =>
+                    nb.folder === oldPath || nb.folder.startsWith(oldPath + '/')
+                );
+
+                // Batch update (Iterative for now, ideally batch API)
+                for (const nb of toUpdate) {
+                    const relative = nb.folder.slice(oldPath.length);
+                    const updatedFolder = newPath + relative;
+
+                    await this.safeFetch(`/api/notebooks/${nb.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ isFolderUpdate: true, folder: updatedFolder })
+                    });
+                }
+                await this.refreshNotebookList();
+            } catch (err) {
+                console.error('Folder rename failed:', err);
+                alert('Failed to rename folder. See console.');
+            }
+        });
+    }
+
+    async deleteFolder(path) {
+        this.confirmAction('Delete Folder', `Are you sure you want to delete "${path}" and ALL its contents? This will move them to Trash.`, async () => {
+            try {
+                const res = await this.safeFetch('/api/notebooks');
+                const notebooks = await res.json();
+
+                const toDelete = notebooks.filter(nb =>
+                    nb.folder === path || nb.folder.startsWith(path + '/')
+                );
+
+                for (const nb of toDelete) {
+                    await this.safeFetch(`/api/notebooks/${nb.id}`, { method: 'DELETE' });
+                }
+                await this.refreshNotebookList();
+            } catch (err) {
+                console.error('Folder delete failed:', err);
+                alert('Failed to delete folder.');
+            }
+        });
     }
 
     updateCurrentNotebookItemUI() {

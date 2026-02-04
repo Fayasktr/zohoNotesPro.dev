@@ -573,6 +573,20 @@ body.light-theme .nav-item.active {
     padding-left: 0;
     margin-top: 10px;
     font-family: 'Inter', sans-serif;
+    /* Restore collapse animation */
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    max-height: 2000px;
+    /* Arbitrary large height for animation */
+    opacity: 1;
+    overflow: hidden;
+}
+
+.notebook-list.collapsed {
+    max-height: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .tree-item {
@@ -591,25 +605,27 @@ body.light-theme .nav-item.active {
     border: 1px solid transparent;
 }
 
-.tree-item:hover {
-    background: rgba(109, 93, 252, 0.1); /* Semi-transparent purple */
-    color: var(--text-main);
-}
-
-.tree-item.active {
-    background: rgba(109, 93, 252, 0.2);
-    color: #fff;
-    border-color: rgba(109, 93, 252, 0.3);
-    font-weight: 500;
-}
-
-/* Indentation Guide Lines */
+/* Connector Lines */
 .tree-children {
-    margin-left: 18px;
-    padding-left: 0;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    margin-left: 10px;
+    /* Indent level */
+    padding-left: 12px;
+    /* Space for line */
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
     overflow: hidden;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.tree-children .tree-item::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    /* Reach back to the border */
+    top: 50%;
+    width: 12px;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .tree-children.collapsed {
