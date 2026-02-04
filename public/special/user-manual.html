@@ -141,6 +141,10 @@
                 <a href="#docker" class="nav-link"><i data-lucide="container" class="w-4 h-4"></i> Docker Isolation</a>
                 <a href="#smart-output" class="nav-link"><i data-lucide="sparkles" class="w-4 h-4"></i> Smart Output</a>
 
+                <p class="px-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-6 mb-2">Advanced</p>
+                <a href="#collab" class="nav-link"><i data-lucide="users" class="w-4 h-4"></i> Collaboration</a>
+                <a href="#game" class="nav-link"><i data-lucide="gamepad-2" class="w-4 h-4"></i> Game Mode</a>
+
                 <p class="px-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-6 mb-2">Security</p>
                 <a href="#safety" class="nav-link"><i data-lucide="shield-check" class="w-4 h-4"></i> Safety
                     Features</a>
@@ -205,27 +209,29 @@
                 </div>
             </section>
 
-            <!-- Hierarchy -->
+            <!-- File System -->
             <section id="hierarchy" class="content-section">
                 <div class="flex items-center gap-4 mb-8">
                     <div
                         class="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
                         <i data-lucide="folder-tree"></i>
                     </div>
-                    <h2 class="text-3xl font-extrabold">2. The Hierarchy</h2>
+                    <h2 class="text-3xl font-extrabold">2. File System & Tree View</h2>
                 </div>
                 <div class="space-y-6">
                     <div class="p-6 border-l-4 border-indigo-500 bg-indigo-500/5 rounded-r-2xl">
                         <p class="text-sm">
-                            Zoho Notes uses a three-tier organization system:
+                            Zoho Notes features a modern <strong>Tree View</strong> explorer, allowing infinite nesting
+                            and organization.
                             <br><br>
-                            - <strong>Folders:</strong> Top-level categorization (e.g., "Web Dev", "Python Basics").
+                            - <strong>Folders:</strong> Hover over any folder to access <strong>Add File</strong>,
+                            <strong>Rename</strong>, or <strong>Delete</strong> options.
                             <br>
-                            - <strong>Files (Notebooks):</strong> Individual documents within folders.
+                            - <strong>Nested Structure:</strong> Create sub-folders naturally (e.g., naming a folder
+                            "Project/Backend" creates a nested tree).
                             <br>
-                            - <strong>Notes (Cells):</strong> The content phases inside each file.
-                            <br><br>
-                            <em>Why? Because high-level projects need deep organization to remain manageable.</em>
+                            - <strong>Visuals:</strong> Clear "L-shaped" connector lines help you track your depth in
+                            the hierarchy.
                         </p>
                     </div>
                 </div>
@@ -262,14 +268,14 @@
                     everything you delete.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="feature-card border-l-4 border-blue-400">
-                        <h4 class="font-bold mb-2">Notebook Trash</h4>
-                        <p class="text-sm text-gray-400">Deletes whole files. Great for clearing out projects you no
-                            longer need but might want back later.</p>
+                        <h4 class="font-bold mb-2">Auto-Delete Policy</h4>
+                        <p class="text-sm text-gray-400">Items in the trash are kept safe for <strong>15 Days</strong>.
+                            After that, our automated system permanently purges them to save space.</p>
                     </div>
                     <div class="feature-card border-l-4 border-green-400">
-                        <h4 class="font-bold mb-2">Individual Note Trash</h4>
-                        <p class="text-sm text-gray-400">Deletes a specific cell. The system remembers where it came
-                            from (original notebook) so you can restore it exactly where it was.</p>
+                        <h4 class="font-bold mb-2">Restoration</h4>
+                        <p class="text-sm text-gray-400">You can restore any notebook or cell. The system remembers
+                            where it came from (original path) so it returns exactly where it belongs.</p>
                     </div>
                 </div>
             </section>
