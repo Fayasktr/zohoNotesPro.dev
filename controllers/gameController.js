@@ -1,7 +1,7 @@
-const quests = require('../config/quests');
+const Quest = require('../models/Quest');
 const User = require('../models/User');
 const aiService = require('../services/aiService');
-const vm = require('vm');
+const engine = require('../engine/AntigravityEngine');
 
 exports.renderGameDashboard = (req, res) => {
     res.render('game/dashboard', {
@@ -10,68 +10,130 @@ exports.renderGameDashboard = (req, res) => {
     });
 };
 
-exports.renderGameMap = (req, res) => {
+exports.renderGameMap = async (req, res) => {
     const { topic, difficulty } = req.params;
-    const filteredQuests = quests.filter(q => q.topic === topic && q.difficulty === difficulty);
-
-    res.render('game/map', {
-        title: `Map: ${topic} - ${difficulty}`,
-        topic,
-        difficulty,
-        quests: filteredQuests,
-        user: req.user
-    });
+    try {
+        const quests = await Quest.find({ topic, difficulty });
+        res.render('game/map', {
+            title: `Map: ${topic} - ${difficulty}`,
+            topic,
+            difficulty,
+            quests,
+            user: req.user
+        });
+    } catch (err) {
+        res.status(500).render('error', { error: 'Failed to load map' });
+    }
 };
 
-exports.renderPlayPage = (req, res) => {
+exports.renderPlayPage = async (req, res) => {
     const { questId } = req.params;
-    const quest = quests.find(q => q.id === questId);
+    try {
+        const quest = await Quest.findOne({ id: questId });
+        if (!quest) return res.redirect('/game');
 
-    if (!quest) return res.redirect('/game');
-
-    res.render('game/play', {
-        title: `Playing: ${quest.title}`,
-        quest,
-        user: req.user
-    });
+        res.render('game/play', {
+            title: `Playing: ${quest.title}`,
+            quest,
+            user: req.user
+        });
+    } catch (err) {
+        res.status(500).render('error', { error: 'Failed to load quest' });
+    }
 };
 
 exports.verifySolution = async (req, res) => {
     const { questId, code } = req.body;
-    const quest = quests.find(q => q.id === questId);
-
-    if (!quest) return res.status(404).json({ error: 'Quest not found' });
 
     try {
+        const quest = await Quest.findOne({ id: questId });
+        if (!quest) return res.status(404).json({ error: 'Quest not found' });
+
         let results = [];
         let allPassed = true;
 
         for (const testCase of quest.testCases) {
-            const sandbox = { console: { log: () => { } } };
-            // Using quest.functionName for better reliability
-            const funcName = quest.functionName || 'main';
+            let passed = false;
+            let actual = null;
+            let error = null;
 
-            const fullCode = `${code}\nresult = ${funcName}(...${JSON.stringify(testCase.input)});`;
+            if (quest.topic === 'javascript') {
+                // JS: Wrap in function call
+                const funcName = quest.functionName || 'main';
+                const inputArgs = testCase.input.map(arg => JSON.stringify(arg)).join(', ');
+                const fullCode = `${code}\n${funcName}(${inputArgs});`;
 
-            const context = vm.createContext(sandbox);
-            vm.runInContext(fullCode, context, { timeout: 1000 });
+                const execResult = await engine.execute(fullCode, 'javascript');
 
-            const actual = context.result;
-            const passed = actual === testCase.expected;
+                if (execResult.success) {
+                    actual = execResult.result;
+                    // Loose equality for simplicity (5 == "5")
+                    passed = actual == testCase.expected;
+                } else {
+                    error = execResult.error;
+                }
+            }
+            else if (quest.topic === 'python') {
+                // Python: Append print call
+                const funcName = quest.functionName;
+                if (funcName) {
+                    const inputArgs = testCase.input.map(arg => JSON.stringify(arg)).join(', ');
+                    const driver = `\nprint(${funcName}(${inputArgs}))`;
+                    const fullCode = code + driver;
 
-            results.push({ input: testCase.input, expected: testCase.expected, actual, passed });
+                    const execResult = await engine.execute(fullCode, 'python');
+                    if (execResult.success) {
+                        // Check stdout (last line usually)
+                        const output = execResult.logs.join('').trim();
+                        actual = output;
+                        // Loose check: string comparison
+                        passed = output == String(testCase.expected);
+                    } else {
+                        error = execResult.error;
+                    }
+                } else {
+                    // Script mode (e.g. print hello world)
+                    const execResult = await engine.execute(code, 'python');
+                    if (execResult.success) {
+                        const output = execResult.logs.join('').trim();
+                        actual = output;
+                        passed = output == String(testCase.expected);
+                    } else {
+                        error = execResult.error;
+                    }
+                }
+            }
+            else if (['c', 'java', 'cpp'].includes(quest.topic)) {
+                // Compiled languages: Check STDOUT
+                // For Hello World type quests
+                const execResult = await engine.execute(code, quest.topic);
+                if (execResult.success) {
+                    const output = execResult.logs.join('').trim();
+                    actual = output;
+                    passed = output == String(testCase.expected);
+                } else {
+                    error = execResult.error;
+                }
+            }
+
+            results.push({
+                input: testCase.input,
+                expected: testCase.expected,
+                actual: error ? `Error: ${error}` : actual,
+                passed
+            });
+
             if (!passed) allPassed = false;
         }
 
         if (allPassed) {
-            // Update User Stats
+            // Update User Stats (Mongoose)
             const user = await User.findById(req.user._id);
             if (!user.completedQuests.includes(questId)) {
                 user.completedQuests.push(questId);
                 user.points += quest.points;
                 user.correctAnswersCount += 1;
 
-                // 1 skip per 5 answers
                 if (user.correctAnswersCount % 5 === 0) {
                     user.skipCredits += 1;
                 }
@@ -81,7 +143,9 @@ exports.verifySolution = async (req, res) => {
         } else {
             return res.json({ success: false, results });
         }
+
     } catch (err) {
+        console.error('Verification error:', err);
         res.status(400).json({ error: err.message });
     }
 };
@@ -108,14 +172,14 @@ exports.skipQuest = async (req, res) => {
 
 exports.askProfessor = async (req, res) => {
     const { questId, code } = req.body;
-    const quest = quests.find(q => q.id === questId);
-
-    if (!quest) return res.status(404).json({ error: 'Quest not found' });
-
     try {
+        const quest = await Quest.findOne({ id: questId });
+        if (!quest) return res.status(404).json({ error: 'Quest not found' });
+
         const hint = await aiService.getHint(quest, code);
         res.json({ hint });
     } catch (err) {
         res.status(500).json({ error: 'Professor is busy right now.' });
     }
 };
+

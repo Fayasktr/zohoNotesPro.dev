@@ -54,7 +54,11 @@ class AntigravityEngine {
             activeTasks++;
             return setTimeout(() => {
                 try {
-                    fn(...args);
+                    if (typeof fn === 'function') {
+                        fn(...args);
+                    }
+                } catch (err) {
+                    customConsole.error(`Async Error (setTimeout): ${err.message}`);
                 } finally {
                     taskFinished();
                 }
@@ -62,10 +66,15 @@ class AntigravityEngine {
         };
 
         const wrappedSetInterval = (fn, delay, ...args) => {
-            // Intervals could run forever, so we don't increment activeTasks here 
-            // unless we want to wait for at least one execution.
-            // For now, let's treat intervals as non-blocking for engine shutdown.
-            return setInterval(fn, delay, ...args);
+            return setInterval(() => {
+                try {
+                    if (typeof fn === 'function') {
+                        fn(...args);
+                    }
+                } catch (err) {
+                    customConsole.error(`Async Error (setInterval): ${err.message}`);
+                }
+            }, delay, ...args);
         };
 
         const sandbox = {
