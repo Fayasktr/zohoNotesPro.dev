@@ -3,11 +3,22 @@ const User = require('../models/User');
 const aiService = require('../services/aiService');
 const engine = require('../engine/AntigravityEngine');
 
-exports.renderGameDashboard = (req, res) => {
-    res.render('game/dashboard', {
-        title: 'New World - Dashboard',
-        user: req.user
-    });
+exports.renderGameDashboard = async (req, res) => {
+    try {
+        const languages = await Quest.distinct('language');
+        res.render('game/dashboard', {
+            title: 'New World - Dashboard',
+            user: req.user,
+            availableTopics: languages.length > 0 ? languages : ['javascript', 'python', 'c', 'java'] // Fallback
+        });
+    } catch (err) {
+        console.error('Dashboard Error:', err);
+        res.render('game/dashboard', {
+            title: 'New World - Dashboard',
+            user: req.user,
+            availableTopics: ['javascript', 'python', 'c', 'java']
+        });
+    }
 };
 
 exports.renderGameMap = async (req, res) => {
