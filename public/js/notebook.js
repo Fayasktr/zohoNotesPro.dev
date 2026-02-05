@@ -632,10 +632,12 @@ class NotebookApp {
                         <i data-lucide="folder" class="tree-icon" style="color: #6d5dfc;"></i>
                         <span class="tree-label">${child.name}</span>
                         <div class="tree-actions">
-                            <button class="tree-action-btn btn-add-file" title="New File" data-folder="${child.name}">
-                                <i data-lucide="plus" style="width:14px;"></i>
+                            <button class="tree-action-btn btn-rename-folder" title="Rename Folder" data-full-path="${child.fullPath}">
+                                <i data-lucide="edit-2" style="width:12px;"></i>
                             </button>
-                            <!-- FUTURE: Rename/Delete folder logic needs path awareness -->
+                            <button class="tree-action-btn danger btn-delete-folder" title="Delete Folder" data-full-path="${child.fullPath}">
+                                <i data-lucide="trash-2" style="width:12px;"></i>
+                            </button>
                         </div>
                     </div>
                     <div class="tree-children collapsed" id="${folderId}"></div>
@@ -681,29 +683,15 @@ class NotebookApp {
         this.inputAction('Rename Folder', `Renaming "${oldPath}"`, oldPath, async (newPath) => {
             if (!newPath || newPath === oldPath) return;
             try {
-                // Find all notes starting with oldPath
-                const res = await this.safeFetch('/api/notebooks');
-                const notebooks = await res.json();
-
-                const toUpdate = notebooks.filter(nb =>
-                    nb.folder === oldPath || nb.folder.startsWith(oldPath + '/')
-                );
-
-                // Batch update (Iterative for now, ideally batch API)
-                for (const nb of toUpdate) {
-                    const relative = nb.folder.slice(oldPath.length);
-                    const updatedFolder = newPath + relative;
-
-                    await this.safeFetch(`/api/notebooks/${nb.id}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ isFolderUpdate: true, folder: updatedFolder })
-                    });
-                }
+                await this.safeFetch('/api/folders/rename', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ oldName: oldPath, newName: newPath })
+                });
                 await this.refreshNotebookList();
             } catch (err) {
                 console.error('Folder rename failed:', err);
-                alert('Failed to rename folder. See console.');
+                alert('Failed to rename folder.');
             }
         });
     }
@@ -711,16 +699,9 @@ class NotebookApp {
     async deleteFolder(path) {
         this.confirmAction('Delete Folder', `Are you sure you want to delete "${path}" and ALL its contents? This will move them to Trash.`, async () => {
             try {
-                const res = await this.safeFetch('/api/notebooks');
-                const notebooks = await res.json();
-
-                const toDelete = notebooks.filter(nb =>
-                    nb.folder === path || nb.folder.startsWith(path + '/')
-                );
-
-                for (const nb of toDelete) {
-                    await this.safeFetch(`/api/notebooks/${nb.id}`, { method: 'DELETE' });
-                }
+                // Use the Bulk Delete API
+                // URL encode the path to handle slashes correctly
+                await this.safeFetch(`/api/folders/${encodeURIComponent(path)}`, { method: 'DELETE' });
                 await this.refreshNotebookList();
             } catch (err) {
                 console.error('Folder delete failed:', err);
