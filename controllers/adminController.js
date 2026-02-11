@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 
 exports.getDashboard = async (req, res) => {
     try {
-        const users = await User.find({ role: { $ne: 'admin' } });
+        const users = await User.find({ role: { $ne: 'admin' } }).lean();
         const unreadFeedbackCount = await Feedback.countDocuments({ isRead: false });
         res.render('admin/dashboard', {
             title: 'Admin Dashboard - Zoho Notes',
@@ -22,7 +22,7 @@ exports.getDashboard = async (req, res) => {
 
 exports.getUsers = async (req, res) => {
     try {
-        const users = await User.find({ role: { $ne: 'admin' } });
+        const users = await User.find({ role: { $ne: 'admin' } }).lean();
         res.json(users);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch users' });
@@ -90,7 +90,7 @@ exports.toggleBlock = async (req, res) => {
 exports.getUserNotes = async (req, res) => {
     const { id } = req.params;
     try {
-        const notes = await Note.find({ owner: id });
+        const notes = await Note.find({ owner: id }).lean();
         res.json(notes);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch user notes' });
@@ -114,7 +114,7 @@ exports.updateUserNote = async (req, res) => {
 
 exports.getSystemLogs = async (req, res) => {
     try {
-        const logs = await SystemLog.find().sort({ timestamp: -1 }).limit(100);
+        const logs = await SystemLog.find().sort({ timestamp: -1 }).limit(100).lean();
         res.json(logs);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch logs' });

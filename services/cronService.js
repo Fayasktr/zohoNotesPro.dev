@@ -28,7 +28,7 @@ class CronService {
     async pingBirthdaySite() {
         const url = 'https://safeena-birthday.onrender.com/';
         try {
-            const response = await axios.get(url);
+            const response = await axios.get(url, { timeout: 10000 });
             console.log(`[CRON] Birthday Ping Success: ${response.status} (${new Date().toLocaleTimeString()})`);
         } catch (err) {
             console.error(`[CRON] Birthday Ping Failed: ${err.message} (${new Date().toLocaleTimeString()})`);

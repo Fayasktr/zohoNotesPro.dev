@@ -28,7 +28,7 @@ exports.renderGameMap = async (req, res) => {
         const query = { language: topic };
         if (difficulty) query.difficulty = difficulty;
 
-        const quests = await Quest.find(query);
+        const quests = await Quest.find(query).lean();
 
         res.render('game/map', {
             title: `Map: ${topic} - ${difficulty}`,
@@ -45,7 +45,7 @@ exports.renderGameMap = async (req, res) => {
 exports.renderPlayPage = async (req, res) => {
     const { questId } = req.params;
     try {
-        const quest = await Quest.findOne({ id: questId });
+        const quest = await Quest.findOne({ id: questId }).lean();
         if (!quest) return res.redirect('/game');
 
         res.render('game/play', {
@@ -62,7 +62,7 @@ exports.verifySolution = async (req, res) => {
     const { questId, code } = req.body;
 
     try {
-        const quest = await Quest.findOne({ id: questId });
+        const quest = await Quest.findOne({ id: questId }).lean();
         if (!quest) return res.status(404).json({ error: 'Quest not found' });
 
         let results = [];
@@ -186,7 +186,7 @@ exports.skipQuest = async (req, res) => {
 exports.askProfessor = async (req, res) => {
     const { questId, code } = req.body;
     try {
-        const quest = await Quest.findOne({ id: questId });
+        const quest = await Quest.findOne({ id: questId }).lean();
         if (!quest) return res.status(404).json({ error: 'Quest not found' });
 
         const hint = await aiService.getHint(quest, code);

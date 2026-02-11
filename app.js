@@ -133,7 +133,7 @@ app.use(passport.session());
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser(async (id, done) => {
     try {
-        const user = await User.findById(id);
+        const user = await User.findById(id).lean();
         done(null, user);
     } catch (err) {
         done(err, null);
@@ -189,7 +189,7 @@ app.use((req, res, next) => {
 app.use(async (req, res, next) => {
     if (req.session.userId) {
         try {
-            const user = await User.findById(req.session.userId);
+            const user = await User.findById(req.session.userId).lean();
             if (!user || user.isBlocked) {
                 const message = user && user.isBlocked ? 'Blocked by Admin' : 'Account deleted';
                 return req.session.destroy(() => {
@@ -557,14 +557,14 @@ app.get('/api/notebooks', isAuthenticated, async (req, res) => {
         const ownedNotes = await Note.find({
             owner: userId,
             isTrashed: { $ne: true }
-        }, 'id title folder isStarred updatedAt').sort({ updatedAt: -1 });
+        }, 'id title folder isStarred updatedAt').sort({ updatedAt: -1 }).lean();
 
         // Find notebooks shared with the user (accepted)
         const sharedNotes = await Note.find({
             'collaborators.user': userId,
             'collaborators.status': 'accepted',
             isTrashed: { $ne: true }
-        }, 'id title folder isStarred updatedAt owner').populate('owner', 'username');
+        }, 'id title folder isStarred updatedAt owner').populate('owner', 'username').lean();
 
         // Combine and mark shared ones
         const allNotes = [
@@ -598,7 +598,7 @@ app.get(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
                 ]
             };
         }
-        const note = await Note.findOne(query);
+        const note = await Note.findOne(query).lean();
         if (!note) return res.status(404).json({ error: 'Notebook not found or access denied' });
         res.json(note.content || note);
     } catch (err) {
@@ -964,11 +964,14 @@ cron.schedule('*/10 * * * *', async () => {
         const noteCount = await Note.countDocuments();
         const feedbackCount = await Feedback.countDocuments();
 
+        const mem = process.memoryUsage();
+        const memMsg = `Memory: RSS=${(mem.rss / 1024 / 1024).toFixed(2)}MB, Heap=${(mem.heapUsed / 1024 / 1024).toFixed(2)}/${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB`;
+
         await SystemLog.create({
             type: 'info',
-            message: `${maintenanceMsg} System Status: ${userCount} Users, ${noteCount} Notes, ${feedbackCount} Feedbacks.`
+            message: `${maintenanceMsg} System Status: ${userCount} Users, ${noteCount} Notes, ${feedbackCount} Feedbacks. ${memMsg}`
         });
-        console.log(`[Cron] Maintenance: ${maintenanceMsg}`);
+        console.log(`[Cron] Maintenance: ${maintenanceMsg} (${memMsg})`);
     } catch (err) {
         console.error('[Cron] Maintenance Error:', err);
         await SystemLog.create({

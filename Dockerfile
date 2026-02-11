@@ -25,4 +25,4 @@ COPY . .
 EXPOSE 3000
 
 # Start the application
-CMD ["npm", "start"]
+CMD ["node", "--max-old-space-size=400", "app.js"]
