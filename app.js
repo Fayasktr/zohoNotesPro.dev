@@ -568,8 +568,8 @@ app.get('/api/notebooks', isAuthenticated, async (req, res) => {
 
         // Combine and mark shared ones
         const allNotes = [
-            ...ownedNotes.map(n => ({ ...n.toObject(), isShared: false })),
-            ...sharedNotes.map(n => ({ ...n.toObject(), isShared: true, ownerName: n.owner?.username }))
+            ...ownedNotes.map(n => ({ ...n, isShared: false })),
+            ...sharedNotes.map(n => ({ ...n, isShared: true, ownerName: n.owner?.username }))
         ];
 
         // Sort by updatedAt
