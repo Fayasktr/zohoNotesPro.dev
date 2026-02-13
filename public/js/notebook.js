@@ -363,6 +363,13 @@ class NotebookApp {
                 this.navigateToFirstMatch();
             });
         }
+
+        const joinWhatsappBtn = document.getElementById('btn-join-whatsapp');
+        if (joinWhatsappBtn) {
+            joinWhatsappBtn.addEventListener('click', () => {
+                this.openModal('modal-whatsapp');
+            });
+        }
     }
 
     setupMobileSidebar() {
