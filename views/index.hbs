@@ -179,10 +179,25 @@
             </div>
 
             <div class="notebook-container w-full max-w-[900px]">
-                <header class="mb-10 flex items-center gap-4">
+                <header class="mb-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
                     <input type="text"
-                        class="text-2xl lg:text-3xl font-bold bg-transparent border-none text-[var(--text-main)] w-full outline-none focus:border-b focus:border-[#6d5dfc] transition-all"
+                        class="text-2xl lg:text-3xl font-bold bg-transparent border-none text-[var(--text-main)] w-full sm:w-auto flex-1 outline-none focus:border-b focus:border-[#6d5dfc] transition-all"
                         id="notebook-title" value="Untitled Notebook" placeholder="Enter title...">
+
+                    <!-- Search Bar -->
+                    <div class="relative group w-full sm:w-64 flex items-center">
+                        <div class="relative flex-1">
+                            <i data-lucide="search"
+                                class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6d5dfc] opacity-50 group-focus-within:opacity-100 transition-opacity"></i>
+                            <input type="text" id="notebook-search" placeholder="Search notes file..."
+                                class="w-full bg-[#ffffff05] border border-[#ffffff1a] pl-11 pr-4 py-2.5 rounded-xl outline-none focus:border-[#6d5dfc] focus:ring-4 focus:ring-[#6d5dfc1a] backdrop-blur-md transition-all text-sm text-[var(--text-main)]">
+                        </div>
+                        <button
+                            class="ml-2 w-10 h-10 flex items-center justify-center bg-[#6d5dfc] text-white rounded-xl hover:scale-[1.05] active:scale-95 transition-all shadow-lg shadow-[#6d5dfc4d]"
+                            id="search-lens-btn" title="Search">
+                            <i data-lucide="search" class="w-5 h-5"></i>
+                        </button>
+                    </div>
                 </header>
 
                 <div id="cells-list">

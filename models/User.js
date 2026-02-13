@@ -12,6 +12,7 @@ const userSchema = new mongoose.Schema({
     isBlocked: { type: Boolean, default: false },
     lastLogin: Date,
     lastLogout: Date,
+    lastActivity: Date,
     settings: {
         defaultLanguage: { type: String, default: 'javascript' }
     },

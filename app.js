@@ -42,12 +42,14 @@ hbs.registerHelper('substring', function (str, start, len) {
 
 hbs.registerHelper('formatDate', function (date) {
     if (!date) return "";
-    return new Date(date).toLocaleString('en-GB', {
+    return new Date(date).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
         day: '2-digit',
         month: 'short',
         year: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true
     });
 });
 
@@ -207,6 +209,25 @@ app.use(async (req, res, next) => {
         // Sync Passport user to res.locals
         res.locals.currentUser = req.user;
         res.locals.username = req.user.username;
+    }
+    next();
+});
+
+// Middleware: Track Last Activity
+app.use(async (req, res, next) => {
+    const userId = req.session?.userId || req.user?._id;
+    if (userId) {
+        try {
+            const now = new Date();
+            const lastUpdate = req.session.lastActivityUpdate ? new Date(req.session.lastActivityUpdate) : null;
+
+            if (!lastUpdate || (now - lastUpdate) > 60000) {
+                await User.findByIdAndUpdate(userId, { lastActivity: now });
+                req.session.lastActivityUpdate = now.toISOString();
+            }
+        } catch (err) {
+            console.error('Activity tracking error:', err);
+        }
     }
     next();
 });

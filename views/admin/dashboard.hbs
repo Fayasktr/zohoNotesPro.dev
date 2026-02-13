@@ -132,8 +132,8 @@
                         <tr>
                             <th class="p-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider">User Profile</th>
                             <th class="p-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider">Status</th>
-                            <th class="p-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider">Last Login</th>
-                            <th class="p-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider">Last Logout</th>
+                            <th class="p-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider">Recent Activity
+                            </th>
                             <th class="p-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider text-right">Actions
                             </th>
                         </tr>
@@ -159,26 +159,29 @@
                                     {{#if isBlocked}}BLOCKED{{else}}ACTIVE{{/if}}
                                 </span>
                             </td>
-                            <td class="p-6 text-[11px] text-[#a0a0a5] font-mono">
-                                {{#if lastLogin}}
-                                <div class="flex items-center gap-2">
-                                    <i data-lucide="calendar" class="w-3 h-3 text-[#30ff6a]"></i>
-                                    {{formatDate lastLogin}}
-                                    <!-- Note: I'll add this JS helper below if needed, or just let Handlebars handle it if configured -->
+                            <td class="p-6">
+                                <div class="flex flex-col gap-1.5">
+                                    {{#if lastActivity}}
+                                    <div class="flex items-center gap-2 text-[11px] text-white font-bold">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-[#30ff6a] animate-pulse"></div>
+                                        Last active
+                                    </div>
+                                    <div class="text-[10px] text-[#a0a0a5] font-mono flex items-center gap-1.5">
+                                        <i data-lucide="clock" class="w-3 h-3"></i>
+                                        {{formatDate lastActivity}}
+                                    </div>
+                                    {{else if lastLogin}}
+                                    <div class="flex items-center gap-2 text-[11px] text-[#a0a0a5] font-semibold">
+                                        <i data-lucide="calendar" class="w-3 h-3"></i>
+                                        Last login
+                                    </div>
+                                    <div class="text-[10px] text-[#a0a0a5] font-mono">
+                                        {{formatDate lastLogin}}
+                                    </div>
+                                    {{else}}
+                                    <span class="text-[10px] opacity-30 italic">No activity recorded</span>
+                                    {{/if}}
                                 </div>
-                                {{else}}
-                                <span class="opacity-30 italic">No record</span>
-                                {{/if}}
-                            </td>
-                            <td class="p-6 text-[11px] text-[#a0a0a5] font-mono">
-                                {{#if lastLogout}}
-                                <div class="flex items-center gap-2">
-                                    <i data-lucide="log-out" class="w-3 h-3 text-[#ff3b30]"></i>
-                                    {{formatDate lastLogout}}
-                                </div>
-                                {{else}}
-                                <span class="opacity-30 italic">No record</span>
-                                {{/if}}
                             </td>
                             <td class="p-6">
                                 <div class="flex justify-end gap-2">

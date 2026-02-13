@@ -23,6 +23,8 @@ class NotebookApp {
             tags: []
         };
         this.editors = {}; // cellId -> monaco editor instance
+        this.allNotebooks = []; // Store all notebooks for filtering
+        this.filteredNotebooks = []; // Store currently filtered results
         this.userSettings = window.USER_SETTINGS || { defaultLanguage: 'javascript' };
         this._autoSave = debounce(() => this.saveToBackend(), 1500);
 
@@ -132,6 +134,10 @@ class NotebookApp {
         } else {
             await this.createNewNotebookInternal('new folder', 'New Note');
         }
+
+        // Clear search on refresh
+        const searchInput = document.getElementById('notebook-search');
+        if (searchInput) searchInput.value = '';
     }
 
     setupEventListeners() {
@@ -336,6 +342,27 @@ class NotebookApp {
         document.getElementById('open-sidebar').addEventListener('click', () => this.toggleMobileSidebar(true));
         document.getElementById('close-sidebar').addEventListener('click', () => this.toggleMobileSidebar(false));
         document.getElementById('sidebar-overlay').addEventListener('click', () => this.toggleMobileSidebar(false));
+
+        // Search Listener
+        const searchInput = document.getElementById('notebook-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', debounce((e) => {
+                this.filterNotebooks(e.target.value);
+            }, 300));
+
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    this.navigateToFirstMatch();
+                }
+            });
+        }
+
+        const searchLensBtn = document.getElementById('search-lens-btn');
+        if (searchLensBtn) {
+            searchLensBtn.addEventListener('click', () => {
+                this.navigateToFirstMatch();
+            });
+        }
     }
 
     setupMobileSidebar() {
@@ -581,11 +608,52 @@ class NotebookApp {
         try {
             const res = await this.safeFetch('/api/notebooks');
             const list = await res.json();
+            this.allNotebooks = list;
+            this.filteredNotebooks = list;
             this.renderNotebookList(list);
             return list;
         } catch (e) {
             console.error('Failed to load notebook list', e);
             return [];
+        }
+    }
+
+    filterNotebooks(query) {
+        if (!query) {
+            this.renderNotebookList(this.allNotebooks);
+            return;
+        }
+
+        const lowerQuery = query.toLowerCase();
+        const filtered = this.allNotebooks.filter(nb =>
+            nb.title.toLowerCase().includes(lowerQuery) ||
+            (nb.folder && nb.folder.toLowerCase().includes(lowerQuery))
+        );
+
+        this.filteredNotebooks = filtered;
+        this.renderNotebookList(filtered);
+
+        // Auto-expand all folders when searching
+        if (query) {
+            document.querySelectorAll('.tree-children').forEach(el => el.classList.remove('collapsed'));
+            document.querySelectorAll('.tree-arrow').forEach(el => el.classList.add('rotated'));
+        }
+    }
+
+    navigateToFirstMatch() {
+        if (this.filteredNotebooks.length > 0) {
+            // Pick the first file (not folder) if possible
+            const firstNote = this.filteredNotebooks.find(nb => nb.id);
+            if (firstNote) {
+                this.loadNotebook(firstNote.id);
+                // Clear search and reset filter
+                const searchInput = document.getElementById('notebook-search');
+                if (searchInput) {
+                    searchInput.value = '';
+                    searchInput.blur();
+                }
+                this.filterNotebooks('');
+            }
         }
     }
 
