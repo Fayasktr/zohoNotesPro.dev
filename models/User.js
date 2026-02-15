@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema({
     password: { type: String }, // Optional for Google users
     googleId: { type: String, unique: true, sparse: true },
     avatar: String,
+    isGoogleAuth: { type: Boolean, default: false },
     resetPasswordToken: String,
     resetPasswordExpires: Date,
     role: { type: String, enum: ['user', 'admin'], default: 'user' },

@@ -157,15 +157,20 @@ passport.use(new GoogleStrategy({
             if (user) {
                 user.googleId = profile.id;
                 user.avatar = profile.photos[0].value;
+                user.isGoogleAuth = true;
                 await user.save();
             } else {
                 user = await User.create({
                     username: profile.displayName,
                     email: profile.emails[0].value,
                     googleId: profile.id,
-                    avatar: profile.photos[0].value
+                    avatar: profile.photos[0].value,
+                    isGoogleAuth: true
                 });
             }
+        } else if (!user.isGoogleAuth) {
+            user.isGoogleAuth = true;
+            await user.save();
         }
         return done(null, user);
     } catch (err) {
@@ -420,6 +425,10 @@ app.post('/forgot-password', async (req, res) => {
             return res.render('forgot', { success: 'If an account exists with that email, a reset link has been sent.' });
         }
 
+        if (user.isGoogleAuth) {
+            return res.render('forgot', { error: 'This account uses Google Login. Please use Google to sign in.' });
+        }
+
         const token = crypto.randomBytes(20).toString('hex');
         user.resetPasswordToken = token;
         user.resetPasswordExpires = Date.now() + 3600000;
@@ -487,6 +496,11 @@ app.post('/reset-password/:token', async (req, res) => {
             resetPasswordExpires: { $gt: Date.now() }
         });
         if (!user) return res.render('forgot', { error: 'Password reset token is invalid or has expired.' });
+
+        if (user.isGoogleAuth) {
+            return res.render('forgot', { error: 'This account uses Google Login. Password change is not possible.' });
+        }
+
         user.password = await bcrypt.hash(password, 10);
         user.resetPasswordToken = undefined;
         user.resetPasswordExpires = undefined;
