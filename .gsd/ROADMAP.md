@@ -19,4 +19,20 @@
 **Verification**:
 - Verify `isGoogleAuth` is set on new Google signups
 - Attempt to change password via API for a Google user and verify failure
-- Confirm local users can still change passwords
+---
+
+### Phase 3: Admin Analytics & User Interaction
+**Status**: ⬜ Not Started
+**Objective**: Implement a circle graph visualizing 3-day user activity and an interactive popup for user details.
+**Depends on**: Phase 2
+
+**Tasks**:
+- [ ] Create API for 3-day activity stats (Active vs Inactive)
+- [ ] Implement circle graph (Chart.js) in Admin Dashboard
+- [ ] Add interactive popup for graph clicks
+- [ ] Implement user list sorting (Last Used top) in popup
+
+**Verification**:
+- Verify activity stats match database records
+- Verify graph interactivity and popup rendering
+- Confirm user list sorting is correct

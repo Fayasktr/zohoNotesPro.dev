@@ -11,4 +11,5 @@ Codebase mapping complete.
 ## Current Context
 - **Project Type:** Express/Handlebars (HBS) MVC
 - **Data Store:** MongoDB (Mongoose)
-- **Primary Features:** Notes, AI-generated coding quests, Polyglot execution.
+- **Primary Features:** Notes, AI-generated coding quests, Polyglot execution, Google OAuth.
+- **Current Objective:** Implementing Admin Analytics (Phase 3).
