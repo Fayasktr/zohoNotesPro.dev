@@ -707,6 +707,9 @@ class NotebookApp {
                         <i data-lucide="folder" class="tree-icon" style="color: #6d5dfc;"></i>
                         <span class="tree-label">${child.name}</span>
                         <div class="tree-actions">
+                            <button class="tree-action-btn btn-add-file" title="Create File" data-folder="${child.fullPath}">
+                                <i data-lucide="plus-square" style="width:12px;"></i>
+                            </button>
                             <button class="tree-action-btn btn-rename-folder" title="Rename Folder" data-full-path="${child.fullPath}">
                                 <i data-lucide="edit-2" style="width:12px;"></i>
                             </button>
