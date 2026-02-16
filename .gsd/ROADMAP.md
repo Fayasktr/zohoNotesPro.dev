@@ -38,7 +38,7 @@
 ---
 
 ### Phase 4: Folder-level File Creation
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Setup a button/option within a folder to create a new file (note) directly inside that folder.
 **Depends on**: Phase 3
 
