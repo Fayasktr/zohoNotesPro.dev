@@ -142,7 +142,7 @@ class NotebookApp {
 
     setupEventListeners() {
         document.getElementById('add-code-cell').addEventListener('click', () => this.addCell('code'));
-        document.getElementById('btn-new-folder').addEventListener('click', () => this.createFolder());
+        // document.getElementById('btn-new-folder').addEventListener('click', () => this.createFolder()); // Removed as per Phase 5
         document.getElementById('run-all-cells').addEventListener('click', () => this.runAll());
         document.getElementById('clear-all-outputs').addEventListener('click', () => this.clearAllOutputs());
         document.getElementById('scroll-to-bottom').addEventListener('click', () => {
@@ -357,10 +357,19 @@ class NotebookApp {
             });
         }
 
-        const searchLensBtn = document.getElementById('search-lens-btn');
-        if (searchLensBtn) {
-            searchLensBtn.addEventListener('click', () => {
-                this.navigateToFirstMatch();
+        /* Removed search-lens-btn listener as button was removed in Phase 5 */
+        // const searchLensBtn = document.getElementById('search-lens-btn');
+        // if (searchLensBtn) {
+        //     searchLensBtn.addEventListener('click', () => {
+        //         this.navigateToFirstMatch();
+        //     });
+        // }
+
+        // Note Label Search (Phase 6)
+        const noteSearchInput = document.getElementById('note-label-search');
+        if (noteSearchInput) {
+            noteSearchInput.addEventListener('input', (e) => {
+                this.filterCells(e.target.value);
             });
         }
 
@@ -645,6 +654,22 @@ class NotebookApp {
             document.querySelectorAll('.tree-children').forEach(el => el.classList.remove('collapsed'));
             document.querySelectorAll('.tree-arrow').forEach(el => el.classList.add('rotated'));
         }
+    }
+
+    filterCells(query) {
+        const lowerQuery = query.toLowerCase();
+        this.notebook.cells.forEach(cell => {
+            const cellElem = document.getElementById(`container-${cell.id}`);
+            if (cellElem) {
+                const titleMatch = (cell.title || '').toLowerCase().includes(lowerQuery);
+                const contentMatch = (cell.content || '').toLowerCase().includes(lowerQuery);
+                if (titleMatch || contentMatch) {
+                    cellElem.classList.remove('hidden');
+                } else {
+                    cellElem.classList.add('hidden');
+                }
+            }
+        });
     }
 
     navigateToFirstMatch() {
