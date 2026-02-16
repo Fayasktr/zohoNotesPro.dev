@@ -35,4 +35,15 @@
 **Verification**:
 - Verify activity stats match database records
 - Verify graph interactivity and popup rendering
-- Confirm user list sorting is correct
+---
+
+### Phase 4: Folder-level File Creation
+**Status**: ⬜ Not Started
+**Objective**: Setup a button/option within a folder to create a new file (note) directly inside that folder.
+**Depends on**: Phase 3
+
+**Tasks**:
+- [ ] TBD (run /plan 4 to create)
+
+**Verification**:
+- TBD
