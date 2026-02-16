@@ -356,6 +356,12 @@ class NotebookApp {
                 }
             });
         }
+        const sidebarSearchBtn = document.getElementById('sidebar-search-btn');
+        if (sidebarSearchBtn) {
+            sidebarSearchBtn.addEventListener('click', () => {
+                this.filterNotebooks(document.getElementById('notebook-search').value);
+            });
+        }
 
         /* Removed search-lens-btn listener as button was removed in Phase 5 */
         // const searchLensBtn = document.getElementById('search-lens-btn');

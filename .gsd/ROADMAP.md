@@ -66,3 +66,16 @@
 **Status**: ✅ Complete
 **Objective**: Implement search functionality for notes based on labels/tags at the current header search position.
 **Depends on**: Phase 5
+
+---
+
+### Phase 7: Search UX Enhancements
+**Status**: ✅ Complete
+**Objective**: Add functional search buttons (lens icons) next to both the sidebar and header search bars for better accessibility and user experience.
+**Depends on**: Phase 6
+
+**Tasks**:
+- [ ] TBD (run /plan 7 to create)
+
+**Verification**:
+- TBD
