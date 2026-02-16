@@ -379,6 +379,12 @@ class NotebookApp {
                 this.openModal('modal-whatsapp');
             });
         }
+        const noteSearchBtn = document.getElementById('note-label-search-btn');
+        if (noteSearchBtn) {
+            noteSearchBtn.addEventListener('click', () => {
+                this.filterCells(document.getElementById('note-label-search').value);
+            });
+        }
     }
 
     setupMobileSidebar() {
