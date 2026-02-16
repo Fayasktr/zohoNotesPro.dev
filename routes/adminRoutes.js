@@ -23,5 +23,7 @@ router.put('/notes/:noteId', adminController.updateUserNote);
 router.get('/system-logs', adminController.getSystemLogs);
 router.post('/system-logs/clear', adminController.clearSystemLogs);
 router.put('/feedback/mark-read', adminController.markFeedbackRead);
+router.get('/activity-stats', adminController.getActivityStats);
+router.get('/active-users-list', adminController.getActiveUsersList);
 
 module.exports = router;

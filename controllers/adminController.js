@@ -138,3 +138,35 @@ exports.markFeedbackRead = async (req, res) => {
         res.status(500).json({ error: 'Failed to mark feedback as read' });
     }
 };
+
+exports.getActivityStats = async (req, res) => {
+    try {
+        const threeDaysAgo = new Date(Date.now() - (3 * 24 * 60 * 60 * 1000));
+        const activeCount = await User.countDocuments({
+            role: { $ne: 'admin' },
+            lastActivity: { $gte: threeDaysAgo }
+        });
+        const totalCount = await User.countDocuments({ role: { $ne: 'admin' } });
+        res.json({
+            active: activeCount,
+            inactive: totalCount - activeCount
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch activity stats' });
+    }
+};
+
+exports.getActiveUsersList = async (req, res) => {
+    try {
+        const threeDaysAgo = new Date(Date.now() - (3 * 24 * 60 * 60 * 1000));
+        const users = await User.find({
+            role: { $ne: 'admin' },
+            lastActivity: { $gte: threeDaysAgo }
+        })
+            .sort({ lastActivity: -1 })
+            .lean();
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch active users list' });
+    }
+};
