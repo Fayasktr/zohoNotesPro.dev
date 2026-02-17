@@ -25,6 +25,8 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 // Models
 const User = require('./models/User');
 const SystemLog = require('./models/SystemLog');
+const SystemConfig = require('./models/SystemConfig');
+
 
 // Routes
 const adminRoutes = require('./routes/adminRoutes');
@@ -997,6 +999,13 @@ app.delete('/api/trash-all', isAuthenticated, async (req, res) => {
 // Run every 10 minutes
 cron.schedule('*/10 * * * *', async () => {
     try {
+        // 0. Check if logging is paused
+        const config = await SystemConfig.findOne({ key: 'isLoggingPaused' }).lean();
+        if (config && config.value === true) {
+            console.log('[Cron] System logging is currently paused.');
+            return;
+        }
+
         // 1. Cleanup expired password reset tokens
         const result = await User.updateMany(
             { resetPasswordExpires: { $lt: Date.now() } },

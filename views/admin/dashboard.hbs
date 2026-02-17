@@ -312,9 +312,17 @@
                     <h2 class="text-2xl font-bold mb-1">System Logs</h2>
                     <p class="text-[#a0a0a5] text-sm italic">Automated maintenance events (Refreshes every 10 min)</p>
                 </div>
-                <button onclick="clearSystemLogs()"
-                    class="bg-[#ff3b301a] text-[#ff3b30] px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#ff3b30] hover:text-white transition-all">Clear
-                    All</button>
+                <div class="flex items-center gap-3">
+                    <button onclick="toggleLogging()" id="loggingToggleButton"
+                        class="bg-[#ffffff08] border border-[#ffffff1a] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-[#ffffff1a] transition-all {{#if isLoggingPaused}}text-[#ff9f0a]{{else}}text-[#30ff6a]{{/if}}">
+                        <i data-lucide="{{#if isLoggingPaused}}pause-circle{{else}}play-circle{{/if}}"
+                            class="w-4 h-4"></i>
+                        <span id="loggingStatusText">{{#if isLoggingPaused}}Paused{{else}}Active{{/if}}</span>
+                    </button>
+                    <button onclick="clearSystemLogs()"
+                        class="bg-[#ff3b301a] text-[#ff3b30] px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#ff3b30] hover:text-white transition-all">Clear
+                        All</button>
+                </div>
             </div>
 
             <div id="logsList" class="space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2 min-h-[200px]">
@@ -804,6 +812,57 @@
                 lucide.createIcons();
             } catch (err) {
                 list.innerHTML = '<p class="text-center py-10 text-[#ff3b30]">Failed to load logs.</p>';
+            }
+        }
+
+        async function toggleLogging() {
+            const btn = document.getElementById('loggingToggleButton');
+            const statusText = document.getElementById('loggingStatusText');
+            let icon = btn.querySelector('i, svg');
+            const originalIconName = icon.getAttribute('data-lucide');
+
+            btn.disabled = true;
+            statusText.innerText = 'Updating...';
+            icon.setAttribute('data-lucide', 'loader-2');
+            lucide.createIcons();
+
+            // Re-select after Lucide replaces the element
+            icon = btn.querySelector('i, svg');
+            icon.classList.add('animate-spin');
+
+            try {
+                const res = await safeFetch('/admin/toggle-logging', { method: 'POST' });
+                const data = await res.json();
+
+                if (data.success) {
+                    const isPaused = data.isLoggingPaused;
+                    statusText.innerText = isPaused ? 'Paused' : 'Active';
+
+                    // Update button styling and icon
+                    if (isPaused) {
+                        btn.classList.remove('text-[#30ff6a]');
+                        btn.classList.add('text-[#ff9f0a]');
+                        icon.setAttribute('data-lucide', 'pause-circle');
+                    } else {
+                        btn.classList.remove('text-[#ff9f0a]');
+                        btn.classList.add('text-[#30ff6a]');
+                        icon.setAttribute('data-lucide', 'play-circle');
+                    }
+                } else {
+                    alert('Error: ' + data.error);
+                    statusText.innerText = (btn.classList.contains('text-[#ff9f0a]') ? 'Paused' : 'Active');
+                    icon.setAttribute('data-lucide', originalIconName);
+                }
+            } catch (err) {
+                alert('Connection error');
+                statusText.innerText = (btn.classList.contains('text-[#ff9f0a]') ? 'Paused' : 'Active');
+                icon.setAttribute('data-lucide', originalIconName);
+            } finally {
+                btn.disabled = false;
+                lucide.createIcons();
+                // Ensure spin is removed from whatever icon is now there
+                const finalIcon = btn.querySelector('i, svg');
+                if (finalIcon) finalIcon.classList.remove('animate-spin');
             }
         }
 

@@ -2,17 +2,23 @@ const User = require('../models/User');
 const Note = require('../models/Note');
 const SystemLog = require('../models/SystemLog');
 const Feedback = require('../models/Feedback');
+const SystemConfig = require('../models/SystemConfig');
 const bcrypt = require('bcryptjs');
 
 exports.getDashboard = async (req, res) => {
     try {
         const users = await User.find({ role: { $ne: 'admin' } }).lean();
         const unreadFeedbackCount = await Feedback.countDocuments({ isRead: false });
+        let loggingConfig = await SystemConfig.findOne({ key: 'isLoggingPaused' }).lean();
+        if (!loggingConfig) {
+            loggingConfig = { value: false };
+        }
         res.render('admin/dashboard', {
             title: 'Admin Dashboard - Zoho Notes',
             adminName: req.session.username,
             users: users,
-            unreadFeedbackCount: unreadFeedbackCount
+            unreadFeedbackCount: unreadFeedbackCount,
+            isLoggingPaused: loggingConfig.value
         });
     } catch (err) {
         console.error('Dashboard error:', err);
@@ -168,5 +174,20 @@ exports.getActiveUsersList = async (req, res) => {
         res.json(users);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch active users list' });
+    }
+};
+
+exports.toggleLogging = async (req, res) => {
+    try {
+        let config = await SystemConfig.findOne({ key: 'isLoggingPaused' });
+        if (!config) {
+            config = new SystemConfig({ key: 'isLoggingPaused', value: true });
+        } else {
+            config.value = !config.value;
+        }
+        await config.save();
+        res.json({ success: true, isLoggingPaused: config.value });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to toggle logging' });
     }
 };

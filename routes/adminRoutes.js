@@ -25,5 +25,7 @@ router.post('/system-logs/clear', adminController.clearSystemLogs);
 router.put('/feedback/mark-read', adminController.markFeedbackRead);
 router.get('/activity-stats', adminController.getActivityStats);
 router.get('/active-users-list', adminController.getActiveUsersList);
+router.post('/toggle-logging', adminController.toggleLogging);
+
 
 module.exports = router;
