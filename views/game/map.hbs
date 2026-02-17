@@ -15,6 +15,7 @@
             --accent: #6d5dfc;
             --text-main: #e1e1e6;
             --text-dim: #8e8e99;
+            --path-color: rgba(109, 93, 252, 0.2);
         }
 
         body {
@@ -22,86 +23,185 @@
             background-color: var(--bg-dark);
             color: var(--text-main);
             overflow-x: hidden;
+            background-image:
+                radial-gradient(circle at 20% 30%, rgba(109, 93, 252, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(109, 93, 252, 0.05) 0%, transparent 50%);
         }
 
         .map-grid {
-            background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-            background-size: 30px 30px;
+            background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        .map-container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            position: relative;
+            padding: 100px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .level-wrapper {
+            position: relative;
+            width: 100%;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* Curved offset using index */
+            transform: translateX(calc(sin(var(--index) * 1.5) * 80px));
         }
 
         .level-node {
-            width: 70px;
-            height: 70px;
-            border-radius: 20px;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
             background: var(--card-bg);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            border: 3px solid rgba(255, 255, 255, 0.1);
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
             cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             position: relative;
             z-index: 10;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+        }
+
+        .level-node::after {
+            content: '';
+            position: absolute;
+            inset: -8px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
         }
 
         .level-node:hover {
-            transform: translateY(-5px);
+            transform: scale(1.15) rotate(5deg);
             border-color: var(--accent);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 12px 24px rgba(109, 93, 252, 0.3);
         }
 
         .level-node.completed {
+            background: #1a2e1f;
             border-color: #30ff6a;
             color: #30ff6a;
         }
 
         .level-node.active {
             background: var(--accent);
-            border-color: var(--accent);
+            border-color: white;
             color: white;
-            box-shadow: 0 0 20px rgba(109, 93, 252, 0.3);
+            box-shadow: 0 0 30px rgba(109, 93, 252, 0.6);
+            animation: pulse 2s infinite;
         }
 
-        .connection-line {
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(109, 93, 252, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 15px rgba(109, 93, 252, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(109, 93, 252, 0);
+            }
+        }
+
+        .level-info {
             position: absolute;
-            width: 2px;
-            background: rgba(255, 255, 255, 0.05);
+            left: 80px;
+            width: 140px;
+            text-align: left;
+            pointer-events: none;
+        }
+
+        /* Alternate label side */
+        .level-wrapper:nth-child(even) .level-info {
+            left: auto;
+            right: 80px;
+            text-align: right;
+        }
+
+        .connection-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
             z-index: 1;
+        }
+
+        .mission-badge {
+            font-size: 9px;
+            text-transform: uppercase;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            margin-bottom: 2px;
+        }
+
+        .mission-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: white;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
     </style>
 </head>
 
 <body class="min-h-screen map-grid pb-32">
     <!-- Nav -->
-    <nav class="fixed top-0 left-0 w-full p-8 flex justify-between items-center z-50 pointer-events-none">
+    <nav class="fixed top-0 left-0 w-full p-6 flex justify-between items-center z-50 pointer-events-none">
         <a href="/game"
-            class="pointer-events-auto p-3 bg-white/5 backdrop-blur-md rounded-xl border border-white/5 hover:bg-white/10 transition-all">
+            class="pointer-events-auto p-3 bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 hover:bg-white/10 transition-all shadow-xl">
             <i data-lucide="chevron-left" class="w-5 h-5"></i>
         </a>
-        <div class="pointer-events-auto glass px-6 py-2 rounded-2xl border border-white/5 bg-white/5">
-            <div class="text-[10px] font-black text-[var(--text-dim)] uppercase text-center">Current Points</div>
-            <div class="text-lg font-black text-yellow-500 text-center">{{user.points}}</div>
+        <div
+            class="pointer-events-auto flex items-center gap-4 bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 p-2 pr-6 shadow-xl">
+            <div class="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center">
+                <i data-lucide="trophy" class="w-5 h-5 text-yellow-500"></i>
+            </div>
+            <div>
+                <div class="text-[9px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">Total Score
+                </div>
+                <div class="text-lg font-black text-white tracking-tight">{{user.points}}</div>
+            </div>
         </div>
     </nav>
 
     <!-- Header -->
-    <header class="pt-32 pb-16 text-center space-y-2">
-        <div class="text-[10px] font-black text-[var(--accent)] uppercase tracking-widest">PHASE: {{topic}}</div>
-        <h1 class="text-4xl font-black text-white capitalize">{{topic}}</h1>
-        <p class="text-[var(--text-dim)] font-medium">Path to Level 100 Mastery</p>
+    <header class="pt-32 pb-12 flex flex-col items-center text-center px-6 relative overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-b from-accent/10 to-transparent pointer-events-none"></div>
+        <div
+            class="px-3 py-1 rounded-full bg-accent/20 border border-accent/30 text-[10px] font-black text-accent uppercase tracking-[0.2em] mb-4">
+            {{topic}} EXPEDITION
+        </div>
+        <h1 class="text-5xl font-black text-white capitalize tracking-tighter mb-2">{{topic}}</h1>
+        <p class="text-[var(--text-dim)] font-medium max-w-xs">Master the path by completing all 50 challenges</p>
     </header>
 
     <!-- Map Layout -->
-    <div class="max-w-md mx-auto relative px-4 flex flex-col items-center gap-20">
-        {{#each quests}}
-        <div class="relative flex flex-col items-center">
-            {{#unless @last}}
-            <div class="connection-line h-20 top-full"></div>
-            {{/unless}}
+    <div class="map-container" id="map-container">
+        <svg class="connection-svg" id="path-svg">
+            <path id="snake-path" d="" fill="none" stroke="rgba(109, 93, 252, 0.2)" stroke-width="6"
+                stroke-linecap="round" stroke-dasharray="10 15" />
+        </svg>
 
+        {{#each quests}}
+        <div class="level-wrapper" style="--index: {{@index}}">
             <div class="level-node {{#if (contains ../user.completedQuests this.id)}}completed{{/if}}"
-                onclick="window.location.href='/game/play/{{this.id}}'">
+                onclick="window.location.href='/game/play/{{this.id}}'" data-id="{{this.id}}">
                 {{#if (contains ../user.completedQuests this.id)}}
                 <i data-lucide="check" class="w-6 h-6"></i>
                 {{else}}
@@ -109,37 +209,94 @@
                 {{/if}}
             </div>
 
-            <div class="absolute -right-32 top-1/2 -translate-y-1/2 w-28 text-left">
-                <div class="text-[10px] font-black text-[var(--text-dim)] uppercase leading-none mb-1">Mission</div>
-                <div class="text-sm font-bold truncate">{{this.title}}</div>
+            <div class="level-info">
+                <div class="mission-badge">Mission {{add @index 1}}</div>
+                <div class="mission-title">{{this.title}}</div>
             </div>
         </div>
         {{/each}}
 
         {{#unless quests}}
-        <div class="py-20 flex flex-col items-center gap-4 opacity-30">
-            <i data-lucide="loader-2" class="w-12 h-12 animate-spin"></i>
-            <p class="font-black text-xs uppercase tracking-tighter">Preparing The Mission Area...</p>
+        <div class="py-20 flex flex-col items-center gap-6 text-center">
+            <div class="w-16 h-16 rounded-3xl bg-accent/20 flex items-center justify-center animate-bounce">
+                <i data-lucide="compass" class="w-8 h-8 text-accent"></i>
+            </div>
+            <div class="space-y-1">
+                <p class="font-black text-lg text-white">Generating Territory...</p>
+                <p class="text-xs text-white/40 max-w-[200px]">Our AI scout is mapping out the next challenges.</p>
+            </div>
         </div>
         {{/unless}}
 
-        <!-- Locked Level -->
-        <div class="level-node opacity-20 cursor-not-allowed">
-            <i data-lucide="lock" class="w-5 h-5 text-[var(--text-dim)]"></i>
+        <!-- Target Goal -->
+        <div class="mt-20 flex flex-col items-center">
+            <div
+                class="w-20 h-20 rounded-3xl bg-gradient-to-br from-yellow-500 to-orange-600 flex items-center justify-center shadow-2xl relative">
+                <div class="absolute inset-0 bg-yellow-500 blur-2xl opacity-20"></div>
+                <i data-lucide="flag" class="w-10 h-10 text-white"></i>
+            </div>
+            <p class="mt-4 font-black text-xs uppercase text-yellow-500 tracking-widest">Mastery Goal</p>
+        </div>
+    </div>
+
+    <!-- UI Overlay Footer -->
+    <div
+        class="fixed bottom-0 left-0 w-full p-8 bg-gradient-to-t from-bg-dark via-bg-dark/80 to-transparent pointer-events-none">
+        <div class="max-w-md mx-auto flex justify-center">
+            <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})"
+                class="pointer-events-auto flex items-center gap-3 px-6 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
+                <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
+                Return to Top
+            </button>
         </div>
     </div>
 
     <script>
         lucide.createIcons();
+
+        function drawPath() {
+            const nodes = document.querySelectorAll('.level-node');
+            const pathElement = document.getElementById('snake-path');
+            if (nodes.length < 2) return;
+
+            let pathD = "";
+            const containerRect = document.getElementById('map-container').getBoundingClientRect();
+
+            nodes.forEach((node, i) => {
+                const rect = node.getBoundingClientRect();
+                const x = rect.left + rect.width / 2 - containerRect.left;
+                const y = rect.top + rect.height / 2 - containerRect.top;
+
+                if (i === 0) {
+                    pathD += `M ${x} ${y}`;
+                } else {
+                    const prevRect = nodes[i - 1].getBoundingClientRect();
+                    const prevX = prevRect.left + prevRect.width / 2 - containerRect.left;
+                    const prevY = prevRect.top + prevRect.height / 2 - containerRect.top;
+
+                    // Simple bezier curve for smoothness
+                    const cpY = (prevY + y) / 2;
+                    pathD += ` C ${prevX} ${cpY}, ${x} ${cpY}, ${x} ${y}`;
+                }
+            });
+
+            pathElement.setAttribute('d', pathD);
+        }
+
         window.onload = () => {
             const nodes = document.querySelectorAll('.level-node');
             const firstUncompleted = Array.from(nodes).find(node => !node.classList.contains('completed'));
+
             if (firstUncompleted) {
                 firstUncompleted.classList.add('active');
                 setTimeout(() => {
                     firstUncompleted.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 300);
+                }, 500);
             }
+
+            drawPath();
+            // Redraw path on resize
+            window.addEventListener('resize', drawPath);
         };
     </script>
 </body>

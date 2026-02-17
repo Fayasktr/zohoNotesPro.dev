@@ -2,9 +2,9 @@ const mongoose = require('mongoose');
 
 const questSchema = new mongoose.Schema({
     id: { type: String, required: true, unique: true },
-    language: { type: String, required: true }, // javascript, python, c, java (merged from 'lang'/'topic')
+    lang: { type: String, required: true }, // javascript, python, c, java
     topic: { type: String, default: 'algorithms' }, // fundamentals, arrays, etc.
-    difficulty: { type: String, required: true, enum: ['basic', 'intermediate', 'advanced'] },
+    difficulty: { type: String, required: true, enum: ['basic', 'intermediate', 'advanced', 'standard'] },
     title: { type: String, required: true },
     description: { type: String, required: true },
     explanation: { type: String, default: "" }, // Educational content

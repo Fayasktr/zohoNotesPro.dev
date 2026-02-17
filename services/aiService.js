@@ -302,6 +302,45 @@ class AIService {
         const response = await this.executePrompt(prompt, "master");
         return response || "The Master is deep in thought. Try again shortly.";
     }
+    /**
+     * Seed a single quest record for the next available topic.
+     * Respects the 50-quest limit per topic requested by the user.
+     */
+    async seedOneQuestRecord() {
+        const Quest = require('../models/Quest');
+        const lang = 'javascript';
+        const limitCount = 50;
+
+        for (const topic of this.OFFICIAL_TOPICS) {
+            const count = await Quest.countDocuments({ lang, topic });
+            if (count < limitCount) {
+                console.log(`[AI SEEDER CRON] Seeding one quest for topic: ${topic} (${count}/${limitCount})`);
+                const existingTitles = await Quest.distinct('title', { lang, topic });
+
+                // executePrompt already has safety gaps and queue logic
+                const questData = await this.generateQuest(topic, existingTitles);
+
+                if (questData) {
+                    const newQuest = new Quest({
+                        ...questData,
+                        id: `${lang}-${topic.replace(/\s+/g, '-')}-${count + 1}`,
+                        lang,
+                        topic,
+                        difficulty: 'standard',
+                        isAI: true
+                    });
+                    await newQuest.save();
+                    console.log(`[AI SEEDER CRON] ✅ Generated & Saved: ${newQuest.title}`);
+                    return true;
+                } else {
+                    console.warn(`[AI SEEDER CRON] ❌ Generation failed for ${topic}.`);
+                    return false;
+                }
+            }
+        }
+        console.log("[AI SEEDER CRON] All topics have 50 questions reached.");
+        return false;
+    }
 }
 
 module.exports = new AIService();

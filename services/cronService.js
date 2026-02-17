@@ -15,6 +15,11 @@ class CronService {
         this.pingJob = cron.schedule('*/14 * * * *', this.pingBirthdaySite.bind(this), {
             scheduled: false
         });
+
+        // 3. AI Quest Seeding: Every 15 minutes
+        this.aiSeedJob = cron.schedule('*/15 * * * *', this.seedAIQuest.bind(this), {
+            scheduled: false
+        });
     }
 
     start() {
@@ -23,6 +28,19 @@ class CronService {
 
         console.log('[CRON] Birthday Site Keep-Alive scheduled (Runs every 14 mins)');
         this.pingJob.start();
+
+        console.log('[CRON] AI Quest Seeding scheduled (Runs every 15 mins)');
+        this.aiSeedJob.start();
+    }
+
+    async seedAIQuest() {
+        const aiService = require('./aiService');
+        try {
+            console.log(`[CRON] starting AI seeding... (${new Date().toLocaleTimeString()})`);
+            await aiService.seedOneQuestRecord();
+        } catch (err) {
+            console.error(`[CRON] AI seeding failed: ${err.message}`);
+        }
     }
 
     async pingBirthdaySite() {
