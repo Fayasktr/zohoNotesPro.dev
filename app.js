@@ -150,30 +150,44 @@ passport.use(new GoogleStrategy({
     proxy: true
 }, async (accessToken, refreshToken, profile, done) => {
     try {
+        const email = profile.emails[0].value.toLowerCase().trim();
+        console.log(`[Google Auth] Attempting login for email: ${email}`);
+
         let user = await User.findOne({ googleId: profile.id });
+
         if (!user) {
+            console.log(`[Google Auth] No user found with googleId: ${profile.id}. Searching by email...`);
             // Check if user exists with same email but no Google ID
-            user = await User.findOne({ email: profile.emails[0].value });
+            user = await User.findOne({ email: email });
+
             if (user) {
+                console.log(`[Google Auth] Existing user found with email: ${email}. Merging accounts...`);
                 user.googleId = profile.id;
                 user.avatar = profile.photos[0].value;
                 user.isGoogleAuth = true;
                 await user.save();
+                console.log(`[Google Auth] Account successfully merged for: ${email}`);
             } else {
+                console.log(`[Google Auth] No existing user found for: ${email}. Creating new account...`);
                 user = await User.create({
                     username: profile.displayName,
-                    email: profile.emails[0].value,
+                    email: email,
                     googleId: profile.id,
                     avatar: profile.photos[0].value,
                     isGoogleAuth: true
                 });
+                console.log(`[Google Auth] New account created for: ${email}`);
             }
-        } else if (!user.isGoogleAuth) {
-            user.isGoogleAuth = true;
-            await user.save();
+        } else {
+            console.log(`[Google Auth] User found with googleId: ${profile.id}`);
+            if (!user.isGoogleAuth) {
+                user.isGoogleAuth = true;
+                await user.save();
+            }
         }
         return done(null, user);
     } catch (err) {
+        console.error('[Google Auth] Error in strategy callback:', err);
         return done(err, null);
     }
 }));
