@@ -65,7 +65,8 @@ body {
     display: flex;
     flex-direction: column;
     padding: 20px;
-    transition: all 0.3s ease;
+    transition: transform 0.3s ease;
+    /* Only transition transform for mobile toggle */
     overflow-y: auto;
     /* Independent scroll for sidebar */
     height: 100vh;
@@ -144,7 +145,7 @@ body.light-theme .nav-item.active {
 
 .notebook-container {
     width: 100%;
-    max-width: 900px;
+    max-width: 1200px;
 }
 
 .notebook-header {

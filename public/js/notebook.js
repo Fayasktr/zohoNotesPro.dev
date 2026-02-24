@@ -33,7 +33,7 @@ class NotebookApp {
         this.setupSmartOutput();
         this.setupEventListeners();
         this.setupMobileSidebar();
-        this.setupResizableSidebar();
+        this.initSplitJS();
         this.setupConsoleInterception();
 
         this.init();
@@ -173,7 +173,6 @@ class NotebookApp {
         document.getElementById('nav-starred-cells').addEventListener('click', () => this.loadStarredNotes());
         document.getElementById('nav-trash').addEventListener('click', () => this.loadTrash());
 
-        this.setupSidebarResizer();
 
         // Event Delegation for Sidebar
         document.getElementById('notebook-list').addEventListener('click', (e) => {
@@ -411,52 +410,97 @@ class NotebookApp {
         }
     }
 
-    setupResizableSidebar() {
-        const sidebar = document.getElementById('main-sidebar');
-        const resizer = document.getElementById('sidebar-resizer');
-        const container = document.getElementById('layout-container');
+    initSplitJS() {
+        if (window.innerWidth <= 1024) return;
 
-        // Load saved width
-        const savedWidth = localStorage.getItem('zoho-sidebar-width');
-        if (savedWidth && window.innerWidth > 1024) {
-            sidebar.style.width = `${savedWidth}px`;
-        }
+        // Global debug helper for the user to run in console
+        window.debugSplitJS = () => {
+            console.log({
+                libLoaded: typeof Split !== 'undefined',
+                containerWidth: document.getElementById('layout-container')?.offsetWidth,
+                sidebarWidth: document.getElementById('main-sidebar')?.offsetWidth,
+                contentWidth: document.getElementById('main-content')?.offsetWidth,
+                localStorageWidth: localStorage.getItem('zoho-sidebar-width')
+            });
+            return 'Check layout data above.';
+        };
 
-        let isResizing = false;
-
-        resizer.addEventListener('mousedown', (e) => {
-            isResizing = true;
-            container.classList.add('resizing');
-            document.body.style.cursor = 'col-resize';
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizing) return;
-            let newWidth = e.clientX;
-            if (newWidth < 200) newWidth = 200;
-            if (newWidth > 450) newWidth = 450;
-
-            sidebar.style.width = `${newWidth}px`;
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (isResizing) {
-                isResizing = false;
-                container.classList.remove('resizing');
-                document.body.style.cursor = 'default';
-                localStorage.setItem('zoho-sidebar-width', parseInt(sidebar.style.width));
+        // Small delay to ensure all dynamic elements and layout are fully settled
+        setTimeout(() => {
+            if (typeof Split === 'undefined') {
+                console.error('[SplitJS] Library not found! Check your internet or CDN link.');
+                return;
             }
-        });
 
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            if (window.innerWidth <= 1024) {
-                sidebar.style.width = '';
-            } else {
-                const width = localStorage.getItem('zoho-sidebar-width') || 280;
-                sidebar.style.width = `${width}px`;
+            const container = document.getElementById('layout-container');
+            const sidebar = document.getElementById('main-sidebar');
+            const content = document.getElementById('main-content');
+
+            if (!container || !sidebar || !content) {
+                console.error('[SplitJS] Elements missing.', { container: !!container, sidebar: !!sidebar, content: !!content });
+                return;
             }
-        });
+
+            const savedWidth = localStorage.getItem('zoho-sidebar-width');
+            const containerWidth = container.offsetWidth;
+            let sidebarPercent = 20; // Default to 20% (~380px on 1080p)
+
+            if (savedWidth && containerWidth > 0) {
+                sidebarPercent = (parseInt(savedWidth) / containerWidth) * 100;
+                // Bound it strictly: 15% minimum, 30% maximum
+                sidebarPercent = Math.max(15, Math.min(30, sidebarPercent));
+            }
+
+            if (this.splitInstance) {
+                this.splitInstance.destroy();
+            }
+
+            try {
+                // Use more forgiving minimum sizes so the gutter is always draggable,
+                // even on smaller laptop widths.
+                this.splitInstance = Split(['#main-sidebar', '#main-content'], {
+                    sizes: [sidebarPercent, 100 - sidebarPercent],
+                    minSize: [200, 400], // sidebar min 200px, content min 400px
+                    gutterSize: 2, // Thinner gutter for a cleaner look
+                    direction: 'horizontal',
+                    cursor: 'col-resize',
+                    onDragStart: (sizes) => {
+                        console.log('[SplitJS] Drag start', sizes);
+                    },
+                    onDrag: (sizes) => {
+                        // Enforce 30% max width for the sidebar
+                        if (sizes[0] > 30) {
+                            this.splitInstance.setSizes([30, 70]);
+                        }
+                    },
+                    onDragEnd: (sizes) => {
+                        const currentContainerWidth = document.getElementById('layout-container').offsetWidth;
+                        const sidebarWidth = (sizes[0] / 100) * currentContainerWidth;
+                        localStorage.setItem('zoho-sidebar-width', parseInt(sidebarWidth));
+                        console.log('[SplitJS] Saved width:', parseInt(sidebarWidth) + 'px');
+                    }
+                });
+                console.log('[SplitJS] Loaded at ' + sidebarPercent.toFixed(1) + '%');
+            } catch (err) {
+                console.error('[SplitJS] Init error:', err);
+            }
+
+            if (!this.hasSplitResizeListener) {
+                window.addEventListener('resize', debounce(() => {
+                    if (window.innerWidth <= 1024) {
+                        if (this.splitInstance) {
+                            this.splitInstance.destroy();
+                            this.splitInstance = null;
+                        }
+                        const sb = document.getElementById('main-sidebar');
+                        if (sb) sb.style.width = '';
+                    } else if (!this.splitInstance) {
+                        this.initSplitJS();
+                    }
+                }, 200));
+                this.hasSplitResizeListener = true;
+            }
+        }, 200);
     }
 
     setupTheme() {
@@ -600,37 +644,6 @@ class NotebookApp {
         await this.loadNotebook(this.notebook.id);
     }
 
-    setupSidebarResizer() {
-        const resizer = document.getElementById('sidebar-resizer');
-        const sidebar = document.getElementById('main-sidebar');
-
-        if (!resizer || !sidebar) return;
-
-        resizer.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            document.body.style.cursor = 'col-resize';
-
-            const startX = e.clientX;
-            const startWidth = sidebar.getBoundingClientRect().width;
-
-            const doDrag = (e) => {
-                // Limit width between 200px and 600px
-                const newWidth = Math.max(200, Math.min(600, startWidth + e.clientX - startX));
-                sidebar.style.width = `${newWidth}px`;
-                sidebar.style.minWidth = `${newWidth}px`;
-                sidebar.style.flexBasis = `${newWidth}px`;
-            };
-
-            const stopDrag = () => {
-                document.body.style.cursor = '';
-                document.documentElement.removeEventListener('mousemove', doDrag);
-                document.documentElement.removeEventListener('mouseup', stopDrag);
-            };
-
-            document.documentElement.addEventListener('mousemove', doDrag);
-            document.documentElement.addEventListener('mouseup', stopDrag);
-        });
-    }
 
     async refreshNotebookList() {
         try {

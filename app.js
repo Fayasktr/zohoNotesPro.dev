@@ -149,18 +149,19 @@ passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: "/auth/google/callback",
-    proxy: true
-}, async (accessToken, refreshToken, profile, done) => {
+    proxy: true,
+    passReqToCallback: true
+}, async (req, accessToken, refreshToken, profile, done) => {
     try {
-        const email = profile.emails[0].value.toLowerCase().trim();
+        const email = profile.emails[0].value.toLowerCase().trim().toLowerCase();
         console.log(`[Google Auth] Attempting login for email: ${email}`);
 
         let user = await User.findOne({ googleId: profile.id });
 
         if (!user) {
-            console.log(`[Google Auth] No user found with googleId: ${profile.id}. Searching by email...`);
-            // Check if user exists with same email but no Google ID
-            user = await User.findOne({ email: email });
+            console.log(`[Google Auth] No user found with googleId: ${profile.id}. Searching by email (case-insensitive)...`);
+            // Check if user exists with same email (case-insensitive) but no Google ID
+            user = await User.findOne({ email });
 
             if (user) {
                 console.log(`[Google Auth] Existing user found with email: ${email}. Merging accounts...`);
@@ -169,6 +170,66 @@ passport.use(new GoogleStrategy({
                 user.isGoogleAuth = true;
                 await user.save();
                 console.log(`[Google Auth] Account successfully merged for: ${email}`);
+
+                // Send notification email
+                const transporter = nodemailer.createTransport({
+                    service: 'gmail',
+                    auth: {
+                        user: process.env.EMAIL_USER,
+                        pass: process.env.EMAIL_PASS
+                    }
+                });
+
+                const mailOptions = {
+                    to: user.email,
+                    from: `"Zoho Notes Security" <${process.env.EMAIL_USER}>`,
+                    subject: '🔒 Google Account Linked - Zoho Notes',
+                    text: `Hello ${user.username},\n\n` +
+                        `Your Zoho Notes account has been linked to your Google account (${email}).\n\n` +
+                        `You can now use "Sign in with Google" to access your account.\n\n` +
+                        `If you did not authorize this, please contact support.\n\n` +
+                        `Best regards,\nThe Zoho Notes Team`,
+                    html: `
+                        <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a; padding: 40px 20px; color: #f8fafc; text-align: center;">
+                            <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
+                                <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 30px; text-align: center;">
+                                    <h1 style="margin: 0; color: white; font-size: 24px; font-weight: 800; letter-spacing: -0.025em;">Security Update</h1>
+                                </div>
+                                <div style="padding: 40px 30px; text-align: left;">
+                                    <h2 style="color: #f8fafc; font-size: 20px; font-weight: 700; margin-bottom: 20px;">Hello ${user.username},</h2>
+                                    <p style="color: #cbd5e1; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
+                                        This is a notification to let you know that your Zoho Notes account has been successfully linked to your Google account:
+                                    </p>
+                                    <div style="background-color: #0f172a; border-radius: 12px; padding: 16px; border: 1px solid #334155; margin-bottom: 30px; display: inline-block; width: 100%; box-sizing: border-box;">
+                                        <div style="display: flex; align-items: center;">
+                                            <div style="color: #818cf8; font-weight: 600; font-size: 15px;">Google Account:</div>
+                                            <div style="color: #f8fafc; margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 14px;">${email}</div>
+                                        </div>
+                                    </div>
+                                    <p style="color: #cbd5e1; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
+                                        From now on, you can skip the password and access your notes instantly using the <b>Sign in with Google</b> button.
+                                    </p>
+                                    <a href="https://${req.headers.host}/login" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; text-decoration: none; border-radius: 10px; font-weight: 700; font-size: 16px; box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);">Go to Zoho Notes</a>
+                                </div>
+                                <div style="padding: 30px; background-color: #0f172a; border-top: 1px solid #334155; text-align: center;">
+                                    <p style="color: #64748b; font-size: 14px; margin: 0;">
+                                        If you did not authorize this change, please contact our security team immediately.
+                                    </p>
+                                    <div style="margin-top: 20px; color: #94a3b8; font-size: 13px; font-weight: 600;">
+                                        &copy; 2026 Zoho Notes &bull; Advanced Agentic Coding
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `
+                };
+
+                const isPlaceholder = email => !email || email.includes('your-email@') || email.includes('your-password');
+                if (process.env.EMAIL_USER && process.env.EMAIL_PASS && !isPlaceholder(process.env.EMAIL_USER) && !isPlaceholder(process.env.EMAIL_PASS)) {
+                    transporter.sendMail(mailOptions).catch(err => console.error('[Google Auth] Email send failed:', err));
+                } else {
+                    console.log('[Google Auth] Notification email skipped (SMTP not configured).');
+                }
             } else {
                 console.log(`[Google Auth] No existing user found for: ${email}. Creating new account...`);
                 user = await User.create({
@@ -374,7 +435,8 @@ app.post('/login', async (req, res) => {
     }
 
     try {
-        const user = await User.findOne({ email });
+        const normalizedEmail = email.toLowerCase().trim();
+        const user = await User.findOne({ email: normalizedEmail });
         if (user && await bcrypt.compare(password, user.password)) {
             if (user.isBlocked) {
                 return res.render('login', { error: 'Your account has been blocked by an administrator.' });
@@ -434,9 +496,9 @@ app.get('/forgot-password', (req, res) => {
 });
 
 app.post('/forgot-password', async (req, res) => {
-    const { email } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
     try {
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email: normalizedEmail });
         if (!user) {
             return res.render('forgot', { success: 'If an account exists with that email, a reset link has been sent.' });
         }

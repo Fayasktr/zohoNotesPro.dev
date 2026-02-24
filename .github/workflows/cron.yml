@@ -1,0 +1,15 @@
+name: 10-Minute Cron Job
+
+on:
+  schedule:
+    # This runs every 10 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # This allows you to run it manually for testing
+
+jobs:
+  ping-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping My Backend
+        run: |
+          curl -I https://zoho-notes.onrender.com/api/health

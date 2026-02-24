@@ -13,6 +13,7 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/split.js/1.6.5/split.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
@@ -31,7 +32,7 @@
     <style>
         /* Custom styles that Tailwind doesn't easily cover or are too specific */
         .sidebar-transition {
-            transition: transform 0.3s ease-in-out, width 0.1s linear;
+            transition: transform 0.3s ease-in-out;
         }
 
         .mobile-overlay {
@@ -39,22 +40,48 @@
             backdrop-filter: blur(4px);
         }
 
-        .resizing {
-            cursor: col-resize;
-            user-select: none;
-        }
-
-        #sidebar-resizer {
+        .gutter {
+            background-color: transparent;
+            background-repeat: no-repeat;
+            background-position: center;
+            transition: background-color 0.2s;
             z-index: 50;
-            width: 10px;
-            /* Wider hit area */
-            margin-left: -5px;
-            /* Offset to center it on the border */
-            background: transparent;
         }
 
-        #sidebar-resizer:hover {
-            background: rgba(109, 93, 252, 0.3);
+        .gutter:hover {
+            background-color: rgba(109, 93, 252, 0.2);
+        }
+
+        .gutter.gutter-horizontal {
+            cursor: col-resize;
+            width: 2px !important;
+            /* Extremely thin like a border */
+            background-color: var(--border-color);
+            transition: background-color 0.2s, width 0.2s;
+            z-index: 50;
+            position: relative;
+        }
+
+        /* Create a wider invisible hit area so it's still easy to grab */
+        .gutter.gutter-horizontal::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -4px;
+            right: -4px;
+            bottom: 0;
+            z-index: 1;
+        }
+
+        .gutter.gutter-horizontal:hover {
+            background-color: var(--accent);
+            width: 4px !important;
+            /* Slightly more visible on hover */
+        }
+
+        /* Let Split.js handle the widths */
+        #main-sidebar {
+            flex-shrink: 0;
         }
 
         @media (max-width: 1024px) {
@@ -80,7 +107,7 @@
 
         <!-- Sidebar -->
         <aside id="main-sidebar"
-            class="sidebar sidebar-mobile lg:relative lg:translate-x-0 w-72 bg-[var(--sidebar-bg)] border-r border-[#ffffff1a] backdrop-blur-xl flex flex-col p-5 sidebar-transition overflow-y-auto">
+            class="sidebar sidebar-mobile lg:relative lg:translate-x-0 bg-[var(--sidebar-bg)] border-r border-[#ffffff1a] backdrop-blur-xl flex flex-col p-5 sidebar-transition overflow-y-auto">
             <div class="flex items-center justify-between mb-1 ">
                 <div
                     class="logo text-2xl font-extrabold bg-gradient-to-r from-[#6d5dfc] to-[var(--text-main)] bg-clip-text text-transparent flex items-center gap-2">
@@ -176,16 +203,12 @@
             </div>
         </aside>
 
-        <!-- Sidebar Resizer -->
-        <div id="sidebar-resizer"
-            class="hidden lg:block w-1 bg-transparent hover:bg-[#6d5dfc] cursor-col-resize hover:bg-opacity-50 transition-colors z-10 mx-[-2px]">
-        </div>
 
 
 
         <!-- Main Content -->
-        <main
-            class="flex-1 overflow-y-auto h-screen px-4 pb-4 sm:px-5 sm:pb-5 lg:p-10 flex flex-col items-center bg-[var(--bg-dark)]">
+        <main id="main-content"
+            class="main-content overflow-y-auto h-screen px-4 pb-4 sm:px-5 sm:pb-5 lg:p-10 flex flex-col items-center bg-[var(--bg-dark)]">
             <!-- Mobile Toggle Header (Sticky) -->
             <div
                 class="sticky top-0 w-full flex lg:hidden pt-4 pb-2 bg-[var(--bg-dark)]/90 backdrop-blur-md z-[100] mb-2">
