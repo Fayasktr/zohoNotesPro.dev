@@ -1121,15 +1121,18 @@ class NotebookApp {
                 wrappingStrategy: 'advanced',
                 overviewRulerLanes: 0,
                 hideCursorInOverviewRuler: true,
+                
+                // --- Study Mode Settings (Disabled Distractions) ---
+                hover: { enabled: false },           // Disables the "big paragraph" on mouse hover
+                suggest: { showDetails: false },     // Hides the side-panel in auto-complete
+                parameterHints: { enabled: false },  // Disables hints while typing inside ()
+                
                 quickSuggestions: {
                     other: true,
                     comments: true,
                     strings: true
                 },
                 suggestOnTriggerCharacters: true,
-                parameterHints: {
-                    enabled: true
-                },
                 acceptSuggestionOnEnter: 'on',
                 snippetSuggestions: 'top',
                 wordBasedSuggestions: true,
@@ -1144,6 +1147,7 @@ class NotebookApp {
                 formatOnType: true,
                 suggest: {
                     snippetsPreventQuickSuggestions: false,
+                    showDetails: false // Duplicate safety for suggestion details
                 },
                 unicodeHighlight: {
                     ambiguousCharacters: false,
