@@ -1080,14 +1080,15 @@ class NotebookApp {
                 });
 
                 monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
-                    noSemanticValidation: false, // Enable semantic validation for unused variable detection
-                    noSyntaxValidation: false,
-                    diagnosticCodesToIgnore: [2393, 2300, 2451, 2403] // Ignore duplicate/redeclaration errors across cells
+                    noSemanticValidation: true, // Disable semantic validation to remove buggy "unused" dots
+                    noSyntaxValidation: false
                 });
                 monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
                     target: monaco.languages.typescript.ScriptTarget.ESNext,
                     allowNonTsExtensions: true,
-                    checkJs: true
+                    checkJs: false, // Disable strict JS checking for parameters
+                    noUnusedLocals: false,
+                    noUnusedParameters: false
                 });
                 this._monacoConfigured = true;
             }
