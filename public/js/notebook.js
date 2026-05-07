@@ -1080,8 +1080,9 @@ class NotebookApp {
                 });
 
                 monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
-                    noSemanticValidation: true, // Fixes redeclaration errors across cells
-                    noSyntaxValidation: false
+                    noSemanticValidation: false, // Enable semantic validation for unused variable detection
+                    noSyntaxValidation: false,
+                    diagnosticCodesToIgnore: [2393, 2300, 2451, 2403] // Ignore duplicate/redeclaration errors across cells
                 });
                 monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
                     target: monaco.languages.typescript.ScriptTarget.ESNext,
@@ -1126,7 +1127,7 @@ class NotebookApp {
                 hover: { enabled: false },           // Disables the "big paragraph" on mouse hover
                 suggest: { showDetails: false },     // Hides the side-panel in auto-complete
                 parameterHints: { enabled: false },  // Disables hints while typing inside ()
-                
+            
                 quickSuggestions: {
                     other: true,
                     comments: true,
