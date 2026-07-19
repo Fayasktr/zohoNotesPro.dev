@@ -1092,13 +1092,16 @@ class NotebookApp {
                     noUnusedLocals: false,
                     noUnusedParameters: false
                 });
+                monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+                    noSemanticValidation: false,
+                    noSyntaxValidation: false
+                });
                 this._monacoConfigured = true;
             }
 
             const lang = isMark ? 'markdown' : (cell.lang === 'cpp' ? 'cpp' : (cell.lang === 'c' ? 'c' : (cell.lang === 'python' ? 'python' : (cell.lang === 'java' ? 'java' : (cell.lang === 'typescript' ? 'typescript' : 'javascript')))));
             const ext = lang === 'javascript' ? 'js' : (lang === 'typescript' ? 'ts' : lang);
             const modelUri = monaco.Uri.parse(`file:///${cell.id}.${ext}`);
-            console.log(`[Monaco] Creating model for cell ${cell.id} with lang=${lang} and URI=${modelUri.toString()}`);
 
             let model = monaco.editor.getModel(modelUri);
             if (!model) {
@@ -1127,12 +1130,12 @@ class NotebookApp {
                 wrappingStrategy: 'advanced',
                 overviewRulerLanes: 0,
                 hideCursorInOverviewRuler: true,
-                
+
                 // --- Study Mode Settings (Disabled Distractions) ---
-                hover: { enabled: false },           // Disables the "big paragraph" on mouse hover
+                hover: { enabled: lang === 'typescript' },           // Disables the "big paragraph" on mouse hover except for TS
                 suggest: { showDetails: false },     // Hides the side-panel in auto-complete
-                parameterHints: { enabled: false },  // Disables hints while typing inside ()
-            
+                parameterHints: { enabled: lang === 'typescript' },  // Disables hints while typing inside () except for TS
+
                 quickSuggestions: {
                     other: true,
                     comments: true,
@@ -1247,9 +1250,13 @@ class NotebookApp {
                         else if (newLang === 'typescript') { monacoLang = 'typescript'; ext = 'ts'; }
 
                         const newModelUri = monaco.Uri.parse(`file:///${cell.id}_${Date.now()}.${ext}`);
-                        console.log(`[Monaco] Switched language to ${newLang}, new model URI=${newModelUri.toString()}`);
                         const newModel = monaco.editor.createModel(editor.getValue(), monacoLang, newModelUri);
                         editor.setModel(newModel);
+
+                        editor.updateOptions({
+                            hover: { enabled: newLang === 'typescript' },
+                            parameterHints: { enabled: newLang === 'typescript' }
+                        });
 
                         // Auto-populate if empty
                         if (!editor.getValue().trim()) {
