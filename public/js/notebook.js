@@ -1092,16 +1092,12 @@ class NotebookApp {
                     noUnusedLocals: false,
                     noUnusedParameters: false
                 });
-                monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-                    target: monaco.languages.typescript.ScriptTarget.ESNext,
-                    allowNonTsExtensions: true,
-                });
                 this._monacoConfigured = true;
             }
 
             const lang = isMark ? 'markdown' : (cell.lang === 'cpp' ? 'cpp' : (cell.lang === 'c' ? 'c' : (cell.lang === 'python' ? 'python' : (cell.lang === 'java' ? 'java' : (cell.lang === 'typescript' ? 'typescript' : 'javascript')))));
             const ext = lang === 'javascript' ? 'js' : (lang === 'typescript' ? 'ts' : lang);
-            const modelUri = monaco.Uri.parse(`inmemory://model/${cell.id}.${ext}`);
+            const modelUri = monaco.Uri.parse(`file:///${cell.id}.${ext}`);
 
             let model = monaco.editor.getModel(modelUri);
             if (!model) {
@@ -1249,7 +1245,7 @@ class NotebookApp {
                         else if (newLang === 'cpp') { monacoLang = 'cpp'; ext = 'cpp'; }
                         else if (newLang === 'typescript') { monacoLang = 'typescript'; ext = 'ts'; }
 
-                        const newModelUri = monaco.Uri.parse(`inmemory://model/${cell.id}_${Date.now()}.${ext}`);
+                        const newModelUri = monaco.Uri.parse(`file:///${cell.id}_${Date.now()}.${ext}`);
                         const newModel = monaco.editor.createModel(editor.getValue(), monacoLang, newModelUri);
                         editor.setModel(newModel);
 
