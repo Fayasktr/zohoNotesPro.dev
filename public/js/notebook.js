@@ -1092,6 +1092,10 @@ class NotebookApp {
                     noUnusedLocals: false,
                     noUnusedParameters: false
                 });
+                monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+                    target: monaco.languages.typescript.ScriptTarget.ESNext,
+                    allowNonTsExtensions: true,
+                });
                 this._monacoConfigured = true;
             }
 
@@ -1236,15 +1240,18 @@ class NotebookApp {
                             'typescript': 'let message: string = "Hello, TypeScript!";\nconsole.log(message);'
                         };
 
-                        // Update Monaco Language
+                        // Update Monaco Language and Model URI
                         let monacoLang = 'javascript';
-                        if (newLang === 'python') monacoLang = 'python';
-                        else if (newLang === 'java') monacoLang = 'java';
-                        else if (newLang === 'c') monacoLang = 'c';
-                        else if (newLang === 'cpp') monacoLang = 'cpp';
-                        else if (newLang === 'typescript') monacoLang = 'typescript';
+                        let ext = 'js';
+                        if (newLang === 'python') { monacoLang = 'python'; ext = 'py'; }
+                        else if (newLang === 'java') { monacoLang = 'java'; ext = 'java'; }
+                        else if (newLang === 'c') { monacoLang = 'c'; ext = 'c'; }
+                        else if (newLang === 'cpp') { monacoLang = 'cpp'; ext = 'cpp'; }
+                        else if (newLang === 'typescript') { monacoLang = 'typescript'; ext = 'ts'; }
 
-                        monaco.editor.setModelLanguage(editor.getModel(), monacoLang);
+                        const newModelUri = monaco.Uri.parse(`inmemory://model/${cell.id}_${Date.now()}.${ext}`);
+                        const newModel = monaco.editor.createModel(editor.getValue(), monacoLang, newModelUri);
+                        editor.setModel(newModel);
 
                         // Auto-populate if empty
                         if (!editor.getValue().trim()) {
