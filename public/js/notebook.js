@@ -145,6 +145,7 @@ class NotebookApp {
         // document.getElementById('btn-new-folder').addEventListener('click', () => this.createFolder()); // Removed as per Phase 5
         document.getElementById('run-all-cells').addEventListener('click', () => this.runAll());
         document.getElementById('clear-all-outputs').addEventListener('click', () => this.clearAllOutputs());
+        document.getElementById('copy-all-cells').addEventListener('click', () => this.copyAllCells());
         document.getElementById('scroll-to-bottom').addEventListener('click', () => {
             const main = document.querySelector('main');
             main.scrollTo({ top: main.scrollHeight, behavior: 'smooth' });
@@ -1387,6 +1388,44 @@ class NotebookApp {
             }
         });
         this._autoSave();
+    }
+
+    async copyAllCells() {
+        if (!this.notebook.cells || this.notebook.cells.length === 0) return;
+
+        const langLabels = {
+            javascript: 'JS', typescript: 'TS', python: 'PY',
+            java: 'JAVA', c: 'C', cpp: 'C++', markdown: 'MD'
+        };
+
+        const divider = '// ═══════════════════════════════════════';
+
+        const blocks = this.notebook.cells.map(cell => {
+            const title = cell.title || 'Untitled Note';
+            const lang = langLabels[cell.lang] || cell.lang?.toUpperCase() || 'CODE';
+            const content = this.editors[cell.id]
+                ? this.editors[cell.id].getValue()
+                : (cell.content || '');
+
+            return `${divider}\n// Note: ${title}    [${lang}]\n${divider}\n\n${content}`;
+        });
+
+        const fullText = blocks.join('\n\n');
+
+        try {
+            await navigator.clipboard.writeText(fullText);
+            // Brief visual feedback on the button
+            const btn = document.getElementById('copy-all-cells');
+            const originalBg = btn.style.background;
+            btn.style.background = '#30ff6a';
+            btn.title = 'Copied!';
+            setTimeout(() => {
+                btn.style.background = originalBg || '#30b0ff';
+                btn.title = 'Copy All Notes';
+            }, 1500);
+        } catch (err) {
+            console.error('Copy failed:', err);
+        }
     }
 
     displayOutput(cellId, data) {
