@@ -1416,11 +1416,14 @@ class NotebookApp {
             await navigator.clipboard.writeText(fullText);
             // Brief visual feedback on the button
             const btn = document.getElementById('copy-all-cells');
-            const originalBg = btn.style.background;
             btn.style.background = '#30ff6a';
+            btn.style.borderColor = '#30ff6a';
+            btn.style.color = '#fff';
             btn.title = 'Copied!';
             setTimeout(() => {
-                btn.style.background = originalBg || '#30b0ff';
+                btn.style.background = '';
+                btn.style.borderColor = '';
+                btn.style.color = '';
                 btn.title = 'Copy All Notes';
             }, 1500);
         } catch (err) {
