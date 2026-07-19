@@ -1096,6 +1096,17 @@ class NotebookApp {
                     noSemanticValidation: false,
                     noSyntaxValidation: false
                 });
+                // Treat each TS cell as an isolated module so variables
+                // declared in one note don't clash with another note.
+                monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+                    target: monaco.languages.typescript.ScriptTarget.ESNext,
+                    allowNonTsExtensions: true,
+                    moduleDetection: 3, // Force — every file is its own module
+                    isolatedModules: true,
+                    strict: false,
+                    noUnusedLocals: false,
+                    noUnusedParameters: false
+                });
                 this._monacoConfigured = true;
             }
 
