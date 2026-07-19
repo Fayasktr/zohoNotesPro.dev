@@ -81,6 +81,4 @@ Follow these steps to set up the project locally.
 
 Contributions, issues, and feature requests are welcome! Feel free to check the issues page if you want to contribute.
 
-## 📄 License
 
-This project is licensed under the ISC License.
