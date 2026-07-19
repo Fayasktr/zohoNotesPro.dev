@@ -977,7 +977,8 @@ class NotebookApp {
         const templates = {
             'c': '#include <stdio.h>\n\nint main() {\n    printf("Hello, World!\\n");\n    return 0;\n}',
             'cpp': '#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!" << std::endl;\n    return 0;\n}',
-            'java': 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}'
+            'java': 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}',
+            'typescript': 'let message: string = "Hello, TypeScript!";\nconsole.log(message);'
         };
 
         const cell = {
@@ -1024,6 +1025,7 @@ class NotebookApp {
                 ${!isMark ? `
                 <select class="cell-lang-select">
                     <option value="javascript" ${cell.lang === 'javascript' ? 'selected' : ''}>JS</option>
+                    <option value="typescript" ${cell.lang === 'typescript' ? 'selected' : ''}>TS</option>
                     <option value="python" ${cell.lang === 'python' ? 'selected' : ''}>PY</option>
                     <option value="java" ${cell.lang === 'java' ? 'selected' : ''}>JAVA (JDK 17)</option>
                     <option value="c" ${cell.lang === 'c' ? 'selected' : ''}>C</option>
@@ -1093,8 +1095,9 @@ class NotebookApp {
                 this._monacoConfigured = true;
             }
 
-            const lang = isMark ? 'markdown' : (cell.lang === 'cpp' ? 'cpp' : (cell.lang === 'c' ? 'c' : (cell.lang === 'python' ? 'python' : (cell.lang === 'java' ? 'java' : 'javascript'))));
-            const modelUri = monaco.Uri.parse(`inmemory://model/${cell.id}.${lang === 'javascript' ? 'js' : lang}`);
+            const lang = isMark ? 'markdown' : (cell.lang === 'cpp' ? 'cpp' : (cell.lang === 'c' ? 'c' : (cell.lang === 'python' ? 'python' : (cell.lang === 'java' ? 'java' : (cell.lang === 'typescript' ? 'typescript' : 'javascript')))));
+            const ext = lang === 'javascript' ? 'js' : (lang === 'typescript' ? 'ts' : lang);
+            const modelUri = monaco.Uri.parse(`inmemory://model/${cell.id}.${ext}`);
 
             let model = monaco.editor.getModel(modelUri);
             if (!model) {
@@ -1229,7 +1232,8 @@ class NotebookApp {
                         const templates = {
                             'c': '#include <stdio.h>\n\nint main() {\n    printf("Hello, World!\\n");\n    return 0;\n}',
                             'cpp': '#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!" << std::endl;\n    return 0;\n}',
-                            'java': 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}'
+                            'java': 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}',
+                            'typescript': 'let message: string = "Hello, TypeScript!";\nconsole.log(message);'
                         };
 
                         // Update Monaco Language
@@ -1238,6 +1242,7 @@ class NotebookApp {
                         else if (newLang === 'java') monacoLang = 'java';
                         else if (newLang === 'c') monacoLang = 'c';
                         else if (newLang === 'cpp') monacoLang = 'cpp';
+                        else if (newLang === 'typescript') monacoLang = 'typescript';
 
                         monaco.editor.setModelLanguage(editor.getModel(), monacoLang);
 

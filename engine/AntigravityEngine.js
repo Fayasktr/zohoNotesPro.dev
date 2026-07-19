@@ -21,6 +21,9 @@ class AntigravityEngine {
             case 'javascript':
             case 'js':
                 return this._executeJS(code, contextExtension);
+            case 'typescript':
+            case 'ts':
+                return this._executeTS(code, contextExtension);
             case 'python':
             case 'py':
                 return this._executeExternal(code, 'python3', 'py');
@@ -121,6 +124,24 @@ class AntigravityEngine {
                 result: null,
                 logs,
                 error: err.message,
+            };
+        }
+    }
+
+    async _executeTS(code, contextExtension = {}) {
+        try {
+            const ts = require('typescript');
+            const compiled = ts.transpileModule(code, {
+                compilerOptions: { module: ts.ModuleKind.CommonJS }
+            });
+            return this._executeJS(compiled.outputText, contextExtension);
+        } catch (err) {
+            return {
+                id: require('crypto').randomUUID(),
+                success: false,
+                result: null,
+                logs: [],
+                error: `TypeScript Compilation Error: ${err.message}`
             };
         }
     }
