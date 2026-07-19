@@ -1098,6 +1098,7 @@ class NotebookApp {
             const lang = isMark ? 'markdown' : (cell.lang === 'cpp' ? 'cpp' : (cell.lang === 'c' ? 'c' : (cell.lang === 'python' ? 'python' : (cell.lang === 'java' ? 'java' : (cell.lang === 'typescript' ? 'typescript' : 'javascript')))));
             const ext = lang === 'javascript' ? 'js' : (lang === 'typescript' ? 'ts' : lang);
             const modelUri = monaco.Uri.parse(`file:///${cell.id}.${ext}`);
+            console.log(`[Monaco] Creating model for cell ${cell.id} with lang=${lang} and URI=${modelUri.toString()}`);
 
             let model = monaco.editor.getModel(modelUri);
             if (!model) {
@@ -1246,6 +1247,7 @@ class NotebookApp {
                         else if (newLang === 'typescript') { monacoLang = 'typescript'; ext = 'ts'; }
 
                         const newModelUri = monaco.Uri.parse(`file:///${cell.id}_${Date.now()}.${ext}`);
+                        console.log(`[Monaco] Switched language to ${newLang}, new model URI=${newModelUri.toString()}`);
                         const newModel = monaco.editor.createModel(editor.getValue(), monacoLang, newModelUri);
                         editor.setModel(newModel);
 
