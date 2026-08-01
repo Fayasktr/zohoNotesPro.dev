@@ -29,6 +29,7 @@ class NotebookApp {
         this._autoSave = debounce(() => this.saveToBackend(), 1500);
 
         this.currentPendingFolder = 'root';
+        this.modalHistoryPushed = false;
         this.setupTheme();
         this.setupSmartOutput();
         this.setupEventListeners();
@@ -302,6 +303,10 @@ class NotebookApp {
             btn.addEventListener('click', () => this.closeAllModals());
         });
 
+        window.addEventListener('popstate', () => {
+            this.closeAllModals(true);
+        });
+
         document.getElementById('btn-confirm-folder').addEventListener('click', () => this.handleFolderCreate());
         document.getElementById('btn-confirm-file').addEventListener('click', () => this.handleFileCreate());
 
@@ -548,13 +553,27 @@ class NotebookApp {
             input.focus();
             input.select();
         }
+
+        // Push state for browser back-button to close modals
+        if (!this.modalHistoryPushed) {
+            window.history.pushState({ modalOpen: true }, '');
+            this.modalHistoryPushed = true;
+        }
     }
 
-    closeAllModals() {
+    closeAllModals(fromPopState = false) {
         document.getElementById('modal-overlay').classList.add('hidden');
         document.querySelectorAll('.modal-content').forEach(m => m.classList.add('hidden'));
         this.currentConfirmCallback = null;
         this.currentInputCallback = null;
+
+        // Clean up history state: if modal is closed manually, pop the state we pushed
+        if (this.modalHistoryPushed && !fromPopState) {
+            this.modalHistoryPushed = false;
+            window.history.back();
+        } else {
+            this.modalHistoryPushed = false;
+        }
     }
 
     async safeFetch(url, options = {}) {
@@ -808,36 +827,7 @@ class NotebookApp {
         lucide.createIcons();
     }
 
-    async renameFolder(oldPath) {
-        this.inputAction('Rename Folder', `Renaming "${oldPath}"`, oldPath, async (newPath) => {
-            if (!newPath || newPath === oldPath) return;
-            try {
-                await this.safeFetch('/api/folders/rename', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ oldName: oldPath, newName: newPath })
-                });
-                await this.refreshNotebookList();
-            } catch (err) {
-                console.error('Folder rename failed:', err);
-                alert('Failed to rename folder.');
-            }
-        });
-    }
 
-    async deleteFolder(path) {
-        this.confirmAction('Delete Folder', `Are you sure you want to delete "${path}" and ALL its contents? This will move them to Trash.`, async () => {
-            try {
-                // Use the Bulk Delete API
-                // URL encode the path to handle slashes correctly
-                await this.safeFetch(`/api/folders/${encodeURIComponent(path)}`, { method: 'DELETE' });
-                await this.refreshNotebookList();
-            } catch (err) {
-                console.error('Folder delete failed:', err);
-                alert('Failed to delete folder.');
-            }
-        });
-    }
 
     updateCurrentNotebookItemUI() {
         const activeItem = document.querySelector('.notebook-item.active');

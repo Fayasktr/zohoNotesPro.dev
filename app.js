@@ -896,12 +896,32 @@ app.post('/api/notebooks/move-cell', isAuthenticated, async (req, res) => {
 app.put('/api/folders/rename', isAuthenticated, async (req, res) => {
     const { oldName, newName } = req.body;
     try {
-        await Note.updateMany(
-            { folder: oldName, owner: req.session.userId },
-            { folder: newName, updatedAt: new Date() }
-        );
+        const escapeRegex = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const oldNameEscaped = escapeRegex(oldName);
+        
+        // Find notes that are in the folder or nested subfolders
+        const notes = await Note.find({
+            owner: req.session.userId,
+            folder: { $regex: '^' + oldNameEscaped + '(?:/|$)' }
+        });
+
+        // Update each note's folder path by replacing the old folder prefix
+        for (const note of notes) {
+            let updatedFolder = note.folder;
+            if (note.folder === oldName) {
+                updatedFolder = newName;
+            } else if (note.folder.startsWith(oldName + '/')) {
+                updatedFolder = newName + note.folder.slice(oldName.length);
+            }
+            await Note.updateOne(
+                { _id: note._id },
+                { folder: updatedFolder, updatedAt: new Date() }
+            );
+        }
+
         res.json({ success: true });
     } catch (err) {
+        console.error('Rename folder error:', err);
         res.status(500).json({ error: 'Failed to rename folder' });
     }
 });
@@ -909,12 +929,20 @@ app.put('/api/folders/rename', isAuthenticated, async (req, res) => {
 app.delete(/^\/api\/folders\/(.+)$/, isAuthenticated, async (req, res) => {
     const folderName = req.params[0];
     try {
+        const escapeRegex = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const folderNameEscaped = escapeRegex(folderName);
+
+        // Move all notes in this folder or any nested subfolders to trash
         await Note.updateMany(
-            { folder: folderName, owner: req.session.userId },
-            { isTrashed: true, updatedAt: new Date() }
+            {
+                owner: req.session.userId,
+                folder: { $regex: '^' + folderNameEscaped + '(?:/|$)' }
+            },
+            { isTrashed: true, trashedAt: new Date(), updatedAt: new Date() }
         );
         res.json({ success: true });
     } catch (err) {
+        console.error('Delete folder error:', err);
         res.status(500).json({ error: 'Failed to delete folder' });
     }
 });
