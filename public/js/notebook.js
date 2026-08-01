@@ -775,7 +775,7 @@ class NotebookApp {
                     <div class="tree-item is-folder" data-path="${child.name}">
                         <i data-lucide="chevron-right" class="tree-arrow"></i>
                         <i data-lucide="folder" class="tree-icon" style="color: #6d5dfc;"></i>
-                        <span class="tree-label">${child.name}</span>
+                        <span class="tree-label" title="${child.fullPath}">${child.name}</span>
                         <div class="tree-actions">
                             <button class="tree-action-btn btn-add-file" title="Create File" data-folder="${child.fullPath}">
                                 <i data-lucide="plus-square" style="width:12px;"></i>
@@ -806,7 +806,7 @@ class NotebookApp {
                 fileItem.innerHTML = `
                     <div class="tree-arrow invisible"></div> <!-- Spacer -->
                     <i data-lucide="${file.isShared ? 'users' : 'file-code'}" class="tree-icon" style="${file.isShared ? 'color: #ffcc00;' : ''}"></i>
-                    <span class="tree-label">${file.title}</span>
+                    <span class="tree-label" title="${file.title}">${file.title}</span>
                     ${!file.isShared ? `
                     <div class="tree-actions">
                         <button class="tree-action-btn rename-notebook-btn"><i data-lucide="edit-2" style="width:12px;"></i></button>
@@ -1684,18 +1684,25 @@ class NotebookApp {
         });
     }
 
-    async renameFolder(oldName) {
-        this.inputAction('Rename Folder', `Enter a new name for "${oldName}":`, oldName, async (newName) => {
-            if (!newName || newName === oldName) return;
+    async renameFolder(oldPath) {
+        const pathParts = oldPath.split('/');
+        const oldBaseName = pathParts[pathParts.length - 1];
+        const parentPath = pathParts.slice(0, -1).join('/');
+
+        this.inputAction('Rename Folder', `Enter a new name for "${oldBaseName}":`, oldBaseName, async (newBaseName) => {
+            if (!newBaseName || newBaseName === oldBaseName) return;
+            const newPath = parentPath ? `${parentPath}/${newBaseName}` : newBaseName;
             try {
                 const res = await this.safeFetch('/api/folders/rename', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ oldName, newName })
+                    body: JSON.stringify({ oldName: oldPath, newName: newPath })
                 });
                 if (res.ok) {
-                    if (this.notebook.folder === oldName) {
-                        this.notebook.folder = newName;
+                    if (this.notebook.folder === oldPath) {
+                        this.notebook.folder = newPath;
+                    } else if (this.notebook.folder.startsWith(oldPath + '/')) {
+                        this.notebook.folder = newPath + this.notebook.folder.slice(oldPath.length);
                     }
                     await this.refreshNotebookList();
                 }

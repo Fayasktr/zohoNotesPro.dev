@@ -758,8 +758,9 @@ app.post('/api/notebooks', isAuthenticated, async (req, res) => {
 
 app.get('/api/trash', isAuthenticated, async (req, res) => {
     try {
-        const notebooks = await Note.find({ owner: req.session.userId, isTrashed: true }, 'id title folder updatedAt');
-        const cells = await TrashedCell.find({ owner: req.session.userId }).sort({ deletedAt: -1 });
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        const notebooks = await Note.find({ owner: userId, isTrashed: true }, 'id title folder updatedAt');
+        const cells = await TrashedCell.find({ owner: userId }).sort({ deletedAt: -1 });
 
         res.json({
             notebooks,
@@ -774,7 +775,8 @@ app.get('/api/trash', isAuthenticated, async (req, res) => {
 app.post('/api/cells/trash', isAuthenticated, async (req, res) => {
     const { notebookId, cell } = req.body;
     try {
-        const notebook = await Note.findOne({ id: notebookId, owner: req.session.userId });
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        const notebook = await Note.findOne({ id: notebookId, owner: userId });
         if (!notebook) return res.status(404).json({ error: 'Notebook not found' });
 
         // Save to TrashedCell
@@ -782,13 +784,13 @@ app.post('/api/cells/trash', isAuthenticated, async (req, res) => {
             ...cell,
             originalNotebookId: notebookId,
             originalNotebookTitle: notebook.title,
-            owner: req.session.userId
+            owner: userId
         });
         await trashedCell.save();
 
         // Remove from Note content
         await Note.updateOne(
-            { id: notebookId, owner: req.session.userId },
+            { id: notebookId, owner: userId },
             { $pull: { 'content.cells': { id: cell.id } } }
         );
 
@@ -803,11 +805,12 @@ app.post('/api/cells/trash', isAuthenticated, async (req, res) => {
 app.post('/api/trash/restore-cell/:id', isAuthenticated, async (req, res) => {
     const cellId = req.params.id;
     try {
-        const trashedCell = await TrashedCell.findOne({ id: cellId, owner: req.session.userId });
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        const trashedCell = await TrashedCell.findOne({ id: cellId, owner: userId });
         if (!trashedCell) return res.status(404).json({ error: 'Trashed cell not found' });
 
         // Check if notebook exists
-        const notebook = await Note.findOne({ id: trashedCell.originalNotebookId, owner: req.session.userId });
+        const notebook = await Note.findOne({ id: trashedCell.originalNotebookId, owner: userId });
         if (!notebook) return res.status(404).json({ error: 'Original notebook no longer exists' });
 
         // Move back to notebook
@@ -819,12 +822,12 @@ app.post('/api/trash/restore-cell/:id', isAuthenticated, async (req, res) => {
         delete cellData.owner;
 
         await Note.updateOne(
-            { id: trashedCell.originalNotebookId, owner: req.session.userId },
+            { id: trashedCell.originalNotebookId, owner: userId },
             { $push: { 'content.cells': cellData } }
         );
 
         // Delete from trash
-        await TrashedCell.deleteOne({ id: cellId, owner: req.session.userId });
+        await TrashedCell.deleteOne({ id: cellId, owner: userId });
 
         res.json({ success: true, notebookId: trashedCell.originalNotebookId });
     } catch (err) {
@@ -836,7 +839,8 @@ app.post('/api/trash/restore-cell/:id', isAuthenticated, async (req, res) => {
 app.delete('/api/trash/cell/:id', isAuthenticated, async (req, res) => {
     const cellId = req.params.id;
     try {
-        await TrashedCell.deleteOne({ id: cellId, owner: req.session.userId });
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        await TrashedCell.deleteOne({ id: cellId, owner: userId });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to delete trashed cell' });
@@ -846,8 +850,9 @@ app.delete('/api/trash/cell/:id', isAuthenticated, async (req, res) => {
 app.delete(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
     const notebookId = req.params[0];
     try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
         const result = await Note.updateOne(
-            { id: notebookId, owner: req.session.userId },
+            { id: notebookId, owner: userId },
             { isTrashed: true, trashedAt: new Date() }
         );
         if (result.matchedCount === 0) return res.status(404).json({ error: 'Notebook not found' });
@@ -862,7 +867,8 @@ app.put(/^\/api\/notebooks\/(.+)\/rename$/, isAuthenticated, async (req, res) =>
     const notebookId = req.params[0];
     const { title } = req.body;
     try {
-        await Note.updateOne({ id: notebookId, owner: req.session.userId }, { title, updatedAt: new Date() });
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        await Note.updateOne({ id: notebookId, owner: userId }, { title, updatedAt: new Date() });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to rename notebook' });
@@ -873,15 +879,16 @@ app.put(/^\/api\/notebooks\/(.+)\/rename$/, isAuthenticated, async (req, res) =>
 app.post('/api/notebooks/move-cell', isAuthenticated, async (req, res) => {
     const { sourceNotebookId, targetNotebookId, cell } = req.body;
     try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
         // 1. Remove from source
         await Note.updateOne(
-            { id: sourceNotebookId, owner: req.session.userId },
+            { id: sourceNotebookId, owner: userId },
             { $pull: { 'content.cells': { id: cell.id } } }
         );
 
         // 2. Add to target
         await Note.updateOne(
-            { id: targetNotebookId, owner: req.session.userId },
+            { id: targetNotebookId, owner: userId },
             { $push: { 'content.cells': cell } }
         );
 
@@ -896,12 +903,13 @@ app.post('/api/notebooks/move-cell', isAuthenticated, async (req, res) => {
 app.put('/api/folders/rename', isAuthenticated, async (req, res) => {
     const { oldName, newName } = req.body;
     try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
         const escapeRegex = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         const oldNameEscaped = escapeRegex(oldName);
         
         // Find notes that are in the folder or nested subfolders
         const notes = await Note.find({
-            owner: req.session.userId,
+            owner: userId,
             folder: { $regex: '^' + oldNameEscaped + '(?:/|$)' }
         });
 
@@ -929,13 +937,14 @@ app.put('/api/folders/rename', isAuthenticated, async (req, res) => {
 app.delete(/^\/api\/folders\/(.+)$/, isAuthenticated, async (req, res) => {
     const folderName = req.params[0];
     try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
         const escapeRegex = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         const folderNameEscaped = escapeRegex(folderName);
 
         // Move all notes in this folder or any nested subfolders to trash
         await Note.updateMany(
             {
-                owner: req.session.userId,
+                owner: userId,
                 folder: { $regex: '^' + folderNameEscaped + '(?:/|$)' }
             },
             { isTrashed: true, trashedAt: new Date(), updatedAt: new Date() }
@@ -950,8 +959,9 @@ app.delete(/^\/api\/folders\/(.+)$/, isAuthenticated, async (req, res) => {
 app.post(/^\/api\/trash\/restore\/(.+)$/, isAuthenticated, async (req, res) => {
     const notebookId = req.params[0];
     try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
         const result = await Note.updateOne(
-            { id: notebookId, owner: req.session.userId },
+            { id: notebookId, owner: userId },
             { isTrashed: false, $unset: { trashedAt: "" } }
         );
         res.json({ success: true });
@@ -963,7 +973,8 @@ app.post(/^\/api\/trash\/restore\/(.+)$/, isAuthenticated, async (req, res) => {
 app.delete(/^\/api\/trash\/(.+)$/, isAuthenticated, async (req, res) => {
     const notebookId = req.params[0];
     try {
-        await Note.deleteOne({ id: notebookId, owner: req.session.userId });
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        await Note.deleteOne({ id: notebookId, owner: userId });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to permanently delete' });
@@ -1076,8 +1087,9 @@ app.post('/api/share/respond', isAuthenticated, async (req, res) => {
 
 app.delete('/api/trash-all', isAuthenticated, async (req, res) => {
     try {
-        await Note.deleteMany({ owner: req.session.userId, isTrashed: true });
-        await TrashedCell.deleteMany({ owner: req.session.userId });
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        await Note.deleteMany({ owner: userId, isTrashed: true });
+        await TrashedCell.deleteMany({ owner: userId });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to empty trash' });

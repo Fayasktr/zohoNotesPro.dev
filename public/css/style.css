@@ -593,7 +593,7 @@ body.light-theme .nav-item.active {
 .tree-item {
     display: flex;
     align-items: center;
-    padding: 6px 12px;
+    padding: 5px 6px;
     cursor: pointer;
     color: var(--text-dim);
     font-size: 13px;
@@ -604,13 +604,14 @@ body.light-theme .nav-item.active {
     text-decoration: none;
     position: relative;
     border: 1px solid transparent;
+    min-width: 0;
 }
 
 /* Connector Lines */
 .tree-children {
-    margin-left: 10px;
-    /* Indent level */
-    padding-left: 12px;
+    margin-left: 6px;
+    /* Compact Indent level */
+    padding-left: 6px;
     /* Space for line */
     border-left: 1px solid rgba(255, 255, 255, 0.1);
     overflow: hidden;
@@ -621,10 +622,10 @@ body.light-theme .nav-item.active {
 .tree-children .tree-item::before {
     content: '';
     position: absolute;
-    left: -12px;
+    left: -6px;
     /* Reach back to the border */
     top: 50%;
-    width: 12px;
+    width: 6px;
     height: 1px;
     background: rgba(255, 255, 255, 0.1);
 }
@@ -639,9 +640,9 @@ body.light-theme .nav-item.active {
 
 /* Icons */
 .tree-icon {
-    width: 16px;
-    height: 16px;
-    margin-right: 8px;
+    width: 15px;
+    height: 15px;
+    margin-right: 5px;
     flex-shrink: 0;
     opacity: 0.7;
     transition: color 0.2s;
@@ -655,10 +656,11 @@ body.light-theme .nav-item.active {
 .tree-arrow {
     width: 14px;
     height: 14px;
-    margin-right: 4px;
+    margin-right: 2px;
     color: var(--text-dim);
     transition: transform 0.2s ease;
     opacity: 0.5;
+    flex-shrink: 0;
 }
 
 .tree-arrow:hover {
@@ -690,38 +692,69 @@ body.light-theme .nav-item.active {
     overflow: hidden;
     text-overflow: ellipsis;
     flex: 1;
+    min-width: 0;
 }
 
-/* Actions (Visible by default, highlighted on hover) */
+/* Floating Actions (Hidden by default to give 100% priority to names, visible on hover) */
 .tree-actions {
     display: flex;
-    gap: 4px;
-    opacity: 0.6;
-    transition: opacity 0.2s;
-    margin-left: auto;
+    gap: 3px;
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+    pointer-events: none;
+    background: var(--sidebar-bg);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 2px 4px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 10;
 }
 
 .tree-item:hover .tree-actions {
     opacity: 1;
+    pointer-events: auto;
+}
+
+/* Fallback for touch devices without hover hover support */
+@media (hover: none) {
+    .tree-actions {
+        opacity: 0.8;
+        pointer-events: auto;
+        position: static;
+        transform: none;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+    }
 }
 
 .tree-action-btn {
-    padding: 2px;
+    padding: 2px 4px;
     border-radius: 4px;
     color: var(--text-dim);
     background: transparent;
     border: none;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .tree-action-btn:hover {
     color: #fff;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
 }
 
 .tree-action-btn:hover.danger {
     color: #ff3b30;
-    background: rgba(255, 59, 48, 0.1);
+    background: rgba(255, 59, 48, 0.15);
 }
 
 /* Root level spacing */
