@@ -14,8 +14,8 @@ exports.getDashboard = async (req, res) => {
             loggingConfig = { value: false };
         }
         res.render('admin/dashboard', {
-            title: 'Admin Dashboard - Zoho Notes Pro',
-            metaTitle: 'Admin Dashboard - Zoho Notes Pro',
+            title: 'Admin Dashboard - Zoho Notes',
+            metaTitle: 'Admin Dashboard - Zoho Notes',
             metaRobots: 'noindex, nofollow',
             adminName: req.session.username,
             users: users,

@@ -1,4 +1,4 @@
-// PWA Registration & Install Prompt Handler for Zoho Notes Pro
+// PWA Registration & Install Prompt Handler for Zoho Notes
 
 (function () {
   'use strict';
@@ -95,9 +95,9 @@
           color: #ffffff;
         }
       </style>
-      <img src="/images/favicon.png" alt="App Icon" style="width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;" />
+      <img src="/images/icon-192.png" alt="App Icon" style="width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;" />
       <div style="flex-grow: 1;">
-        <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 2px;">Install Zoho Notes Pro</div>
+        <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 2px;">Install Zoho Notes</div>
         <div style="font-size: 0.8rem; color: #a0a0a5;">Add to home screen for desktop & offline notebook access.</div>
       </div>
       <button class="pwa-btn-install" id="pwa-install-btn">Install</button>
@@ -124,7 +124,7 @@
 
   // 4. Listen for Successful App Installation
   window.addEventListener('appinstalled', () => {
-    console.log('[PWA] Zoho Notes Pro installed successfully!');
+    console.log('[PWA] Zoho Notes installed successfully!');
     const banner = document.getElementById('pwa-install-banner');
     if (banner) banner.remove();
   });

@@ -429,9 +429,9 @@ app.get('/sitemap.xml', (req, res) => {
 app.get('/signup', (req, res) => {
     if (req.session.userId) return res.redirect('/');
     res.render('signup', {
-        title: 'Sign Up - Zoho Notes Pro | Interactive Code Compiler & Notebook',
-        metaTitle: 'Sign Up - Zoho Notes Pro | Interactive Polyglot Code Compiler',
-        metaDescription: 'Create a free Zoho Notes Pro account to write markdown documentation and execute JavaScript, Python, C, C++, and Java code directly in your browser.',
+        title: 'Sign Up - Zoho Notes',
+        metaTitle: 'Sign Up - Zoho Notes',
+        metaDescription: 'Create a free Zoho Notes account to write markdown documentation and execute JavaScript, Python, C, C++, and Java code directly in your browser.',
         metaKeywords: 'zoho notes signup, create notebook account, online python compiler signup, code editor registration',
         canonicalUrl: `${req.protocol}://${req.get('host')}/signup`
     });
@@ -449,7 +449,7 @@ app.post('/signup', async (req, res) => {
         res.redirect('/');
     } catch (err) {
         res.render('signup', {
-            title: 'Sign Up - Zoho Notes Pro',
+            title: 'Sign Up - Zoho Notes',
             error: 'Email already exists',
             canonicalUrl: `${req.protocol}://${req.get('host')}/signup`
         });
@@ -473,9 +473,9 @@ app.get('/login', (req, res) => {
     }
     const error = req.query.error;
     res.render('login', {
-        title: 'Login - Zoho Notes Pro | Interactive Code Compiler & Notebook',
-        metaTitle: 'Login - Zoho Notes Pro | Interactive Polyglot Code Compiler',
-        metaDescription: 'Sign in to Zoho Notes Pro to access your interactive polyglot notebooks, run code snippets, and collaborate with your team.',
+        title: 'Login - Zoho Notes',
+        metaTitle: 'Login - Zoho Notes',
+        metaDescription: 'Sign in to Zoho Notes to access your interactive polyglot notebooks, run code snippets, and collaborate with your team.',
         metaKeywords: 'zoho notes login, interactive notebook login, python runner login, code editor sign in',
         canonicalUrl: `${req.protocol}://${req.get('host')}/login`,
         error
@@ -658,10 +658,10 @@ app.post('/reset-password/:token', async (req, res) => {
 
 app.get('/', isAuthenticated, (req, res) => {
     res.render('index', {
-        title: 'Zoho Notes Pro - Polyglot Code Compiler & Interactive Notebook',
-        metaTitle: 'Zoho Notes Pro - Polyglot Code Compiler & Interactive Notebook',
+        title: 'Zoho Notes',
+        metaTitle: 'Zoho Notes',
         metaDescription: 'Interactive web-based polyglot notebook application. Write rich Markdown notes and execute JavaScript, Python, Java, C, and C++ directly in Monaco Editor powered notebook cells.',
-        metaKeywords: 'zoho notes pro, online code runner, polyglot compiler, javascript python java compiler, monaco editor notebook, developer documentation',
+        metaKeywords: 'zoho notes, online code runner, polyglot compiler, javascript python java compiler, monaco editor notebook, developer documentation',
         canonicalUrl: `${req.protocol}://${req.get('host')}/`,
         username: res.locals.username,
         isAdmin: req.session.role === 'admin' || (req.user && req.user.role === 'admin'),
@@ -1054,9 +1054,9 @@ app.delete(/^\/api\/trash\/(.+)$/, isAuthenticated, async (req, res) => {
 
 app.get('/sharing-notes', isAuthenticated, async (req, res) => {
     res.render('sharingNotes', {
-        title: 'Collaborative Shared Notebooks - Zoho Notes Pro',
-        metaTitle: 'Collaborative Shared Notebooks - Zoho Notes Pro',
-        metaDescription: 'Collaborate and share interactive notebooks with team members on Zoho Notes Pro.',
+        title: 'Collaborative Shared Notebooks - Zoho Notes',
+        metaTitle: 'Collaborative Shared Notebooks - Zoho Notes',
+        metaDescription: 'Collaborate and share interactive notebooks with team members on Zoho Notes.',
         canonicalUrl: `${req.protocol}://${req.get('host')}/sharing-notes`
     });
 });

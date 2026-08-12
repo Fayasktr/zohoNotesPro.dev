@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zoho-notes-pro-v1';
+const CACHE_NAME = 'zoho-notes-v2';
 const OFFLINE_URL = '/offline.html';
 
 // Static Shell Assets to Pre-cache
@@ -8,6 +8,11 @@ const PRECACHE_ASSETS = [
   '/css/style.css',
   '/js/pwa.js',
   '/images/favicon.png',
+  '/images/icon-192.png',
+  '/images/icon-512.png',
+  '/images/icon-maskable-192.png',
+  '/images/icon-maskable-512.png',
+  '/images/apple-touch-icon.png',
   '/manifest.json',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap',
   'https://unpkg.com/lucide@latest'
@@ -17,7 +22,7 @@ const PRECACHE_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Pre-caching App Shell');
+      console.log('[SW] Pre-caching App Shell for Zoho Notes');
       return cache.addAll(PRECACHE_ASSETS).catch((err) => {
         console.warn('[SW] Some precache assets failed to load:', err);
       });

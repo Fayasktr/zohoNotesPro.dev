@@ -1,10 +1,10 @@
-# Zoho Notes Pro
+# Zoho Notes
 
-**Zoho Notes Pro** is an interactive, web-based polyglot notebook application. It bridges the gap between traditional note-taking apps and full-fledged IDEs, providing a seamless platform to write notes, document code, and execute that code in the same cohesive workspace.
+**Zoho Notes** is an interactive, web-based polyglot notebook application. It bridges the gap between traditional note-taking apps and full-fledged IDEs, providing a seamless platform to write notes, document code, and execute that code in the same cohesive workspace.
 
 ## 🌟 Why this project?
 
-This project was built for developers, students, and educators who need a dynamic environment to learn, experiment, and document their work. Instead of juggling a note-taking app and a terminal or IDE, Zoho Notes Pro brings them together. It allows you to organize your thoughts with rich Markdown text and test code snippets side-by-side without needing complex local project setups.
+This project was built for developers, students, and educators who need a dynamic environment to learn, experiment, and document their work. Instead of juggling a note-taking app and a terminal or IDE, Zoho Notes brings them together. It allows you to organize your thoughts with rich Markdown text and test code snippets side-by-side without needing complex local project setups.
 
 ## 🚀 Features
 

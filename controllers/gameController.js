@@ -8,8 +8,8 @@ exports.renderGameDashboard = async (req, res) => {
         const languages = await Quest.distinct('language');
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         res.render('game/dashboard', {
-            title: 'Code Quests & Gamified Learning - Zoho Notes Pro',
-            metaTitle: 'Code Quests & Gamified Learning - Zoho Notes Pro',
+            title: 'Code Quests & Gamified Learning - Zoho Notes',
+            metaTitle: 'Code Quests & Gamified Learning - Zoho Notes',
             metaDescription: 'Level up your coding skills with interactive quests and gamified learning challenges in JavaScript, Python, C, and Java.',
             canonicalUrl: `${baseUrl}/game`,
             user: req.user,
@@ -19,8 +19,8 @@ exports.renderGameDashboard = async (req, res) => {
         console.error('Dashboard Error:', err);
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         res.render('game/dashboard', {
-            title: 'Code Quests & Gamified Learning - Zoho Notes Pro',
-            metaTitle: 'Code Quests & Gamified Learning - Zoho Notes Pro',
+            title: 'Code Quests & Gamified Learning - Zoho Notes',
+            metaTitle: 'Code Quests & Gamified Learning - Zoho Notes',
             metaDescription: 'Level up your coding skills with interactive quests and gamified learning challenges in JavaScript, Python, C, and Java.',
             canonicalUrl: `${baseUrl}/game`,
             user: req.user,
@@ -41,9 +41,9 @@ exports.renderGameMap = async (req, res) => {
         const baseUrl = `${req.protocol}://${req.get('host')}`;
 
         res.render('game/map', {
-            title: `${topic.toUpperCase()} Quest Map - Zoho Notes Pro`,
-            metaTitle: `${topic.toUpperCase()} Quest Map - Zoho Notes Pro`,
-            metaDescription: `Master ${topic} with interactive coding quests and challenges on Zoho Notes Pro.`,
+            title: `${topic.toUpperCase()} Quest Map - Zoho Notes`,
+            metaTitle: `${topic.toUpperCase()} Quest Map - Zoho Notes`,
+            metaDescription: `Master ${topic} with interactive coding quests and challenges on Zoho Notes.`,
             canonicalUrl: `${baseUrl}/game/map/${topic}`,
             topic,
             difficulty,
@@ -51,7 +51,7 @@ exports.renderGameMap = async (req, res) => {
             user: req.user
         });
     } catch (err) {
-        res.status(500).render('error', { title: 'Error - Zoho Notes Pro', error: 'Failed to load map' });
+        res.status(500).render('error', { title: 'Error - Zoho Notes', error: 'Failed to load map' });
     }
 };
 
@@ -63,15 +63,15 @@ exports.renderPlayPage = async (req, res) => {
         const baseUrl = `${req.protocol}://${req.get('host')}`;
 
         res.render('game/play', {
-            title: `Quest: ${quest.title} - Zoho Notes Pro`,
-            metaTitle: `Quest: ${quest.title} - Zoho Notes Pro`,
-            metaDescription: `Solve "${quest.title}" coding challenge in ${quest.language} on Zoho Notes Pro.`,
+            title: `Quest: ${quest.title} - Zoho Notes`,
+            metaTitle: `Quest: ${quest.title} - Zoho Notes`,
+            metaDescription: `Solve "${quest.title}" coding challenge in ${quest.language} on Zoho Notes.`,
             canonicalUrl: `${baseUrl}/game/play/${questId}`,
             quest,
             user: req.user
         });
     } catch (err) {
-        res.status(500).render('error', { title: 'Error - Zoho Notes Pro', error: 'Failed to load quest' });
+        res.status(500).render('error', { title: 'Error - Zoho Notes', error: 'Failed to load quest' });
     }
 };
 
