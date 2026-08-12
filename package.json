@@ -1,18 +1,33 @@
 {
-  "name": "zoho-note-compailor",
+  "name": "zoho-notes-pro",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "An interactive, web-based polyglot notebook application for writing notes, code documentation, and live execution.",
+  "main": "app.js",
   "scripts": {
     "start": "node app.js",
+    "dev": "node app.js",
+    "check": "node -c app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "zoho-notes",
+    "notebook",
+    "polyglot",
+    "code-runner",
+    "monaco-editor",
+    "express",
+    "mongodb",
+    "pwa"
+  ],
+  "author": "Fayas KP",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Fayasktr/zohoNotesPro.dev.git"
+  },
+  "license": "MIT",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@types/node": "^26.1.1",
