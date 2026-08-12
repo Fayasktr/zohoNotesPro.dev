@@ -1,4 +1,4 @@
-# 📓 Zoho Notes Pro (Interactive Polyglot Notebook)
+# 📓 Zoho Notes
 
 [![Node.js Version](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 [![Express.js](https://img.shields.io/badge/Express.js-5.x-blue.svg)](https://expressjs.com/)
@@ -6,7 +6,7 @@
 [![PWA Ready](https://img.shields.io/badge/PWA-Supported-purple.svg)](https://web.dev/progressive-web-apps/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Zoho Notes Pro** is a modern, interactive web app that combines **note-taking** with **live code execution**. It works like a digital notebook where you can type explanations in rich Markdown and write executable code in multiple programming languages (JavaScript, Python, C++, Java, and more) inside the exact same page!
+**Zoho Notes** is a modern, interactive web app that combines **note-taking** with **live code execution**. It works like a digital notebook where you can type explanations in rich Markdown and write executable code in multiple programming languages (JavaScript, Python, C++, Java, and more) inside the exact same page!
 
 ---
 
@@ -14,7 +14,7 @@
 
 In standard note-taking apps, you can only write text or static code blocks. To test code, you usually have to open an IDE or terminal. 
 
-**Zoho Notes Pro changes that!**
+**Zoho Notes changes that!**
 - You get a cell-based notebook (similar to Jupyter Notebooks or Google Colab, but for web developers).
 - Write notes and documentation using Markdown formatting.
 - Add code cells and run them instantly with **one click** or `Ctrl + Enter`.
@@ -40,7 +40,7 @@ In standard note-taking apps, you can only write text or static code blocks. To 
 
 ## 🛠️ Supported Programming Languages
 
-Zoho Notes Pro supports executing code in the following languages:
+Zoho Notes supports executing code in the following languages:
 
 - 🟨 **JavaScript** (Node.js runtime)
 - 🟦 **TypeScript** (via `ts-node`)
@@ -54,10 +54,10 @@ Zoho Notes Pro supports executing code in the following languages:
 
 ## 🏗️ Project Architecture & Structure
 
-Below is an overview of the directory organization in Zoho Notes Pro:
+Below is an overview of the directory organization in Zoho Notes:
 
 ```
-zohoNotesPro.dev/
+zohoNotes/
 ├── app.js                 # Main Express application entry point
 ├── Dockerfile             # Docker container definition
 ├── render.yaml            # Render cloud deployment specification
@@ -88,7 +88,7 @@ zohoNotesPro.dev/
 
 ## 🚀 Quick Start Guide
 
-Follow these simple steps to set up and run Zoho Notes Pro on your local machine.
+Follow these simple steps to set up and run Zoho Notes on your local machine.
 
 ### Prerequisites
 
@@ -172,7 +172,7 @@ Open your browser and navigate to:
 
 ---
 
-## 📖 How to Use Zoho Notes Pro
+## 📖 How to Use Zoho Notes
 
 1. **Sign Up / Log In**: Create an account or log in with your credentials.
 2. **Create a New Notebook**: Click the **+** button to create a new note cell.
@@ -196,12 +196,12 @@ A [`Dockerfile`](file:///c:/Users/FAYAS/Desktop/zoho%20note%20compailor/Dockerfi
 
 Build the Docker image:
 ```bash
-docker build -t zoho-notes-pro .
+docker build -t zoho-notes .
 ```
 
 Run the container:
 ```bash
-docker run -p 3000:3000 --env-file .env zoho-notes-pro
+docker run -p 3000:3000 --env-file .env zoho-notes
 ```
 
 ---
@@ -217,7 +217,7 @@ npm run check
 
 ## 🤝 Contributing
 
-Contributions are always welcome! If you'd like to improve Zoho Notes Pro:
+Contributions are always welcome! If you'd like to improve Zoho Notes:
 1. Fork the project repository.
 2. Create your feature branch (`git checkout -b feature/AmazingFeature`).
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).

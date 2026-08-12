@@ -1,6 +1,6 @@
 Add-Type -AssemblyName System.Drawing
 
-$srcPath = 'C:\Users\FAYAS\.gemini\antigravity\brain\5a6d427a-657a-405c-9e88-dbe881797754\zoho_notes_logo_1786519068366.jpg'
+$srcPath = 'C:\Users\FAYAS\.gemini\antigravity\brain\5a6d427a-657a-405c-9e88-dbe881797754\zoho_notes_light_logo_1786519896657.jpg'
 $outDir = 'c:\Users\FAYAS\Desktop\zoho note compailor\public\images'
 
 $src = [System.Drawing.Image]::FromFile($srcPath)
