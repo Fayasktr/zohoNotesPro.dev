@@ -6,15 +6,23 @@ const engine = require('../engine/AntigravityEngine');
 exports.renderGameDashboard = async (req, res) => {
     try {
         const languages = await Quest.distinct('language');
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
         res.render('game/dashboard', {
-            title: 'New World - Dashboard',
+            title: 'Code Quests & Gamified Learning - Zoho Notes Pro',
+            metaTitle: 'Code Quests & Gamified Learning - Zoho Notes Pro',
+            metaDescription: 'Level up your coding skills with interactive quests and gamified learning challenges in JavaScript, Python, C, and Java.',
+            canonicalUrl: `${baseUrl}/game`,
             user: req.user,
             availableTopics: languages.length > 0 ? languages : ['javascript', 'python', 'c', 'java'] // Fallback
         });
     } catch (err) {
         console.error('Dashboard Error:', err);
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
         res.render('game/dashboard', {
-            title: 'New World - Dashboard',
+            title: 'Code Quests & Gamified Learning - Zoho Notes Pro',
+            metaTitle: 'Code Quests & Gamified Learning - Zoho Notes Pro',
+            metaDescription: 'Level up your coding skills with interactive quests and gamified learning challenges in JavaScript, Python, C, and Java.',
+            canonicalUrl: `${baseUrl}/game`,
             user: req.user,
             availableTopics: ['javascript', 'python', 'c', 'java']
         });
@@ -22,23 +30,28 @@ exports.renderGameDashboard = async (req, res) => {
 };
 
 exports.renderGameMap = async (req, res) => {
-    const { topic, difficulty } = req.params;
+    const { topic } = req.params;
+    const { difficulty } = req.query;
     try {
         // Map URL param 'topic' to Schema field 'language'
         const query = { language: topic };
         if (difficulty) query.difficulty = difficulty;
 
         const quests = await Quest.find(query).lean();
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
 
         res.render('game/map', {
-            title: `Map: ${topic} - ${difficulty}`,
+            title: `${topic.toUpperCase()} Quest Map - Zoho Notes Pro`,
+            metaTitle: `${topic.toUpperCase()} Quest Map - Zoho Notes Pro`,
+            metaDescription: `Master ${topic} with interactive coding quests and challenges on Zoho Notes Pro.`,
+            canonicalUrl: `${baseUrl}/game/map/${topic}`,
             topic,
             difficulty,
             quests,
             user: req.user
         });
     } catch (err) {
-        res.status(500).render('error', { error: 'Failed to load map' });
+        res.status(500).render('error', { title: 'Error - Zoho Notes Pro', error: 'Failed to load map' });
     }
 };
 
@@ -47,14 +60,18 @@ exports.renderPlayPage = async (req, res) => {
     try {
         const quest = await Quest.findOne({ id: questId }).lean();
         if (!quest) return res.redirect('/game');
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
 
         res.render('game/play', {
-            title: `Playing: ${quest.title}`,
+            title: `Quest: ${quest.title} - Zoho Notes Pro`,
+            metaTitle: `Quest: ${quest.title} - Zoho Notes Pro`,
+            metaDescription: `Solve "${quest.title}" coding challenge in ${quest.language} on Zoho Notes Pro.`,
+            canonicalUrl: `${baseUrl}/game/play/${questId}`,
             quest,
             user: req.user
         });
     } catch (err) {
-        res.status(500).render('error', { error: 'Failed to load quest' });
+        res.status(500).render('error', { title: 'Error - Zoho Notes Pro', error: 'Failed to load quest' });
     }
 };
 

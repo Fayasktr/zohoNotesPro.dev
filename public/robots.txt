@@ -1,0 +1,19 @@
+# Robots.txt for Zoho Notes Pro
+# https://zohonotespro.dev
+
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /signup
+Allow: /forgot-password
+Allow: /sharing-notes
+Allow: /game/
+Allow: /presentation.html
+
+# Disallow Private User & Admin API Routes
+Disallow: /api/
+Disallow: /admin/
+Disallow: /auth/
+
+# Sitemap Location
+Sitemap: https://zohonotespro.dev/sitemap.xml

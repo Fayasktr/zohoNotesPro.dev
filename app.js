@@ -105,6 +105,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'hbs');
 app.set('views', path.join(__dirname, 'views'));
+hbs.registerPartials(path.join(__dirname, 'views/partials'));
 
 // Prevent caching for all routes
 app.use((req, res, next) => {
@@ -377,10 +378,63 @@ const isAuthenticated = (req, res, next) => {
 app.use('/admin', adminRoutes);
 app.use('/', gameRoutes);
 
+// SEO: Dynamic XML Sitemap Route
+app.get('/sitemap.xml', (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const date = new Date().toISOString().split('T')[0];
+    const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${baseUrl}/</loc>
+    <lastmod>${date}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/login</loc>
+    <lastmod>${date}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/signup</loc>
+    <lastmod>${date}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/forgot-password</loc>
+    <lastmod>${date}</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/sharing-notes</loc>
+    <lastmod>${date}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/presentation.html</loc>
+    <lastmod>${date}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+</urlset>`;
+    res.header('Content-Type', 'application/xml');
+    res.send(sitemap);
+});
+
 // Auth Routes
 app.get('/signup', (req, res) => {
     if (req.session.userId) return res.redirect('/');
-    res.render('signup', { title: 'Signup - Zoho Notes' });
+    res.render('signup', {
+        title: 'Sign Up - Zoho Notes Pro | Interactive Code Compiler & Notebook',
+        metaTitle: 'Sign Up - Zoho Notes Pro | Interactive Polyglot Code Compiler',
+        metaDescription: 'Create a free Zoho Notes Pro account to write markdown documentation and execute JavaScript, Python, C, C++, and Java code directly in your browser.',
+        metaKeywords: 'zoho notes signup, create notebook account, online python compiler signup, code editor registration',
+        canonicalUrl: `${req.protocol}://${req.get('host')}/signup`
+    });
 });
 
 app.post('/signup', async (req, res) => {
@@ -394,7 +448,11 @@ app.post('/signup', async (req, res) => {
         req.session.role = user.role;
         res.redirect('/');
     } catch (err) {
-        res.render('signup', { error: 'Email already exists' });
+        res.render('signup', {
+            title: 'Sign Up - Zoho Notes Pro',
+            error: 'Email already exists',
+            canonicalUrl: `${req.protocol}://${req.get('host')}/signup`
+        });
     }
 });
 
@@ -414,7 +472,14 @@ app.get('/login', (req, res) => {
         return req.session.role === 'admin' ? res.redirect('/admin/dashboard') : res.redirect('/');
     }
     const error = req.query.error;
-    res.render('login', { title: 'Login - Zoho Notes', error });
+    res.render('login', {
+        title: 'Login - Zoho Notes Pro | Interactive Code Compiler & Notebook',
+        metaTitle: 'Login - Zoho Notes Pro | Interactive Polyglot Code Compiler',
+        metaDescription: 'Sign in to Zoho Notes Pro to access your interactive polyglot notebooks, run code snippets, and collaborate with your team.',
+        metaKeywords: 'zoho notes login, interactive notebook login, python runner login, code editor sign in',
+        canonicalUrl: `${req.protocol}://${req.get('host')}/login`,
+        error
+    });
 });
 
 app.post('/login', async (req, res) => {
@@ -593,7 +658,11 @@ app.post('/reset-password/:token', async (req, res) => {
 
 app.get('/', isAuthenticated, (req, res) => {
     res.render('index', {
-        title: 'Zoho Notes',
+        title: 'Zoho Notes Pro - Polyglot Code Compiler & Interactive Notebook',
+        metaTitle: 'Zoho Notes Pro - Polyglot Code Compiler & Interactive Notebook',
+        metaDescription: 'Interactive web-based polyglot notebook application. Write rich Markdown notes and execute JavaScript, Python, Java, C, and C++ directly in Monaco Editor powered notebook cells.',
+        metaKeywords: 'zoho notes pro, online code runner, polyglot compiler, javascript python java compiler, monaco editor notebook, developer documentation',
+        canonicalUrl: `${req.protocol}://${req.get('host')}/`,
         username: res.locals.username,
         isAdmin: req.session.role === 'admin' || (req.user && req.user.role === 'admin'),
         defaultLanguage: res.locals.currentUser?.settings?.defaultLanguage || 'javascript'
@@ -984,7 +1053,12 @@ app.delete(/^\/api\/trash\/(.+)$/, isAuthenticated, async (req, res) => {
 // --- SHARING ROUTES ---
 
 app.get('/sharing-notes', isAuthenticated, async (req, res) => {
-    res.render('sharingNotes', { title: 'Collaborative Sharing - Zoho Notes' });
+    res.render('sharingNotes', {
+        title: 'Collaborative Shared Notebooks - Zoho Notes Pro',
+        metaTitle: 'Collaborative Shared Notebooks - Zoho Notes Pro',
+        metaDescription: 'Collaborate and share interactive notebooks with team members on Zoho Notes Pro.',
+        canonicalUrl: `${req.protocol}://${req.get('host')}/sharing-notes`
+    });
 });
 
 app.post('/api/share/invite', isAuthenticated, async (req, res) => {

@@ -1,0 +1,66 @@
+{{!-- SEO Head Metadata Partial --}}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{#if metaTitle}}{{metaTitle}}{{else if title}}{{title}}{{else}}Zoho Notes Pro - Polyglot Code Compiler & Interactive Notebook{{/if}}</title>
+
+<!-- Primary Meta Tags -->
+<meta name="title" content="{{#if metaTitle}}{{metaTitle}}{{else if title}}{{title}}{{else}}Zoho Notes Pro - Polyglot Code Compiler & Interactive Notebook{{/if}}">
+<meta name="description" content="{{#if metaDescription}}{{metaDescription}}{{else}}Zoho Notes Pro is an interactive web-based polyglot notebook application. Write rich markdown notes, document code, and execute JavaScript, Python, C, C++, and Java in real-time.{{/if}}">
+<meta name="keywords" content="{{#if metaKeywords}}{{metaKeywords}}{{else}}zoho notes, online code compiler, polyglot notebook, execute python online, execute javascript online, run c++ online, interactive code editor, monaco editor notebook, developer documentation tool{{/if}}">
+<meta name="author" content="Zoho Notes Pro Team">
+<meta name="robots" content="{{#if metaRobots}}{{metaRobots}}{{else}}index, follow{{/if}}">
+<meta name="theme-color" content="#0a0a0c">
+
+<!-- Canonical Link -->
+{{#if canonicalUrl}}
+<link rel="canonical" href="{{canonicalUrl}}">
+{{/if}}
+
+<!-- Open Graph / Facebook Meta Tags -->
+<meta property="og:type" content="{{#if ogType}}{{ogType}}{{else}}website{{/if}}">
+<meta property="og:site_name" content="Zoho Notes Pro">
+<meta property="og:url" content="{{#if canonicalUrl}}{{canonicalUrl}}{{else}}https://zohonotespro.dev{{/if}}">
+<meta property="og:title" content="{{#if metaTitle}}{{metaTitle}}{{else if title}}{{title}}{{else}}Zoho Notes Pro - Interactive Code Compiler & Polyglot Notebook{{/if}}">
+<meta property="og:description" content="{{#if metaDescription}}{{metaDescription}}{{else}}Write documentation and execute JS, Python, C, C++, and Java code side-by-side in your browser with Monaco Editor powered notebook cells.{{/if}}">
+<meta property="og:image" content="{{#if ogImage}}{{ogImage}}{{else}}/images/favicon.png{{/if}}">
+
+<!-- Twitter Cards -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:url" content="{{#if canonicalUrl}}{{canonicalUrl}}{{else}}https://zohonotespro.dev{{/if}}">
+<meta name="twitter:title" content="{{#if metaTitle}}{{metaTitle}}{{else if title}}{{title}}{{else}}Zoho Notes Pro - Interactive Code Compiler & Polyglot Notebook{{/if}}">
+<meta name="twitter:description" content="{{#if metaDescription}}{{metaDescription}}{{else}}Write documentation and execute JS, Python, C, C++, and Java code side-by-side in your browser with Monaco Editor powered notebook cells.{{/if}}">
+<meta name="twitter:image" content="{{#if ogImage}}{{ogImage}}{{else}}/images/favicon.png{{/if}}">
+
+<!-- Web Application Manifest, PWA & Icons -->
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" href="/images/favicon.png">
+<link rel="apple-touch-icon" href="/images/favicon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Zoho Notes">
+<script src="/js/pwa.js" defer></script>
+
+<!-- JSON-LD Structured Data (Schema.org) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Zoho Notes Pro",
+  "alternateName": "Zoho Note Compiler",
+  "url": "{{#if canonicalUrl}}{{canonicalUrl}}{{else}}https://zohonotespro.dev{{/if}}",
+  "description": "An interactive web-based polyglot notebook application that allows developers, students, and educators to write rich Markdown notes and execute code in JavaScript, TypeScript, Python, Java, C, and C++ directly in the browser.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "All",
+  "browserRequirements": "Requires JavaScript. Requires HTML5.",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Zoho Notes Pro"
+  }
+}
+</script>

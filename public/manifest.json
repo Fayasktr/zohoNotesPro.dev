@@ -1,0 +1,50 @@
+{
+  "id": "zoho-notes-pro-pwa",
+  "short_name": "Zoho Notes",
+  "name": "Zoho Notes Pro - Polyglot Notebook & Compiler",
+  "description": "Write markdown documentation and execute JavaScript, Python, C, C++, and Java code side-by-side directly in your browser.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a0c",
+  "theme_color": "#0a0a0c",
+  "categories": ["education", "productivity", "utilities", "developer"],
+  "icons": [
+    {
+      "src": "/images/favicon.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/favicon.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Notebook",
+      "short_name": "New Note",
+      "description": "Create a new polyglot notebook",
+      "url": "/",
+      "icons": [{ "src": "/images/favicon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Shared Notes",
+      "short_name": "Shared",
+      "description": "View shared collaborative notebooks",
+      "url": "/sharing-notes",
+      "icons": [{ "src": "/images/favicon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Code Quests",
+      "short_name": "Quests",
+      "description": "Play interactive coding quests",
+      "url": "/game",
+      "icons": [{ "src": "/images/favicon.png", "sizes": "192x192" }]
+    }
+  ]
+}
