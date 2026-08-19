@@ -457,7 +457,19 @@
                 defaultLanguage: '{{defaultLanguage}}'
             };
         </script>
+        <!-- Dexie IndexedDB Engine -->
+        <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+        <!-- Local-First Database & Sync Engine -->
+        <script src="/js/db/database.js"></script>
+        <script src="/js/db/syncEngine.js"></script>
+        <!-- Client-Side Polyglot Browser Engine (WASM + JS/TS) -->
+        <script src="/js/engine/browserEngine.js"></script>
+        <!-- Offline Manager & Sync Badge -->
+        <script src="/js/offlineManager.js"></script>
+        <!-- Core Notebook UI Application -->
         <script src="/js/notebook.js"></script>
+        <!-- Progressive Web App Handler -->
+        <script src="/js/pwa.js"></script>
         <script>
             lucide.createIcons();
         </script>

@@ -1,0 +1,822 @@
+# 🏗️ Zoho Notes Pro — Cloud-to-Local Optimization Plan (v2)
+
+## Summary of Decisions Made
+
+Based on your feedback, here's what we're building:
+
+| Decision | Choice |
+|----------|--------|
+| **Storage library** | **RxDB** (future live collab coding feature needs reactive + real-time sync) |
+| **Local execution** | JS, TypeScript, Python (via Pyodide WASM) |
+| **Server execution** | C, C++, Java (stay exactly as current setup) |
+| **Data strategy** | Local-first with Atlas backup. Lazy-load: fetch only when user opens a note |
+| **Multi-device** | Yes — latest data always pushed to Atlas for cross-device access |
+| **Cold start issue** | Already solved with cron job (not a problem) |
+| **Pyodide ~11MB** | Acceptable |
+| **Who writes code** | AI agents — this plan is for architecture/direction |
+
+---
+
+## 🔴 The Critical Question You Raised: "What If the Laptop Suddenly Shuts Down?"
+
+This is an excellent question. Let me explain exactly what happens at each layer:
+
+### How IndexedDB (the engine under RxDB) Handles Crashes
+
+> [!NOTE]
+> **IndexedDB uses atomic transactions** — this is the key concept. "Atomic" means a write either **fully completes** or **doesn't happen at all**. There is no "half-saved" state.
+
+```
+User clicks Save → RxDB starts an IndexedDB transaction
+                    ├── If laptop shuts down DURING the write → Transaction rolls back
+                    │   (the previous version of the note is still intact)
+                    │
+                    └── If the write completes before shutdown → Data is safely on disk
+                        (survives restart, survives browser crash)
+```
+
+**So the real risk is NOT data corruption. It's: "What if I made changes but they haven't synced to Atlas yet?"**
+
+### Our 3-Layer Safety Net
+
+```mermaid
+graph TD
+    subgraph Layer1["Layer 1: Instant Save (< 5ms)"]
+        A["User types/edits"] --> B["RxDB writes to IndexedDB"]
+        B --> C["✅ Saved on local disk immediately"]
+    end
+    
+    subgraph Layer2["Layer 2: Background Sync (5-30 sec)"]
+        C --> D{"Online?"}
+        D -->|"Yes"| E["Push to MongoDB Atlas"]
+        D -->|"No"| F["Queue in syncQueue"]
+        F -->|"When back online"| E
+        E --> G["✅ Backed up on Atlas"]
+    end
+    
+    subgraph Layer3["Layer 3: Periodic Snapshot (Every 2 min)"]
+        C --> H["Auto-save snapshot"]
+        H --> I["✅ Even unsaved drafts are preserved"]
+    end
+```
+
+### Every Possible Crash Scenario & What Happens
+
+| Scenario | Data Lost? | Why? |
+|----------|-----------|------|
+| Laptop shuts down while typing | ❌ No | RxDB auto-saves on every change (debounced ~500ms). IndexedDB persists across restarts |
+| Laptop shuts down while syncing to Atlas | ❌ No | Local copy is already in IndexedDB. Sync retries on next app open |
+| Browser crashes | ❌ No | IndexedDB data survives browser crashes — it's on disk, not in RAM |
+| User clears browser data | ⚠️ **Yes locally** | BUT Atlas has the backup. On next login, data re-syncs from Atlas |
+| Hard drive fails completely | ⚠️ **Yes locally** | BUT Atlas has the backup (up to last successful sync) |
+| Offline for 3 days, then hard drive fails | ⚠️ **Partial loss** | Only changes made since last sync are lost. This is the worst case |
+
+> [!IMPORTANT]
+> **The ONLY way to truly lose data** is: user is offline + makes changes + hard drive physically dies before ever going online again. This is extremely rare, and we can mitigate it further with an **"unsynced changes" warning badge** in the UI.
+
+### Smart Sync Strategy (Not Live, Not Scheduled — Event-Driven)
+
+You correctly identified that:
+- **Live sync** (every keystroke → server) = wasteful, expensive
+- **Scheduled sync** (every 5 min) = could miss 5 minutes of work
+
+**Our approach: Event-driven with debounce**
+
+```javascript
+// Conceptual — how the sync engine decides when to push to Atlas
+
+const SYNC_TRIGGERS = {
+  ON_CHANGE:    'debounce 10 seconds',    // After user stops typing for 10s → sync
+  ON_NOTE_CLOSE: 'immediate',             // User closes/switches note → sync now
+  ON_APP_BLUR:   'immediate',             // User switches to another tab → sync now  
+  ON_IDLE:       'every 2 minutes',       // If app is idle, periodic check
+  ON_RECONNECT:  'immediate',             // Internet comes back → flush all queued
+  ON_LOGOUT:     'immediate + wait',      // Must complete sync before logout
+};
+```
+
+This way:
+- We don't spam Atlas with requests (not live)
+- We never miss more than ~10 seconds of work (not a dumb schedule)
+- Critical moments (closing a note, switching tabs, going offline→online) always trigger immediate sync
+
+---
+
+## 📚 Why RxDB Over Dexie.js (For Your Use Case)
+
+You mentioned you'll build **live collaborative coding** (multiple people editing one file) in the future. This changes the recommendation:
+
+| Feature | Dexie.js | RxDB | Why RxDB Wins for You |
+|---------|----------|------|----------------------|
+| **Reactive queries** | ❌ Manual | ✅ Built-in | Live collab needs instant UI updates when data changes |
+| **Replication/Sync** | ❌ Build yourself | ✅ Built-in plugin | Multi-device + collaboration needs battle-tested sync |
+| **Conflict resolution** | ❌ Build yourself | ✅ Built-in | Two users edit same note → RxDB handles merge |
+| **Multi-tab support** | ⚠️ Limited | ✅ Leader election | Same user with 2 tabs open won't corrupt data |
+| **Observable data** | ❌ No | ✅ RxJS streams | UI auto-updates when another collaborator makes a change |
+| **Encryption** | ❌ No | ✅ Plugin | Sensitive notes encrypted at rest in browser |
+| **Bundle size** | ~16KB | ~150KB | Acceptable trade-off for the features |
+
+### How RxDB Works (Simple Explanation)
+
+```javascript
+// 1. Define your database schema (like Mongoose, but for the browser)
+const noteSchema = {
+  title: 'note',
+  version: 0,
+  primaryKey: 'id',
+  type: 'object',
+  properties: {
+    id:        { type: 'string', maxLength: 100 },
+    title:     { type: 'string' },
+    content:   { type: 'object' },           // your cell data
+    folder:    { type: 'string' },
+    isStarred: { type: 'boolean' },
+    isTrashed: { type: 'boolean' },
+    owner:     { type: 'string' },
+    updatedAt: { type: 'number' },           // timestamp
+    _deleted:  { type: 'boolean' }           // soft delete for sync
+  },
+  required: ['id', 'owner']
+};
+
+// 2. Create the database
+const db = await createRxDatabase({
+  name: 'zohonotes',
+  storage: getRxStorageDexie()   // RxDB uses Dexie/IndexedDB under the hood!
+});
+await db.addCollections({ notes: { schema: noteSchema } });
+
+// 3. CRUD is simple
+await db.notes.insert({ id: 'note-1', title: 'Hello', ... });
+const note = await db.notes.findOne('note-1').exec();
+await note.patch({ title: 'Updated Title' });
+
+// 4. REACTIVE — UI auto-updates (this is the magic for live collab)
+db.notes.find().$.subscribe(allNotes => {
+  renderNotesList(allNotes);  // Called automatically whenever ANY note changes
+});
+
+// 5. SYNC with Atlas (built-in replication)
+const replicationState = replicateRxCollection({
+  collection: db.notes,
+  replicationIdentifier: 'notes-atlas-sync',
+  pull: { handler: fetchNotesFromAtlas },
+  push: { handler: pushNotesToAtlas },
+  live: false,          // not constant live — we trigger manually
+  retryTime: 10000,     // retry every 10s on failure
+});
+```
+
+---
+
+## 🏛️ Final Architecture: Local-First with Atlas Backup
+
+```mermaid
+graph TB
+    subgraph Browser["🌐 User's Browser (LOCAL — Where Most Work Happens)"]
+        UI["📱 UI Layer<br/>(Monaco Editor + Handlebars)"]
+        
+        subgraph Execution["⚡ Local Code Execution"]
+            JSRunner["🟨 JavaScript<br/>(sandboxed iframe)"]
+            TSRunner["🟦 TypeScript<br/>(browser compiler → JS)"]
+            PyRunner["🐍 Python<br/>(Pyodide WASM ~11MB)"]
+        end
+        
+        subgraph Storage["💾 Local Storage (RxDB → IndexedDB)"]
+            NotesDB["📒 Notes Collection"]
+            TrashDB["🗑️ Trash Collection"]
+            SettingsDB["⚙️ Settings"]
+            SyncQueue["📤 Sync Queue<br/>(unsynced changes)"]
+        end
+        
+        SyncEngine["🔄 Smart Sync Engine<br/>(event-driven, not live)"]
+        SW["📦 Service Worker<br/>(offline + asset caching)"]
+    end
+    
+    subgraph Cloud["☁️ Render.com (LIGHTWEIGHT — Only Essential Services)"]
+        AuthAPI["🔐 Auth Server<br/>(Login, Signup, Google OAuth,<br/>Password Reset, Email)"]
+        SyncAPI["🔄 Sync API<br/>(pull/push notes)"]
+        HeavyRunner["⚙️ Code Runner<br/>(C, C++, Java ONLY)"]
+        AIProxy["🤖 Gemini AI Proxy<br/>(API key hidden)"]
+        ShareAPI["🤝 Sharing/Collab API"]
+        AdminAPI["👑 Admin Panel"]
+    end
+    
+    subgraph Atlas["🗄️ MongoDB Atlas (BACKUP + SOURCE OF TRUTH)"]
+        NotesBackup["📒 Notes (backup)"]
+        UsersDB["👤 Users"]
+        SharedDB["🤝 Shared Notes"]
+        SystemDB["📊 System Logs/Config"]
+    end
+    
+    UI --> JSRunner & TSRunner & PyRunner
+    UI --> NotesDB
+    NotesDB --> SyncEngine
+    SyncEngine -->|"Event-driven push"| SyncAPI
+    SyncAPI --> NotesBackup
+    UI -->|"C/C++/Java code"| HeavyRunner
+    UI -->|"Login/Auth"| AuthAPI
+    AuthAPI --> UsersDB
+    UI -->|"AI requests"| AIProxy
+    UI -->|"Share/Collab"| ShareAPI
+    ShareAPI --> SharedDB
+```
+
+---
+
+## 📋 What Runs Where (Final Breakdown)
+
+### ✅ Runs Locally in Browser
+
+| Feature | Technology | Speed Gain |
+|---------|-----------|------------|
+| JavaScript execution | Sandboxed `<iframe>` with `postMessage` API | 300ms → **< 5ms** |
+| TypeScript execution | TypeScript compiler loaded from CDN → transpile → run as JS | 500ms → **< 20ms** |
+| Python execution | Pyodide (CPython compiled to WASM) | 1000ms → **50-200ms** |
+| Note CRUD (create, read, update, delete) | RxDB → IndexedDB | 200ms → **< 5ms** |
+| Folder management | RxDB → IndexedDB | 200ms → **< 5ms** |
+| Trash & Restore | RxDB → IndexedDB | 200ms → **< 5ms** |
+| User settings | RxDB → IndexedDB (or localStorage for tiny items) | 100ms → **< 1ms** |
+| Search notes | RxDB full-text queries on IndexedDB | 300ms → **< 10ms** |
+| Offline mode | Service Worker + RxDB | ❌ → **✅ Full** |
+
+### ☁️ Stays on Render.com Server (Current Setup Unchanged)
+
+| Feature | Why It Can't Be Local |
+|---------|----------------------|
+| **C execution** (`gcc`) | GCC compiler is ~200MB+ — impossible to load in browser |
+| **C++ execution** (`g++`) | Same as C — G++ is too massive for WASM |
+| **Java execution** (`javac` + `java`) | JDK is ~300MB+ — far too heavy for browser |
+| **User authentication** | Passwords, OAuth secrets must stay on a trusted server |
+| **Google OAuth** | Google requires server-side callback URL + client secret |
+| **Email (nodemailer)** | SMTP credentials must be server-side |
+| **Gemini AI Service** | API key must be hidden from browser (security) |
+| **Note sharing/collaboration** | Central server needed to mediate between users |
+| **Admin panel** | Server-side admin operations with elevated permissions |
+| **Cron jobs** | Background cleanup tasks need always-on server |
+
+---
+
+## 🗂️ Data Flow: The Lazy-Load + Backup Strategy
+
+You specified: *"Only required data in local. If user hasn't opened the data, fetch it and store locally. If local already has it, use local."*
+
+Here's exactly how that works:
+
+### On Login (First Time on This Device)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Browser as Browser (RxDB)
+    participant Server as Render + Atlas
+
+    User->>Browser: Opens app, logs in
+    Browser->>Server: POST /api/auth/login
+    Server-->>Browser: ✅ Auth token + user profile
+    Browser->>Server: GET /api/sync/manifest
+    Note right of Server: Returns lightweight list:<br/>[ {id, title, folder, updatedAt} ]<br/>NOT full content!
+    Server-->>Browser: Note manifest (titles + metadata only)
+    Browser->>Browser: Store manifest in RxDB<br/>(sidebar shows all note titles)
+    Note over Browser: Full note content is NOT<br/>downloaded yet — lazy!
+```
+
+### When User Opens a Specific Note
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant RxDB as RxDB (Local)
+    participant Server as Atlas (Cloud)
+
+    User->>RxDB: Opens "My Python Notes"
+    RxDB->>RxDB: Check: do I have full content?
+    
+    alt Content exists locally
+        RxDB-->>User: ✅ Show from local (instant, < 5ms)
+        RxDB->>Server: Background: check if cloud version is newer
+        alt Cloud is newer
+            Server-->>RxDB: Download updated content
+            RxDB->>RxDB: Merge changes
+            RxDB-->>User: ✅ Auto-refresh UI (RxDB reactive!)
+        end
+    else Content NOT in local
+        RxDB->>Server: GET /api/sync/note/:id (fetch full content)
+        Server-->>RxDB: Full note content
+        RxDB->>RxDB: Store in IndexedDB
+        RxDB-->>User: ✅ Show note
+    end
+```
+
+### When User Saves/Edits a Note
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant RxDB as RxDB (Local)
+    participant Sync as Sync Engine
+    participant Atlas as Atlas (Cloud)
+
+    User->>RxDB: Edits note (types, adds cell, etc.)
+    RxDB->>RxDB: ✅ Saved to IndexedDB (instant, < 5ms)
+    RxDB->>Sync: Notify: "note-123 changed"
+    
+    Note over Sync: Debounce 10 seconds<br/>(wait for user to stop typing)
+    
+    Sync->>Sync: User stopped typing for 10s
+    
+    alt Online
+        Sync->>Atlas: POST /api/sync/push {note-123}
+        Atlas-->>Sync: ✅ Backed up
+    else Offline
+        Sync->>Sync: Add to sync queue
+        Note over Sync: Will retry when online
+    end
+```
+
+---
+
+## 🔄 Multi-Device Conflict Resolution
+
+Since you want multi-device support, two devices could edit the same note. Here's how we handle it:
+
+### Conflict Strategy: "Last Write Wins" + "Merge When Possible"
+
+```mermaid
+graph TD
+    A["User edits on Phone<br/>updatedAt: 10:30 AM"] -->|"Syncs to Atlas"| C["Atlas<br/>updatedAt: 10:30 AM"]
+    B["User edits on Laptop<br/>updatedAt: 10:32 AM"] -->|"Syncs to Atlas"| D{"Conflict?"}
+    C --> D
+    
+    D -->|"Different fields changed<br/>(title on phone, content on laptop)"| E["✅ Auto-merge both changes"]
+    D -->|"Same field changed"| F["⚠️ Last-write-wins<br/>(laptop version kept,<br/>phone version archived)"]
+    F --> G["📋 Conflict log shown to user<br/>'A version from your phone was replaced'"]
+```
+
+**RxDB has built-in conflict handling** — this is one of the reasons we chose it. We configure a custom conflict handler:
+
+```javascript
+// Conceptual — RxDB conflict handler
+const conflictHandler = (input) => {
+  const { newDocumentState, realMasterState, currentForkState } = input;
+  
+  // If the conflict is on different fields, merge them
+  // If the conflict is on the same field, keep the newer timestamp
+  // Archive the losing version in a "conflict_history" collection
+  
+  return {
+    isEqual: false,
+    documentData: resolvedVersion
+  };
+};
+```
+
+---
+
+## 🔧 Detailed Implementation Phases (Using RxDB)
+
+### Phase 1: Set Up RxDB + Note Storage Locally
+**Goal**: Replace MongoDB-based note CRUD with local RxDB, keep Atlas as backup
+
+#### Files to create/modify:
+
+| Action | File | Purpose |
+|--------|------|---------|
+| **[NEW]** | `public/js/db/database.js` | RxDB database initialization + schemas |
+| **[NEW]** | `public/js/db/collections.js` | Note, Trash, Settings collection definitions |
+| **[NEW]** | `public/js/db/syncEngine.js` | Event-driven sync engine (push/pull to Atlas) |
+| **[NEW]** | `public/js/db/conflictHandler.js` | Multi-device conflict resolution logic |
+| **[MODIFY]** | `public/js/notebook.js` | Replace `fetch('/api/notebooks/...')` with RxDB calls |
+| **[NEW]** | `routes/syncRoutes.js` | New server endpoints: `/api/sync/manifest`, `/api/sync/push`, `/api/sync/pull` |
+| **[MODIFY]** | `app.js` | Add sync routes, keep auth + C/C++/Java routes |
+
+#### RxDB Schema Design:
+
+```javascript
+// Notes Collection
+const noteSchema = {
+  title: 'note',
+  version: 0,
+  primaryKey: 'id',
+  type: 'object',
+  properties: {
+    id:           { type: 'string', maxLength: 100 },
+    title:        { type: 'string', default: 'Untitled' },
+    isStarred:    { type: 'boolean', default: false },
+    isTrashed:    { type: 'boolean', default: false },
+    content:      { type: 'object' },                 // Mixed content (cells array)
+    folder:       { type: 'string', default: 'root' },
+    owner:        { type: 'string', maxLength: 100 },
+    updatedAt:    { type: 'number' },                 // Unix timestamp
+    trashedAt:    { type: ['number', 'null'] },
+    _deleted:     { type: 'boolean', default: false }, // Soft delete for replication
+    _syncStatus:  { type: 'string', default: 'synced' } // 'synced' | 'pending' | 'conflict'
+  },
+  required: ['id', 'owner'],
+  indexes: ['folder', 'updatedAt', 'owner']
+};
+
+// Trashed Cells Collection
+const trashedCellSchema = {
+  title: 'trashedcell',
+  version: 0,
+  primaryKey: 'id',
+  type: 'object',
+  properties: {
+    id:           { type: 'string', maxLength: 100 },
+    noteId:       { type: 'string' },
+    cellType:     { type: 'string' },
+    content:      { type: 'string' },
+    language:     { type: 'string' },
+    trashedAt:    { type: 'number' }
+  },
+  required: ['id', 'noteId']
+};
+
+// Sync Queue (tracks what needs to be pushed to Atlas)
+const syncQueueSchema = {
+  title: 'syncqueue',
+  version: 0,
+  primaryKey: 'id',
+  type: 'object',
+  properties: {
+    id:           { type: 'string', maxLength: 100 },
+    action:       { type: 'string' },    // 'CREATE' | 'UPDATE' | 'DELETE'
+    entityType:   { type: 'string' },    // 'note' | 'trashedCell'
+    entityId:     { type: 'string' },
+    timestamp:    { type: 'number' },
+    retryCount:   { type: 'number', default: 0 }
+  },
+  required: ['id', 'action', 'entityId']
+};
+```
+
+---
+
+### Phase 2: Browser-Side Code Execution Engine
+**Goal**: Run JS, TS, Python locally. C/C++/Java stay on server (unchanged).
+
+#### Files to create/modify:
+
+| Action | File | Purpose |
+|--------|------|---------|
+| **[NEW]** | `public/js/engine/browserEngine.js` | Main client-side execution router |
+| **[NEW]** | `public/js/engine/jsRunner.js` | Sandboxed JavaScript execution in iframe |
+| **[NEW]** | `public/js/engine/tsRunner.js` | TypeScript compiler + JS runner |
+| **[NEW]** | `public/js/engine/pyodideRunner.js` | Python via Pyodide WASM |
+| **[MODIFY]** | `public/js/notebook.js` | Route execute calls to local engine, fallback to server |
+| **[KEEP]** | `engine/AntigravityEngine.js` | Unchanged — still runs C/C++/Java on server |
+
+#### Execution Flow:
+
+```javascript
+// public/js/engine/browserEngine.js — Conceptual
+class BrowserEngine {
+  async execute(code, lang) {
+    switch (lang.toLowerCase()) {
+      case 'javascript': case 'js':
+        return this.jsRunner.run(code);          // 100% local
+        
+      case 'typescript': case 'ts':
+        return this.tsRunner.run(code);          // 100% local
+        
+      case 'python': case 'py':
+        return this.pyodideRunner.run(code);     // 100% local (WASM)
+        
+      case 'c': case 'cpp': case 'c++': case 'java':
+        return this.serverRunner.run(code, lang); // Server — unchanged!
+    }
+  }
+}
+
+// The server runner is just the current fetch call — nothing changes for C/C++/Java
+class ServerRunner {
+  async run(code, lang) {
+    const res = await fetch('/api/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, lang })
+    });
+    return res.json();
+  }
+}
+```
+
+#### JavaScript Sandboxing (Security):
+
+```javascript
+// We DON'T use eval() directly — that's dangerous
+// Instead, we use a sandboxed iframe with postMessage
+
+class JSRunner {
+  constructor() {
+    // Create an invisible, sandboxed iframe
+    this.iframe = document.createElement('iframe');
+    this.iframe.sandbox = 'allow-scripts';  // No DOM access, no network, no storage
+    this.iframe.style.display = 'none';
+    document.body.appendChild(this.iframe);
+  }
+
+  run(code) {
+    return new Promise((resolve) => {
+      // Send code to iframe via postMessage
+      // Iframe runs it in isolation
+      // Iframe sends results back via postMessage
+      // We capture console.log, errors, return values
+    });
+  }
+}
+```
+
+---
+
+### Phase 3: Enhanced Offline + Service Worker
+**Goal**: Full offline functionality with unsynced-changes indicator
+
+#### Files to create/modify:
+
+| Action | File | Purpose |
+|--------|------|---------|
+| **[MODIFY]** | `public/sw.js` | Cache RxDB lib, Pyodide WASM, TypeScript compiler |
+| **[MODIFY]** | `public/js/pwa.js` | Online/offline status indicator + unsynced badge |
+| **[NEW]** | `public/js/offlineManager.js` | Manage offline queue, show warnings |
+
+#### Unsynced Changes Warning (UI):
+
+```
+┌─────────────────────────────────────────┐
+│ 📒 Zoho Notes                    🔴 3   │ ← "3 unsynced changes"
+│                                  unsynced│
+│  When user hovers/clicks:               │
+│  ┌─────────────────────────────────┐    │
+│  │ ⚠️ 3 notes haven't been backed │    │
+│  │ up to the cloud yet.           │    │
+│  │                                │    │
+│  │ • "Python Basics" — 2 min ago  │    │
+│  │ • "JS Arrays" — 5 min ago     │    │
+│  │ • "React Notes" — 12 min ago  │    │
+│  │                                │    │
+│  │ [Sync Now]     [Dismiss]      │    │
+│  └─────────────────────────────────┘    │
+└─────────────────────────────────────────┘
+```
+
+---
+
+### Phase 4: Slim Down Server + Add Sync API
+**Goal**: Remove redundant server endpoints, add sync endpoints
+
+#### Server Endpoint Changes:
+
+```diff
+ # KEEP (unchanged)
+ POST   /api/auth/login
+ POST   /api/auth/signup  
+ GET    /auth/google
+ GET    /auth/google/callback
+ POST   /api/execute          ← Now only receives C, C++, Java
+ POST   /api/feedback
+ GET    /api/feedback
+ POST   /api/share/*
+ GET    /api/share/*
+ GET    /admin/*
+ POST   /api/ai/*
+
+ # NEW (sync endpoints)
++GET    /api/sync/manifest    ← Returns {id, title, folder, updatedAt} for all user notes
++POST   /api/sync/push        ← Receives changed notes from client → saves to Atlas
++POST   /api/sync/pull        ← Client requests specific notes by ID → returns full content
++POST   /api/sync/resolve     ← Handles conflict resolution for multi-device
+
+ # REMOVE (now handled by RxDB locally)
+-GET    /api/notebooks
+-GET    /api/notebooks/:id
+-POST   /api/notebooks
+-DELETE /api/notebooks/:id
+-PUT    /api/notebooks/:id/rename
+-POST   /api/notebooks/move-cell
+-GET    /api/trash
+-POST   /api/cells/trash
+-POST   /api/trash/restore-cell/:id
+-DELETE /api/trash/cell/:id
+-POST   /api/trash/restore/:id
+-DELETE /api/trash/:id
+-PUT    /api/folders/rename
+-DELETE /api/folders/:id
+-DELETE /api/trash-all
+```
+
+---
+
+### Phase 5: Data Migration (Existing Users)
+**Goal**: Smoothly transition existing MongoDB users to local-first
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant NewApp as New App (v2)
+    participant RxDB as RxDB (Local)
+    participant Atlas as MongoDB Atlas
+
+    User->>NewApp: First login after update
+    NewApp->>NewApp: Check: is RxDB empty?
+    
+    alt First time (migration needed)
+        NewApp->>Atlas: GET /api/sync/manifest
+        Atlas-->>NewApp: All note metadata
+        NewApp->>RxDB: Store metadata (titles, folders)
+        NewApp-->>User: ✅ Sidebar loads instantly
+        Note over NewApp: Full content loaded lazily<br/>when user opens each note
+    else Already migrated
+        NewApp->>RxDB: Load from local
+        NewApp-->>User: ✅ Instant load
+        NewApp->>Atlas: Background: check for updates
+    end
+```
+
+---
+
+## 🚨 Things We Almost Missed (Added)
+
+### 1. Auth Token Management for Offline
+
+When the user is offline, their session/JWT token might expire. We need:
+
+```javascript
+// On login, store the auth token in RxDB with expiry
+await db.settings.upsert({
+  key: 'authToken',
+  value: token,
+  expiresAt: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+});
+
+// On app open:
+// 1. If token exists and not expired → allow offline access to local data
+// 2. If token expired + offline → show read-only mode with "Login when online" message
+// 3. If token expired + online → redirect to login
+```
+
+### 2. Storage Quota Management
+
+Browsers limit IndexedDB storage. We need to monitor it:
+
+```javascript
+// Check available storage
+const estimate = await navigator.storage.estimate();
+const usedMB = (estimate.usage / 1024 / 1024).toFixed(2);
+const totalMB = (estimate.quota / 1024 / 1024).toFixed(2);
+const percentUsed = ((estimate.usage / estimate.quota) * 100).toFixed(1);
+
+// If usage > 80%, warn user and offer to clear old trashed notes
+if (percentUsed > 80) {
+  showWarning(`Storage ${percentUsed}% full. Consider emptying trash.`);
+}
+```
+
+### 3. Preparing for Future Live Collaborative Coding
+
+Your future live-collab feature will need:
+- **WebSocket server** on Render for real-time communication
+- **CRDT or OT algorithm** for conflict-free simultaneous editing
+- **RxDB's reactive `.$.subscribe()`** to update UI when remote changes arrive
+
+RxDB's reactive architecture makes this much easier to add later. When you build it:
+
+```javascript
+// Future: Live collab will look like this with RxDB
+db.notes.findOne('shared-note-123').$.subscribe(note => {
+  // This fires automatically when ANYONE (local or remote) changes the note
+  editor.setValue(note.content);
+});
+```
+
+### 4. Version History (Undo Across Sessions)
+
+Since notes are the core product, we should keep a lightweight version history:
+
+```javascript
+const versionSchema = {
+  title: 'noteversion',
+  version: 0,
+  primaryKey: 'id',
+  type: 'object',
+  properties: {
+    id:        { type: 'string', maxLength: 100 },
+    noteId:    { type: 'string' },
+    content:   { type: 'object' },
+    timestamp: { type: 'number' },
+    source:    { type: 'string' }  // 'local' | 'sync' | 'conflict-resolution'
+  }
+};
+
+// Keep last 10 versions per note locally
+// Keep last 50 versions per note on Atlas
+```
+
+### 5. Pyodide Loading Strategy
+
+The 11MB Pyodide download should be **lazy-loaded** (only when user first runs Python):
+
+```javascript
+// DON'T load Pyodide on page load — waste of bandwidth
+// DO load it on first Python execution
+
+class PyodideRunner {
+  constructor() {
+    this.pyodide = null;
+    this.loading = false;
+  }
+
+  async run(code) {
+    if (!this.pyodide) {
+      // Show loading indicator: "Loading Python runtime (~11MB, first time only)..."
+      this.pyodide = await loadPyodide({
+        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/'
+      });
+    }
+    
+    // Redirect stdout to capture console output
+    this.pyodide.runPython(`
+      import sys, io
+      sys.stdout = io.StringIO()
+    `);
+    
+    const result = await this.pyodide.runPythonAsync(code);
+    const stdout = this.pyodide.runPython('sys.stdout.getvalue()');
+    
+    return { success: true, logs: stdout.split('\n'), result };
+  }
+}
+```
+
+### 6. What If User Logs In on a New Device?
+
+```
+New Device Login Flow:
+1. User logs in → server authenticates
+2. App checks: RxDB is empty (new device)
+3. Fetch manifest from Atlas (note titles, folders, metadata)
+4. Show sidebar immediately (titles only)
+5. User clicks a note → fetch full content from Atlas → store in RxDB
+6. From now on, that note is local-first on this device too
+7. Background: gradually pre-fetch recently edited notes
+```
+
+### 7. Browser Compatibility
+
+| Browser | IndexedDB | WASM | Service Worker | RxDB | Status |
+|---------|-----------|------|----------------|------|--------|
+| Chrome 80+ | ✅ | ✅ | ✅ | ✅ | **Full support** |
+| Firefox 78+ | ✅ | ✅ | ✅ | ✅ | **Full support** |
+| Safari 15.4+ | ✅ | ✅ | ✅ | ✅ | **Full support** |
+| Edge 80+ | ✅ | ✅ | ✅ | ✅ | **Full support** |
+| IE 11 | ❌ | ❌ | ❌ | ❌ | **Not supported** (dead browser) |
+
+> [!NOTE]
+> Safari has a **7-day cap on IndexedDB** for non-PWA websites. If the user doesn't visit for 7 days, Safari may delete the local data. **Solution**: Prompt users to "Install as PWA" on Safari — installed PWAs have no storage limit.
+
+---
+
+## 📊 Final Cost & Performance Summary
+
+| Metric | Before (All Cloud) | After (Local-First + Atlas Backup) |
+|--------|-------------------|-------------------------------------|
+| **Render usage** | Handles everything 24/7 | Only auth + sync + C/Java + AI (80% less load) |
+| **Monthly cost** | Free (with limitations) | Free (even more headroom) |
+| **Note save** | 200-500ms (network) | **< 5ms** (local IndexedDB) |
+| **Note load** | 200-500ms (network) | **< 5ms** (local) or 200ms (first fetch from Atlas) |
+| **JS execution** | 300-1000ms | **< 5ms** |
+| **Python execution** | 500-2000ms | **50-200ms** (Pyodide) |
+| **C/C++/Java execution** | 500-2000ms | 500-2000ms (unchanged, still server) |
+| **Offline** | ❌ Dead | ✅ Full (except C/Java + AI) |
+| **Multi-device** | ✅ (Atlas) | ✅ (Atlas backup + sync) |
+| **Data safety** | Server only | **Local + Atlas** (double safety) |
+
+---
+
+## ⚠️ Remaining Open Questions
+
+> [!IMPORTANT]
+> 1. **Should we keep the current Handlebars (server-rendered) views, or move to a client-side SPA framework (React/Vue)?** The local-first approach works best with a client-side SPA. Currently your views are server-rendered `.hbs` files. We can make it work with Handlebars, but a future SPA migration would be much cleaner for RxDB's reactive features.
+
+> [!IMPORTANT]
+> 2. **For the live collaborative coding feature (future) — do you envision Google Docs-style real-time cursors, or is it more like Git-style "pull latest changes"?** This affects whether we need WebSockets + CRDT now or can add it later.
+
+3. **Should we implement RxDB encryption for notes stored in IndexedDB?** It's free with RxDB but adds slight overhead. Useful if users store sensitive code/notes.
+
+4. **Do you want a "version history" feature for notes?** (Ability to see and restore previous versions of a note.) It's easy to add with RxDB but adds storage usage.
+
+## Verification Plan
+
+### Automated Tests
+- RxDB CRUD operations: create, read, update, delete notes locally
+- Sync engine: push/pull with mock server, offline queue, conflict resolution
+- BrowserEngine: JS/TS/Python execution correctness
+- Offline mode: service worker caching, data availability
+
+### Manual Verification  
+- **Crash test**: Open app → edit note → force-kill browser process → reopen → verify note is intact
+- **Offline test**: Disconnect internet → create/edit notes → reconnect → verify sync to Atlas
+- **Multi-device test**: Edit on device A → check device B → verify latest version appears
+- **Migration test**: Existing user with MongoDB notes → update app → verify all notes appear locally
+- **Storage test**: Create 100+ notes → verify IndexedDB performance stays fast

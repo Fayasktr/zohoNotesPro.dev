@@ -31,6 +31,7 @@ const SystemConfig = require('./models/SystemConfig');
 // Routes
 const adminRoutes = require('./routes/adminRoutes');
 const gameRoutes = require('./routes/gameRoutes');
+const syncRoutes = require('./routes/syncRoutes');
 const cronService = require('./services/cronService');
 
 // Start Cron Jobs
@@ -377,6 +378,7 @@ const isAuthenticated = (req, res, next) => {
 // Admin Routes (MVC)
 app.use('/admin', adminRoutes);
 app.use('/', gameRoutes);
+app.use('/api/sync', isAuthenticated, syncRoutes);
 
 // SEO: Dynamic XML Sitemap Route
 app.get('/sitemap.xml', (req, res) => {

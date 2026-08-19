@@ -1,0 +1,597 @@
+/**
+ * Zoho Notes Pro - Client-Side Polyglot Browser Execution Engine
+ * 
+ * Execution Matrix:
+ * - JavaScript  -> 100% Local (True Web Worker Sandbox + Infinite Loop Killer + Async Serializer)
+ * - TypeScript  -> 100% Local (In-Browser TS Transpiler -> Web Worker Sandbox)
+ * - Python      -> 100% Local (Pyodide WebAssembly ~11MB, Lazy-Loaded & Cached)
+ * - C, C++, Java -> Secure Cloud Execution (Render.com via /api/execute)
+ */
+
+(function (window) {
+    'use strict';
+
+    // Inline Web Worker Sandbox Code Template
+    const WORKER_SANDBOX_SOURCE = `
+        self.serialize = function(obj, depth, seen) {
+            depth = depth !== undefined ? depth : 5;
+            seen = seen || new WeakSet();
+            if (obj === undefined) return 'undefined';
+            if (obj === null) return 'null';
+            if (typeof obj === 'string') return obj;
+            if (typeof obj === 'boolean' || typeof obj === 'number' || typeof obj === 'bigint') return String(obj);
+            if (depth < 0) return '[...]';
+            if (typeof obj === 'object' && obj !== null) {
+                if (seen.has(obj)) return '[Circular]';
+                seen.add(obj);
+            }
+            if (typeof obj === 'function') return '[Function: ' + (obj.name || 'anonymous') + ']';
+            if (obj instanceof Error || (obj && obj.message && obj.stack)) {
+                return obj.stack || (obj.name || 'Error') + ': ' + obj.message;
+            }
+            if (Array.isArray(obj)) {
+                var parts = [];
+                for (var i = 0; i < obj.length; i++) {
+                    parts.push(self.serialize(obj[i], depth - 1, seen));
+                }
+                return '[' + parts.join(', ') + ']';
+            }
+            try {
+                if (typeof obj === 'object') {
+                    var entries = Object.entries(obj);
+                    if (entries.length === 0) return '{}';
+                    var content = entries.map(function(pair) {
+                        return pair[0] + ': ' + self.serialize(pair[1], depth - 1, seen);
+                    }).join(', ');
+                    return '{ ' + content + ' }';
+                }
+                return String(obj);
+            } catch(e) {
+                return String(obj);
+            }
+        };
+
+        const customConsole = {
+            log: function() {
+                var args = Array.prototype.slice.call(arguments);
+                self.postMessage({ type: 'log', log: args.map(function(a){ return self.serialize(a); }).join(' ') });
+            },
+            error: function() {
+                var args = Array.prototype.slice.call(arguments);
+                self.postMessage({ type: 'log', log: 'ERROR: ' + args.map(function(a){ return self.serialize(a); }).join(' ') });
+            },
+            warn: function() {
+                var args = Array.prototype.slice.call(arguments);
+                self.postMessage({ type: 'log', log: 'WARN: ' + args.map(function(a){ return self.serialize(a); }).join(' ') });
+            },
+            info: function() {
+                var args = Array.prototype.slice.call(arguments);
+                self.postMessage({ type: 'log', log: 'INFO: ' + args.map(function(a){ return self.serialize(a); }).join(' ') });
+            },
+            dir: function(arg) {
+                self.postMessage({ type: 'log', log: self.serialize(arg, 3) });
+            },
+            table: function(arg) {
+                try {
+                    self.postMessage({ type: 'log', log: JSON.stringify(arg, null, 2) });
+                } catch(e) {
+                    self.postMessage({ type: 'log', log: self.serialize(arg) });
+                }
+            }
+        };
+
+        self.console = customConsole;
+
+        self.onmessage = async function(e) {
+            var code = e.data.code;
+            try {
+                var AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+                var fn = new AsyncFunction('console', '"use strict";\\n' + code);
+                var result = await fn(customConsole);
+                self.postMessage({
+                    type: 'done',
+                    success: true,
+                    result: self.serialize(result),
+                    error: null
+                });
+            } catch(err) {
+                self.postMessage({
+                    type: 'done',
+                    success: false,
+                    result: null,
+                    error: err.message || String(err)
+                });
+            }
+        };
+    `;
+
+    class BrowserExecutionEngine {
+        constructor() {
+            this.timeoutMs = 5000;
+            this.pyodide = null;
+            this.isPyodideLoading = false;
+            this.pyodideLoadPromise = null;
+            this.tsLoaded = false;
+            this.workerBlobUrl = null;
+        }
+
+        /**
+         * Main Execution Entry Point
+         * @param {string} code - Source code to execute
+         * @param {string} lang - Language (javascript, typescript, python, c, cpp, java)
+         * @param {object} contextExtension - Optional global context
+         * @returns {Promise<{success: boolean, result: any, logs: string[], error: string|null, durationMs: number}>}
+         */
+        async execute(code, lang = 'javascript', contextExtension = {}) {
+            const normalizedLang = (lang || 'javascript').toLowerCase().trim();
+            const startTime = performance.now();
+
+            let response;
+            switch (normalizedLang) {
+                case 'javascript':
+                case 'js':
+                    response = await this.executeJS(code, contextExtension);
+                    break;
+
+                case 'typescript':
+                case 'ts':
+                    response = await this.executeTS(code, contextExtension);
+                    break;
+
+                case 'python':
+                case 'py':
+                    response = await this.executePython(code);
+                    break;
+
+                case 'c':
+                case 'cpp':
+                case 'c++':
+                case 'java':
+                    response = await this.executeOnServer(code, normalizedLang);
+                    break;
+
+                default:
+                    response = {
+                        success: false,
+                        result: null,
+                        logs: [],
+                        error: `Unsupported language runtime: ${lang}`
+                    };
+            }
+
+            const endTime = performance.now();
+            response.durationMs = Math.round(endTime - startTime);
+            return response;
+        }
+
+        // =========================================================================
+        // 1. JAVASCRIPT RUNNER (Web Worker Sandbox + Infinite Loop Protection)
+        // =========================================================================
+
+        getWorkerBlobUrl() {
+            if (!this.workerBlobUrl && typeof Blob !== 'undefined' && typeof URL !== 'undefined') {
+                const blob = new Blob([WORKER_SANDBOX_SOURCE], { type: 'application/javascript' });
+                this.workerBlobUrl = URL.createObjectURL(blob);
+            }
+            return this.workerBlobUrl;
+        }
+
+        async executeJS(code, contextExtension = {}) {
+            // Check if Web Workers are supported
+            if (typeof Worker !== 'undefined' && this.getWorkerBlobUrl()) {
+                return this.executeJSInWorker(code);
+            }
+            // Fallback for environments without Worker support
+            return this.executeJSFallback(code, contextExtension);
+        }
+
+        executeJSInWorker(code) {
+            return new Promise((resolve) => {
+                const logs = [];
+                let worker = null;
+                let timeoutTimer = null;
+                let isFinished = false;
+
+                try {
+                    worker = new Worker(this.getWorkerBlobUrl());
+
+                    const cleanup = () => {
+                        if (timeoutTimer) {
+                            clearTimeout(timeoutTimer);
+                            timeoutTimer = null;
+                        }
+                        if (worker) {
+                            worker.terminate();
+                            worker = null;
+                        }
+                    };
+
+                    // Strict 5s Timeout Guard (terminates infinite loops without freezing the UI)
+                    timeoutTimer = setTimeout(() => {
+                        if (!isFinished) {
+                            isFinished = true;
+                            cleanup();
+                            resolve({
+                                success: false,
+                                result: null,
+                                logs,
+                                error: 'Execution timed out (5s limit). Infinite loop terminated safely.'
+                            });
+                        }
+                    }, this.timeoutMs);
+
+                    worker.onmessage = (e) => {
+                        const data = e.data;
+                        if (!data) return;
+
+                        if (data.type === 'log') {
+                            logs.push(data.log);
+                        } else if (data.type === 'done') {
+                            if (!isFinished) {
+                                isFinished = true;
+                                cleanup();
+                                resolve({
+                                    success: data.success,
+                                    result: data.result,
+                                    logs,
+                                    error: data.error
+                                });
+                            }
+                        }
+                    };
+
+                    worker.onerror = (err) => {
+                        if (!isFinished) {
+                            isFinished = true;
+                            cleanup();
+                            resolve({
+                                success: false,
+                                result: null,
+                                logs,
+                                error: err.message || 'Worker runtime error'
+                            });
+                        }
+                    };
+
+                    worker.postMessage({ code });
+                } catch (err) {
+                    if (timeoutTimer) clearTimeout(timeoutTimer);
+                    if (worker) worker.terminate();
+                    resolve({
+                        success: false,
+                        result: null,
+                        logs,
+                        error: err.message || String(err)
+                    });
+                }
+            });
+        }
+
+        async executeJSFallback(code, contextExtension = {}) {
+            const logs = [];
+            const customConsole = {
+                log: (...args) => logs.push(args.map(a => this.serialize(a)).join(' ')),
+                error: (...args) => logs.push(`ERROR: ${args.map(a => this.serialize(a)).join(' ')}`),
+                warn: (...args) => logs.push(`WARN: ${args.map(a => this.serialize(a)).join(' ')}`),
+                info: (...args) => logs.push(`INFO: ${args.map(a => this.serialize(a)).join(' ')}`),
+                dir: (arg) => logs.push(this.serialize(arg, 3)),
+                table: (arg) => {
+                    try {
+                        logs.push(JSON.stringify(arg, null, 2));
+                    } catch (e) {
+                        logs.push(this.serialize(arg));
+                    }
+                }
+            };
+
+            try {
+                const sandbox = {
+                    console: customConsole,
+                    Math: window.Math,
+                    Date: window.Date,
+                    JSON: window.JSON,
+                    Array: window.Array,
+                    Object: window.Object,
+                    String: window.String,
+                    Number: window.Number,
+                    Boolean: window.Boolean,
+                    RegExp: window.RegExp,
+                    Map: window.Map,
+                    Set: window.Set,
+                    ...contextExtension
+                };
+
+                const paramNames = Object.keys(sandbox);
+                const paramValues = Object.values(sandbox);
+
+                const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
+                const userFunc = new AsyncFunction(...paramNames, `"use strict";\n${code}`);
+
+                const execPromise = userFunc(...paramValues);
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Execution timed out (5s limit)')), this.timeoutMs)
+                );
+
+                const result = await Promise.race([execPromise, timeoutPromise]);
+
+                return {
+                    success: true,
+                    result: this.serialize(result),
+                    logs,
+                    error: null
+                };
+            } catch (err) {
+                return {
+                    success: false,
+                    result: null,
+                    logs,
+                    error: err.message || String(err)
+                };
+            }
+        }
+
+        // =========================================================================
+        // 2. TYPESCRIPT RUNNER (In-Browser Transpile -> Web Worker Sandbox)
+        // =========================================================================
+
+        async executeTS(code, contextExtension = {}) {
+            try {
+                if (!this.tsLoaded && (typeof window.ts === 'undefined' || !window.ts.transpileModule)) {
+                    this.showToast('⚡ Loading TypeScript compiler...', 'info');
+                    await this.loadScript('https://cdnjs.cloudflare.com/ajax/libs/typescript/5.3.3/typescript.min.js');
+                    this.tsLoaded = true;
+                }
+
+                if (typeof window.ts === 'undefined' || !window.ts.transpileModule) {
+                    throw new Error('TypeScript compiler failed to load.');
+                }
+
+                const transpileResult = window.ts.transpileModule(code, {
+                    compilerOptions: {
+                        module: window.ts.ModuleKind.ESNext,
+                        target: window.ts.ScriptTarget.ES2022,
+                        jsx: window.ts.JsxEmit.None,
+                        removeComments: false,
+                        alwaysStrict: true
+                    }
+                });
+
+                return await this.executeJS(transpileResult.outputText, contextExtension);
+            } catch (err) {
+                return {
+                    success: false,
+                    result: null,
+                    logs: [],
+                    error: `TypeScript Compilation Error: ${err.message}`
+                };
+            }
+        }
+
+        // =========================================================================
+        // 3. PYTHON RUNNER (Pyodide WebAssembly)
+        // =========================================================================
+
+        async executePython(code) {
+            const logs = [];
+
+            try {
+                if (!this.pyodide) {
+                    this.showToast('⚡ Loading Python WASM runtime (~11MB, cached after first load)...', 'info');
+                    await this.loadPyodide();
+                }
+
+                if (!this.pyodide) {
+                    throw new Error('Failed to initialize Pyodide WebAssembly runtime.');
+                }
+
+                this.pyodide.setStdout({
+                    batched: (text) => {
+                        if (text && text.trim()) logs.push(text);
+                    }
+                });
+
+                this.pyodide.setStderr({
+                    batched: (text) => {
+                        if (text && text.trim()) logs.push(`STDERR: ${text}`);
+                    }
+                });
+
+                const result = await this.pyodide.runPythonAsync(code);
+
+                return {
+                    success: true,
+                    result: result !== undefined && result !== null ? String(result) : null,
+                    logs,
+                    error: null
+                };
+            } catch (err) {
+                let errorMsg = err.message || String(err);
+                if (errorMsg.includes('PythonError:')) {
+                    const lines = errorMsg.split('\n');
+                    errorMsg = lines.slice(-2).join('\n');
+                }
+
+                return {
+                    success: false,
+                    result: null,
+                    logs,
+                    error: errorMsg
+                };
+            }
+        }
+
+        async loadPyodide() {
+            if (this.pyodideLoadPromise) return this.pyodideLoadPromise;
+
+            this.pyodideLoadPromise = new Promise(async (resolve, reject) => {
+                try {
+                    if (typeof window.loadPyodide !== 'function') {
+                        await this.loadScript('https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js');
+                    }
+
+                    console.log('[BrowserEngine] Initializing Pyodide WASM...');
+                    this.pyodide = await window.loadPyodide({
+                        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/'
+                    });
+                    console.log('[BrowserEngine] Pyodide WASM initialized successfully');
+                    this.showToast('✅ Python WASM runtime is ready!', 'success');
+                    resolve(this.pyodide);
+                } catch (err) {
+                    console.error('[BrowserEngine] Failed to load Pyodide WASM', err);
+                    this.showToast('❌ Failed to load Python WASM runtime. Check internet.', 'error');
+                    this.pyodideLoadPromise = null;
+                    reject(err);
+                }
+            });
+
+            return this.pyodideLoadPromise;
+        }
+
+        // =========================================================================
+        // 4. SERVER RUNNER (C, C++, Java Fallback)
+        // =========================================================================
+
+        async executeOnServer(code, lang) {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+            try {
+                const res = await window.fetch('/api/execute', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ code, lang })
+                });
+
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error || `Server execution failed (${res.status})`);
+                }
+
+                return {
+                    success: data.success !== false,
+                    result: data.result || null,
+                    logs: data.logs || [],
+                    error: data.error || null
+                };
+            } catch (err) {
+                return {
+                    success: false,
+                    result: null,
+                    logs: [],
+                    error: `Cloud Execution Error: ${err.message}`
+                };
+            }
+        }
+
+        // =========================================================================
+        // 5. PRE-WARM OFFLINE RUNTIMES (Pyodide WASM + TypeScript)
+        // =========================================================================
+
+        async prewarm() {
+            this.showToast('⚡ Pre-warming offline runtimes (TS + Python WASM)...', 'info');
+            try {
+                // Preload TS
+                if (typeof window.ts === 'undefined') {
+                    await this.loadScript('https://cdnjs.cloudflare.com/ajax/libs/typescript/5.3.3/typescript.min.js');
+                    this.tsLoaded = true;
+                }
+                // Preload Pyodide WASM
+                if (!this.pyodide) {
+                    await this.loadPyodide();
+                }
+                this.showToast('🎉 All offline runtimes (JS, TS, Python WASM) are cached & ready!', 'success');
+                return true;
+            } catch (err) {
+                this.showToast(`Pre-warm notice: ${err.message}`, 'error');
+                return false;
+            }
+        }
+
+        // =========================================================================
+        // UTILITIES: Object Serializer & Loader
+        // =========================================================================
+
+        serialize(obj, depth = 5, seen = new WeakSet()) {
+            if (obj === undefined) return 'undefined';
+            if (obj === null) return 'null';
+            if (typeof obj === 'string') return obj;
+            if (typeof obj === 'boolean' || typeof obj === 'number' || typeof obj === 'bigint') return String(obj);
+
+            if (depth < 0) return '[...]';
+            if (typeof obj === 'object' && obj !== null) {
+                if (seen.has(obj)) return '[Circular]';
+                seen.add(obj);
+            }
+
+            if (typeof obj === 'function') return `[Function: ${obj.name || 'anonymous'}]`;
+
+            if (obj instanceof Error || (obj && obj.message && obj.stack)) {
+                return obj.stack || `${obj.name || 'Error'}: ${obj.message}`;
+            }
+
+            if (obj && typeof obj.then === 'function') return '[Promise]';
+
+            if (Array.isArray(obj)) {
+                let parts = [];
+                for (let i = 0; i < obj.length; i++) {
+                    parts.push(this.serialize(obj[i], depth - 1, seen));
+                }
+                return `[${parts.join(', ')}]`;
+            }
+
+            try {
+                if (typeof obj === 'object') {
+                    const entries = Object.entries(obj);
+                    if (entries.length === 0) return '{}';
+                    const content = entries
+                        .map(([k, v]) => `${k}: ${this.serialize(v, depth - 1, seen)}`)
+                        .join(', ');
+                    return `{ ${content} }`;
+                }
+                return String(obj);
+            } catch (e) {
+                return String(obj);
+            }
+        }
+
+        loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const existing = document.querySelector(`script[src="${src}"]`);
+                if (existing) {
+                    return resolve();
+                }
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = () => resolve();
+                script.onerror = (e) => reject(new Error(`Failed to load external script: ${src}`));
+                document.head.appendChild(script);
+            });
+        }
+
+        showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            if (!toast) return;
+            const titleEl = document.getElementById('toast-title');
+            const msgEl = document.getElementById('toast-message');
+            const iconEl = document.getElementById('toast-icon');
+
+            if (titleEl) titleEl.innerText = type === 'error' ? 'Error' : (type === 'success' ? 'Ready' : 'Runtime');
+            if (msgEl) msgEl.innerText = message;
+            if (iconEl) {
+                iconEl.className = `w-10 h-10 rounded-full flex items-center justify-center ${type === 'error' ? 'bg-red-500/20 text-red-400' : 'bg-indigo-500/20 text-indigo-400'}`;
+            }
+
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-24', 'opacity-0');
+            }, 3500);
+        }
+    }
+
+    // Export singleton
+    window.ZohoBrowserEngine = new BrowserExecutionEngine();
+})(window);

@@ -28,6 +28,10 @@ class NotebookApp {
         this.userSettings = window.USER_SETTINGS || { defaultLanguage: 'javascript' };
         this._autoSave = debounce(() => this.saveToBackend(), 1500);
 
+        this.db = window.ZohoLocalDB;
+        this.sync = window.ZohoSyncEngine;
+        this.engine = window.ZohoBrowserEngine;
+
         this.currentPendingFolder = 'root';
         this.modalHistoryPushed = false;
         this.setupTheme();
@@ -119,7 +123,19 @@ class NotebookApp {
     }
 
     async init() {
-        const notebooks = await this.refreshNotebookList();
+        if (this.db) await this.db.init();
+        if (this.sync) await this.sync.init();
+
+        // Listen for reactive updates from background sync
+        if (this.db && this.db.notes$) {
+            this.db.notes$.subscribe((change) => {
+                if (change && change.isRemoteSync) {
+                    this.refreshNotebookList(false);
+                }
+            });
+        }
+
+        const notebooks = await this.refreshNotebookList(true);
 
         const savedId = localStorage.getItem('zoho-notebook-current-id');
         if (savedId) {
@@ -665,10 +681,27 @@ class NotebookApp {
     }
 
 
-    async refreshNotebookList() {
+    async refreshNotebookList(fetchRemote = false) {
         try {
-            const res = await this.safeFetch('/api/notebooks');
-            const list = await res.json();
+            let list = [];
+            if (this.db) {
+                list = await this.db.getAllNotes();
+            }
+
+            // If remote fetch requested, sync manifest from Atlas to discover new/updated notes from other devices
+            if (fetchRemote && this.sync) {
+                await this.sync.syncManifest();
+                if (this.db) list = await this.db.getAllNotes();
+            }
+
+            // Fallback to server endpoint if local is still empty
+            if (list.length === 0 && fetchRemote) {
+                const res = await this.safeFetch('/api/notebooks');
+                if (res.ok) {
+                    list = await res.json();
+                }
+            }
+
             this.allNotebooks = list;
             this.filteredNotebooks = list;
             this.renderNotebookList(list);
@@ -839,9 +872,24 @@ class NotebookApp {
 
     async loadNotebook(id, targetCellId = null) {
         try {
-            const res = await this.safeFetch(`/api/notebooks/${id}`);
-            if (!res.ok) throw new Error('Not found');
-            const data = await res.json();
+            let data = null;
+
+            if (this.db) {
+                data = await this.db.getNote(id);
+                // If data does not have full cells content yet (lazy loading), pull from Atlas
+                if (!data || !data._hasFullContent || !data.cells || data.cells.length === 0) {
+                    if (this.sync) {
+                        data = await this.sync.pullNote(id);
+                    }
+                }
+            }
+
+            if (!data) {
+                const res = await this.safeFetch(`/api/notebooks/${id}`);
+                if (!res.ok) throw new Error('Not found');
+                data = await res.json();
+                if (this.db) await this.db.putNote(data, { isRemoteSync: true });
+            }
 
             this.disposeEditors();
             this.notebook = data;
@@ -852,7 +900,7 @@ class NotebookApp {
 
             this.setActiveNotebookUI(id);
 
-            if (this.notebook.cells.length === 0) {
+            if (!this.notebook.cells || this.notebook.cells.length === 0) {
                 this.addCell('code');
             } else {
                 this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
@@ -1292,39 +1340,18 @@ class NotebookApp {
         this.currentRunningCellId = cellId;
 
         try {
-            // 1. Local execution for JS logs
-            if (cell.lang === 'javascript' || !cell.lang) {
-                try {
-                    const wrappedCode = `(function() {\n${code}\n})()`;
-                    const result = eval(wrappedCode);
-                    if (result !== undefined) {
-                        console.log(result);
-                    }
-                } catch (e) {
-                    console.log('Execution Error:', e.message);
-                }
-            }
-
-            // 2. Server execution for formal results
-            const response = await this.safeFetch('/api/execute', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code, lang: cell.lang || 'javascript' })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                // Handle specific JSON errors from backend
-                if (data.code === 'AUTH_EXPIRED') {
-                    alert('Session expired. Please refresh and login again.');
-                    return;
-                }
-                if (data.code === 'CSRF_ERROR') {
-                    alert('Security token mismatch. Please refresh the page.');
-                    return;
-                }
-                throw new Error(data.error || 'Execution failed');
+            let data;
+            if (this.engine) {
+                // Execute via Polyglot Browser Engine (Local JS/TS/Python WASM, Cloud for C/C++/Java)
+                data = await this.engine.execute(code, cell.lang || 'javascript');
+            } else {
+                // Fallback to direct server execution
+                const response = await this.safeFetch('/api/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code, lang: cell.lang || 'javascript' })
+                });
+                data = await response.json();
             }
 
             cell.output = data;
@@ -1341,10 +1368,9 @@ class NotebookApp {
                 runBtn.innerText = 'Run';
                 runBtn.disabled = false;
             }
-            // Keep currentRunningCellId for a short while longer to catch late async logs
             setTimeout(() => {
                 if (this.currentRunningCellId === cellId) this.currentRunningCellId = null;
-            }, 5000);
+            }, 1000);
         }
     }
 
@@ -1506,14 +1532,26 @@ class NotebookApp {
             const [cell] = this.notebook.cells.splice(cellIndex, 1);
 
             try {
-                await this.safeFetch('/api/cells/trash', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        notebookId: this.notebook.id,
-                        cell: cell
-                    })
-                });
+                if (this.db) {
+                    await this.db.addTrashedCell({
+                        id: cell.id,
+                        noteId: this.notebook.id,
+                        cellType: cell.type,
+                        content: cell.content || '',
+                        language: cell.lang || 'javascript'
+                    });
+                    await this.db.putNote(this.notebook);
+                    if (this.sync) this.sync.notifyLocalChange(this.notebook.id, 'UPDATE');
+                } else {
+                    await this.safeFetch('/api/cells/trash', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            notebookId: this.notebook.id,
+                            cell: cell
+                        })
+                    });
+                }
 
                 if (this.editors[cellId]) {
                     this.editors[cellId].dispose();
@@ -1523,11 +1561,10 @@ class NotebookApp {
                 // Re-render to update sequence numbers
                 this.disposeEditors();
                 document.getElementById('cells-list').innerHTML = '';
-                this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
+                this.notebook.cells.forEach((c, idx) => this.renderCell(c, idx + 1));
                 this._autoSave();
             } catch (err) {
                 console.error('Delete cell failed', err);
-                // Restore cell if failed
                 this.notebook.cells.splice(cellIndex, 0, cell);
                 alert('Failed to delete note');
             }
@@ -1537,15 +1574,19 @@ class NotebookApp {
     async deleteNotebook(id) {
         this.confirmAction('Move to Trash?', 'This notebook will be moved to the trash.', async () => {
             try {
-                const res = await this.safeFetch(`/api/notebooks/${id}`, { method: 'DELETE' });
-                if (res.ok) {
-                    const savedId = localStorage.getItem('zoho-notebook-current-id');
-                    if (savedId === id) {
-                        localStorage.removeItem('zoho-notebook-current-id');
-                        await this.init(); // Re-initialize to load next available or new note
-                    } else {
-                        await this.refreshNotebookList();
-                    }
+                if (this.db) {
+                    await this.db.trashNote(id);
+                    if (this.sync) this.sync.notifyLocalChange(id, 'TRASH');
+                } else {
+                    await this.safeFetch(`/api/notebooks/${id}`, { method: 'DELETE' });
+                }
+
+                const savedId = localStorage.getItem('zoho-notebook-current-id');
+                if (savedId === id) {
+                    localStorage.removeItem('zoho-notebook-current-id');
+                    await this.init(); // Re-initialize to load next available or new note
+                } else {
+                    await this.refreshNotebookList();
                 }
             } catch (e) {
                 console.error('Move to trash failed', e);
@@ -1557,18 +1598,26 @@ class NotebookApp {
         this.inputAction('Rename Notebook', 'Enter a new title for this notebook:', oldTitle, async (newTitle) => {
             if (!newTitle) return;
             try {
-                const res = await this.safeFetch(`/api/notebooks/${id}/rename`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: newTitle })
-                });
-                if (res.ok) {
-                    if (this.notebook.id === id) {
-                        this.notebook.title = newTitle;
-                        document.getElementById('notebook-title').value = newTitle;
+                if (this.db) {
+                    const note = await this.db.getNote(id);
+                    if (note) {
+                        note.title = newTitle;
+                        await this.db.putNote(note);
+                        if (this.sync) this.sync.notifyLocalChange(id, 'UPDATE');
                     }
-                    await this.refreshNotebookList();
+                } else {
+                    await this.safeFetch(`/api/notebooks/${id}/rename`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: newTitle })
+                    });
                 }
+
+                if (this.notebook.id === id) {
+                    this.notebook.title = newTitle;
+                    document.getElementById('notebook-title').value = newTitle;
+                }
+                await this.refreshNotebookList();
             } catch (e) {
                 console.error('Rename failed', e);
             }
@@ -1693,19 +1742,33 @@ class NotebookApp {
             if (!newBaseName || newBaseName === oldBaseName) return;
             const newPath = parentPath ? `${parentPath}/${newBaseName}` : newBaseName;
             try {
-                const res = await this.safeFetch('/api/folders/rename', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ oldName: oldPath, newName: newPath })
-                });
-                if (res.ok) {
-                    if (this.notebook.folder === oldPath) {
-                        this.notebook.folder = newPath;
-                    } else if (this.notebook.folder.startsWith(oldPath + '/')) {
-                        this.notebook.folder = newPath + this.notebook.folder.slice(oldPath.length);
+                if (this.db) {
+                    const allNotes = await this.db.getAllNotes();
+                    for (const n of allNotes) {
+                        if (n.folder === oldPath) {
+                            n.folder = newPath;
+                            await this.db.putNote(n);
+                            if (this.sync) this.sync.notifyLocalChange(n.id, 'UPDATE');
+                        } else if (n.folder && n.folder.startsWith(oldPath + '/')) {
+                            n.folder = newPath + n.folder.slice(oldPath.length);
+                            await this.db.putNote(n);
+                            if (this.sync) this.sync.notifyLocalChange(n.id, 'UPDATE');
+                        }
                     }
-                    await this.refreshNotebookList();
+                } else {
+                    await this.safeFetch('/api/folders/rename', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ oldName: oldPath, newName: newPath })
+                    });
                 }
+
+                if (this.notebook.folder === oldPath) {
+                    this.notebook.folder = newPath;
+                } else if (this.notebook.folder && this.notebook.folder.startsWith(oldPath + '/')) {
+                    this.notebook.folder = newPath + this.notebook.folder.slice(oldPath.length);
+                }
+                await this.refreshNotebookList();
             } catch (e) {
                 console.error('Folder rename failed', e);
             }
@@ -1715,14 +1778,23 @@ class NotebookApp {
     async deleteFolder(folderName) {
         this.confirmAction('Delete Folder?', `Move all notebooks in "${folderName}" to trash?`, async () => {
             try {
-                const res = await this.safeFetch(`/api/folders/${folderName}`, { method: 'DELETE' });
-                if (res.ok) {
-                    if (this.notebook.folder === folderName) {
-                        localStorage.removeItem('zoho-notebook-current-id');
-                        await this.init();
-                    } else {
-                        await this.refreshNotebookList();
+                if (this.db) {
+                    const allNotes = await this.db.getAllNotes();
+                    for (const n of allNotes) {
+                        if (n.folder === folderName || (n.folder && n.folder.startsWith(folderName + '/'))) {
+                            await this.db.trashNote(n.id);
+                            if (this.sync) this.sync.notifyLocalChange(n.id, 'TRASH');
+                        }
                     }
+                } else {
+                    await this.safeFetch(`/api/folders/${folderName}`, { method: 'DELETE' });
+                }
+
+                if (this.notebook.folder === folderName) {
+                    localStorage.removeItem('zoho-notebook-current-id');
+                    await this.init();
+                } else {
+                    await this.refreshNotebookList();
                 }
             } catch (e) {
                 console.error('Folder delete failed', e);
@@ -1732,9 +1804,14 @@ class NotebookApp {
 
     async loadTrash() {
         try {
-            const res = await this.safeFetch('/api/trash');
-            if (!res.ok) throw new Error('Failed to fetch trash');
-            const data = await res.json();
+            let data;
+            if (this.db) {
+                data = await this.db.getTrash();
+            } else {
+                const res = await this.safeFetch('/api/trash');
+                if (!res.ok) throw new Error('Failed to fetch trash');
+                data = await res.json();
+            }
             this.renderTrashView(data);
         } catch (e) {
             console.error('Failed to load trash list', e);
@@ -1812,7 +1889,7 @@ class NotebookApp {
                     </div>
                     <div style="flex: 1;">
                         <div style="font-weight: 600;">${cell.title || 'Untitled Note'}</div>
-                        <div style="font-size: 11px; color: var(--text-dim);">Type: Note • Original: ${cell.originalNotebookTitle}</div>
+                        <div style="font-size: 11px; color: var(--text-dim);">Type: Note • Original: ${cell.originalNotebookTitle || 'Note'}</div>
                     </div>
                     <div style="display: flex; gap: 10px;">
                         <button class="btn-icon btn-restore-cell" data-id="${cell.id}" title="Restore">
@@ -1864,18 +1941,39 @@ class NotebookApp {
 
     async restoreCell(id) {
         try {
-            const res = await this.safeFetch(`/api/trash/restore-cell/${id}`, { method: 'POST' });
-            if (res.ok) {
-                const data = await res.json();
-                // If it's the current notebook, reload it
-                if (this.notebook.id === data.notebookId) {
-                    await this.loadNotebook(data.notebookId);
+            if (this.db) {
+                const trash = await this.db.getTrash();
+                const cell = trash.cells.find(c => c.id === id);
+                if (cell) {
+                    const note = await this.db.getNote(cell.noteId);
+                    if (note) {
+                        note.cells = note.cells || [];
+                        note.cells.push({
+                            id: cell.id,
+                            type: cell.cellType,
+                            content: cell.content,
+                            lang: cell.language
+                        });
+                        await this.db.putNote(note);
+                        await this.db.deleteTrashedCell(id);
+                        if (this.sync) this.sync.notifyLocalChange(note.id, 'UPDATE');
+                    }
+                }
+                if (this.notebook.id === cell?.noteId) {
+                    await this.loadNotebook(cell.noteId);
                 } else {
                     await this.loadTrash();
                 }
             } else {
-                const data = await res.json();
-                alert(data.error || 'Failed to restore cell');
+                const res = await this.safeFetch(`/api/trash/restore-cell/${id}`, { method: 'POST' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (this.notebook.id === data.notebookId) {
+                        await this.loadNotebook(data.notebookId);
+                    } else {
+                        await this.loadTrash();
+                    }
+                }
             }
         } catch (e) {
             console.error('Restore failed', e);
@@ -1884,10 +1982,12 @@ class NotebookApp {
 
     async deleteCellPermanently(id) {
         try {
-            const res = await this.safeFetch(`/api/trash/cell/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                await this.loadTrash();
+            if (this.db) {
+                await this.db.deleteTrashedCell(id);
+            } else {
+                await this.safeFetch(`/api/trash/cell/${id}`, { method: 'DELETE' });
             }
+            await this.loadTrash();
         } catch (e) {
             console.error('Permanent delete failed', e);
         }
@@ -1895,11 +1995,14 @@ class NotebookApp {
 
     async restoreNotebook(id) {
         try {
-            const res = await this.safeFetch(`/api/trash/restore/${id}`, { method: 'POST' });
-            if (res.ok) {
-                await this.refreshNotebookList();
-                await this.loadTrash();
+            if (this.db) {
+                await this.db.restoreNote(id);
+                if (this.sync) this.sync.notifyLocalChange(id, 'UPDATE');
+            } else {
+                await this.safeFetch(`/api/trash/restore/${id}`, { method: 'POST' });
             }
+            await this.refreshNotebookList();
+            await this.loadTrash();
         } catch (e) {
             console.error('Restore failed', e);
         }
@@ -1907,10 +2010,13 @@ class NotebookApp {
 
     async deletePermanently(id) {
         try {
-            const res = await this.safeFetch(`/api/trash/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                await this.loadTrash();
+            if (this.db) {
+                await this.db.permanentlyDeleteNote(id);
+                if (this.sync) this.sync.notifyLocalChange(id, 'DELETE');
+            } else {
+                await this.safeFetch(`/api/trash/${id}`, { method: 'DELETE' });
             }
+            await this.loadTrash();
         } catch (e) {
             console.error('Permanent delete failed', e);
         }
@@ -1919,10 +2025,13 @@ class NotebookApp {
     async emptyTrash() {
         this.confirmAction('Empty Trash?', 'Are you sure you want to empty the trash? This action cannot be undone.', async () => {
             try {
-                const res = await this.safeFetch('/api/trash-all', { method: 'DELETE' });
-                if (res.ok) {
-                    await this.loadTrash();
+                if (this.db) {
+                    await this.db.clearAllTrash();
+                    if (this.sync) this.sync.syncNow({ immediate: true });
+                } else {
+                    await this.safeFetch('/api/trash-all', { method: 'DELETE' });
                 }
+                await this.loadTrash();
             } catch (e) {
                 console.error('Empty trash failed', e);
             }
@@ -1931,37 +2040,52 @@ class NotebookApp {
 
     async saveToBackend() {
         try {
-            const res = await this.safeFetch('/api/notebooks', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(this.notebook)
-            });
-            if (res.ok) {
-                localStorage.setItem('zoho-notebook-current-id', this.notebook.id);
+            if (this.db) {
+                await this.db.putNote(this.notebook);
+                if (this.sync) {
+                    this.sync.notifyLocalChange(this.notebook.id, 'UPDATE');
+                }
+            } else {
+                await this.safeFetch('/api/notebooks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.notebook)
+                });
             }
+            localStorage.setItem('zoho-notebook-current-id', this.notebook.id);
         } catch (e) {
             console.error('Save failed', e);
         }
     }
+
     async loadStarredNotes() {
         try {
-            const res = await this.safeFetch('/api/notebooks');
-            const notebooks = await res.json();
-            const starredCells = [];
-
-            // Fetch full content for all notebooks to find starred cells
-            // Better would be a backend endpoint, but we can do it client-side for now
-            // since notebooks are small usually.
-            await Promise.all(notebooks.map(async (nb) => {
-                const fullRes = await this.safeFetch(`/api/notebooks/${nb.id}`);
-                const fullNb = await fullRes.json();
-                const cells = fullNb.cells || [];
-                cells.forEach(cell => {
-                    if (cell.isStarred) {
-                        starredCells.push({ ...cell, notebookTitle: fullNb.title, notebookId: fullNb.id });
+            let starredCells = [];
+            if (this.db) {
+                const notes = await this.db.getStarredNotes();
+                notes.forEach(nb => {
+                    if (nb.cells) {
+                        nb.cells.forEach(cell => {
+                            if (cell.isStarred) {
+                                starredCells.push({ ...cell, notebookTitle: nb.title, notebookId: nb.id });
+                            }
+                        });
                     }
                 });
-            }));
+            } else {
+                const res = await this.safeFetch('/api/notebooks');
+                const notebooks = await res.json();
+                await Promise.all(notebooks.map(async (nb) => {
+                    const fullRes = await this.safeFetch(`/api/notebooks/${nb.id}`);
+                    const fullNb = await fullRes.json();
+                    const cells = fullNb.cells || [];
+                    cells.forEach(cell => {
+                        if (cell.isStarred) {
+                            starredCells.push({ ...cell, notebookTitle: fullNb.title, notebookId: fullNb.id });
+                        }
+                    });
+                }));
+            }
 
             this.renderStarredView(starredCells);
         } catch (e) {
@@ -1997,7 +2121,7 @@ class NotebookApp {
                         <span class="cell-title-input" style="flex: 1; border: none;">${cell.title || 'Untitled'}</span>
                          <div class="cell-actions">
                              <button class="btn-icon btn-goto-notebook" data-id="${cell.notebookId}" data-cell-id="${cell.id}" title="Go to Note Phase">
-                                <i data-lucide="external-link"></i>
+                                 <i data-lucide="external-link"></i>
                              </button>
                         </div>
                     </div>
