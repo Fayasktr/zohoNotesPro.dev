@@ -43,5 +43,6 @@ yarn-error.log*
 Thumbs.db
 desktop.ini
 
-
-implementation_plan_for_cluodeToWasm.md
+implementation_plan_for_cluodeToWasm*
+implementation_plan*
+scratch/
