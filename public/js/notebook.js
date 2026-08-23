@@ -1093,11 +1093,25 @@ class NotebookApp {
                     <button class="btn-icon btn-star-cell" title="Star Note">
                         <i data-lucide="star" ${cell.isStarred ? 'style="fill: #ffcc00; color: #ffcc00;"' : ''}></i>
                     </button>
-                    ${!isMark ? `<button class="btn-run" id="run-${cell.id}">Run</button>` : ''}
+                    ${!isMark ? `
+                    <button class="btn-icon btn-toggle-stdin ${cell.stdin || cell.showStdin ? 'active' : ''}" id="stdin-btn-${cell.id}" title="Toggle Terminal Input (stdin / scanf / cin)">
+                        <i data-lucide="terminal" style="width: 14px;"></i>
+                    </button>
+                    <button class="btn-run" id="run-${cell.id}">Run</button>
+                    ` : ''}
                     <button class="btn-icon delete-cell" title="Delete Note"><i data-lucide="trash-2"></i></button>
                 </div>
             </div>
             <div class="editor-container" id="editor-${cell.id}"></div>
+            ${!isMark ? `
+            <div class="cell-stdin-container ${cell.stdin || cell.showStdin ? '' : 'hidden'}" id="stdin-container-${cell.id}">
+                <div class="stdin-header">
+                    <span class="stdin-label"><i data-lucide="terminal" style="width: 12px; height: 12px; margin-right: 4px; vertical-align: -1px;"></i> Terminal Input (stdin / scanf / cin)</span>
+                    <span class="stdin-hint">Values passed to standard input</span>
+                </div>
+                <textarea class="cell-stdin-input" id="stdin-input-${cell.id}" placeholder="Enter input values for scanf / cin / input() (e.g. 10 20)...">${cell.stdin || ''}</textarea>
+            </div>
+            ` : ''}
             ${isMark ? `<div class="markdown-preview hidden" id="preview-${cell.id}"></div>` : ''}
             <div class="output-container ${cell.output ? '' : 'hidden'}" id="output-${cell.id}"></div>
         `;
@@ -1344,6 +1358,29 @@ class NotebookApp {
                         this._autoSave();
                     });
                 }
+
+                // Terminal Input (stdin) Toggle and Input Listeners
+                const stdinBtn = cellElem.querySelector(`#stdin-btn-${cell.id}`);
+                const stdinContainer = cellElem.querySelector(`#stdin-container-${cell.id}`);
+                const stdinInput = cellElem.querySelector(`#stdin-input-${cell.id}`);
+
+                if (stdinBtn && stdinContainer) {
+                    stdinBtn.onclick = () => {
+                        const isHidden = stdinContainer.classList.toggle('hidden');
+                        stdinBtn.classList.toggle('active', !isHidden);
+                        cell.showStdin = !isHidden;
+                        if (!isHidden && stdinInput) stdinInput.focus();
+                        this._autoSave();
+                    };
+                }
+
+                if (stdinInput) {
+                    stdinInput.oninput = (e) => {
+                        cell.stdin = e.target.value;
+                        if (stdinBtn) stdinBtn.classList.toggle('active', !!e.target.value.trim());
+                        this._autoSave();
+                    };
+                }
             }
         });
     }
@@ -1367,18 +1404,22 @@ class NotebookApp {
 
         this.currentRunningCellId = cellId;
 
+        // Retrieve stdin input from cell or textarea
+        const stdinInputElem = document.getElementById(`stdin-input-${cellId}`);
+        const stdin = cell.stdin !== undefined ? cell.stdin : (stdinInputElem ? stdinInputElem.value : '');
+
         try {
             let data;
             const activeEngine = this.engine || window.ZohoBrowserEngine;
             if (activeEngine) {
-                // Execute via Polyglot Browser Engine (Local JS/TS/Python WASM, Cloud for C/C++/Java)
-                data = await activeEngine.execute(code, cell.lang || 'javascript');
+                // Execute via Polyglot Browser Engine (Local JS/TS/Python WASM, Cloud for C/C++/Java with stdin)
+                data = await activeEngine.execute(code, cell.lang || 'javascript', { stdin });
             } else {
                 // Fallback to direct server execution
                 const response = await this.safeFetch('/api/execute', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code, lang: cell.lang || 'javascript' })
+                    body: JSON.stringify({ code, lang: cell.lang || 'javascript', stdin })
                 });
                 data = await response.json();
             }

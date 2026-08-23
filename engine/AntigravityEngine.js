@@ -1,21 +1,29 @@
 const vm = require('node:vm');
 const crypto = require('crypto');
-const { exec } = require('child_process');
+const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
 class AntigravityEngine {
     constructor() {
-        this.timeout = 5000;
+        this.timeout = 8000; // 8 seconds timeout for compilation + execution
         this.tempDir = path.join(os.tmpdir(), 'antigravity_exec');
         if (!fs.existsSync(this.tempDir)) {
             fs.mkdirSync(this.tempDir, { recursive: true });
         }
     }
 
-    async execute(code, lang = 'javascript', contextExtension = {}) {
+    /**
+     * Main execution dispatcher supporting interactive stdin
+     * @param {string} code 
+     * @param {string} lang 
+     * @param {Object} options { stdin: string, args: Array, contextExtension: Object }
+     */
+    async execute(code, lang = 'javascript', options = {}) {
         const resultId = crypto.randomUUID();
+        const stdin = typeof options === 'string' ? options : (options?.stdin || '');
+        const contextExtension = options?.contextExtension || {};
 
         switch (lang.toLowerCase()) {
             case 'javascript':
@@ -26,14 +34,14 @@ class AntigravityEngine {
                 return this._executeTS(code, contextExtension);
             case 'python':
             case 'py':
-                return this._executeExternal(code, 'python3', 'py');
+                return this._executePython(code, stdin);
             case 'c':
-                return this._executeC(code);
+                return this._executeC(code, stdin);
             case 'cpp':
             case 'c++':
-                return this._executeCpp(code);
+                return this._executeCpp(code, stdin);
             case 'java':
-                return this._executeJava(code);
+                return this._executeJava(code, stdin);
             default:
                 return { id: resultId, success: false, error: `Unsupported language: ${lang}` };
         }
@@ -86,8 +94,6 @@ class AntigravityEngine {
             clearTimeout: (id) => {
                 if (id) {
                     clearTimeout(id);
-                    // Note: This is an edge case where we might decrement twice if the timer already fired.
-                    // But taskFinished() uses Math.max(0) to stay safe.
                     taskFinished();
                 }
             },
@@ -146,117 +152,171 @@ class AntigravityEngine {
         }
     }
 
-    async _executeExternal(code, command, ext) {
-        const id = crypto.randomUUID();
-        const filePath = path.join(this.tempDir, `${id}.${ext}`);
-        fs.writeFileSync(filePath, code);
-
+    /**
+     * Helper to spawn a process and pipe standard input (stdin)
+     */
+    _runBinaryWithStdin(binaryPath, args = [], stdin = '', timeoutMs = 6000) {
         return new Promise((resolve) => {
-            const cmd = `${command} "${filePath}"`;
-            exec(cmd, { timeout: this.timeout }, (error, stdout, stderr) => {
-                // Cleanup
-                try { fs.unlinkSync(filePath); } catch (e) { }
+            let stdout = '';
+            let stderr = '';
+            let isKilled = false;
 
-                if (error && error.killed) {
-                    return resolve({ id, success: false, error: 'Execution timed out' });
+            const child = spawn(binaryPath, args, {
+                windowsHide: true
+            });
+
+            const timer = setTimeout(() => {
+                isKilled = true;
+                try { child.kill('SIGKILL'); } catch (e) { }
+            }, timeoutMs);
+
+            if (child.stdin) {
+                if (typeof stdin === 'string' && stdin.length > 0) {
+                    child.stdin.write(stdin + (stdin.endsWith('\n') ? '' : '\n'));
+                }
+                child.stdin.end();
+            }
+
+            if (child.stdout) {
+                child.stdout.on('data', (d) => { stdout += d.toString(); });
+            }
+
+            if (child.stderr) {
+                child.stderr.on('data', (d) => { stderr += d.toString(); });
+            }
+
+            child.on('error', (err) => {
+                clearTimeout(timer);
+                resolve({
+                    success: false,
+                    logs: [],
+                    error: err.message
+                });
+            });
+
+            child.on('close', (code) => {
+                clearTimeout(timer);
+                if (isKilled) {
+                    return resolve({
+                        success: false,
+                        logs: stdout ? stdout.trim().split('\n') : [],
+                        error: 'Execution timed out. Make sure all required input values for scanf/cin/input are provided in Terminal Input.'
+                    });
                 }
 
                 const logs = stdout ? stdout.trim().split('\n') : [];
                 if (stderr) logs.push(`STDERR: ${stderr.trim()}`);
 
                 resolve({
-                    id,
-                    success: !error,
+                    success: code === 0,
                     result: null,
                     logs,
-                    error: error ? error.message : null
+                    error: code !== 0 ? (stderr ? stderr.trim() : `Process exited with code ${code}`) : null
                 });
             });
         });
     }
 
-    async _executeC(code) {
+    async _executePython(code, stdin = '') {
         const id = crypto.randomUUID();
+        const filePath = path.join(this.tempDir, `${id}.py`);
+        fs.writeFileSync(filePath, code);
+
+        const pythonCommands = process.platform === 'win32' ? ['python', 'py', 'python3'] : ['python3', 'python'];
+        let lastResult = null;
+
+        try {
+            for (const cmd of pythonCommands) {
+                const result = await this._runBinaryWithStdin(cmd, [filePath], stdin, this.timeout);
+                if (result.success || (result.error && !result.error.includes('not found') && !result.error.includes('is not recognized') && !result.error.includes('App execution aliases') && !result.error.includes('Microsoft Store'))) {
+                    return { id, ...result };
+                }
+                lastResult = result;
+            }
+            return {
+                id,
+                success: false,
+                logs: [],
+                error: lastResult?.error || 'Python runtime not found'
+            };
+        } finally {
+            try { fs.unlinkSync(filePath); } catch (e) { }
+        }
+    }
+
+    async _executeC(code, stdin = '') {
+        const id = crypto.randomUUID();
+        const isWindows = process.platform === 'win32';
         const srcPath = path.join(this.tempDir, `${id}.c`);
-        const binPath = path.join(this.tempDir, `${id}.out`);
+        const binPath = path.join(this.tempDir, isWindows ? `${id}.exe` : `${id}.out`);
         fs.writeFileSync(srcPath, code);
 
         return new Promise((resolve) => {
             const compileCmd = `gcc "${srcPath}" -o "${binPath}"`;
-            exec(compileCmd, (cError, cStdout, cStderr) => {
+            exec(compileCmd, async (cError, cStdout, cStderr) => {
                 if (cError) {
                     try { fs.unlinkSync(srcPath); } catch (e) { }
-                    return resolve({ id, success: false, error: `Compilation Error: ${cStderr || cError.message}` });
+                    return resolve({
+                        id,
+                        success: false,
+                        logs: [],
+                        error: `C Compilation Error:\n${cStderr || cError.message}`
+                    });
                 }
 
-                exec(`"${binPath}"`, { timeout: this.timeout }, (rError, rStdout, rStderr) => {
-                    // Cleanup
-                    try { fs.unlinkSync(srcPath); fs.unlinkSync(binPath); } catch (e) { }
-
-                    if (rError && rError.killed) {
-                        return resolve({ id, success: false, error: 'Execution timed out' });
-                    }
-
-                    const logs = rStdout ? rStdout.trim().split('\n') : [];
-                    if (rStderr) logs.push(`STDERR: ${rStderr.trim()}`);
-
+                try {
+                    const execResult = await this._runBinaryWithStdin(binPath, [], stdin, this.timeout);
                     resolve({
                         id,
-                        success: !rError,
-                        result: null,
-                        logs,
-                        error: rError ? rError.message : null
+                        ...execResult
                     });
-                });
+                } finally {
+                    try { fs.unlinkSync(srcPath); } catch (e) { }
+                    try { fs.unlinkSync(binPath); } catch (e) { }
+                }
             });
         });
     }
 
-    async _executeCpp(code) {
+    async _executeCpp(code, stdin = '') {
         const id = crypto.randomUUID();
+        const isWindows = process.platform === 'win32';
         const srcPath = path.join(this.tempDir, `${id}.cpp`);
-        const binPath = path.join(this.tempDir, `${id}.out`);
+        const binPath = path.join(this.tempDir, isWindows ? `${id}.exe` : `${id}.out`);
         fs.writeFileSync(srcPath, code);
 
         return new Promise((resolve) => {
             const compileCmd = `g++ "${srcPath}" -o "${binPath}"`;
-            exec(compileCmd, (cError, cStdout, cStderr) => {
+            exec(compileCmd, async (cError, cStdout, cStderr) => {
                 if (cError) {
                     try { fs.unlinkSync(srcPath); } catch (e) { }
-                    return resolve({ id, success: false, error: `Compilation Error: ${cStderr || cError.message}` });
+                    return resolve({
+                        id,
+                        success: false,
+                        logs: [],
+                        error: `C++ Compilation Error:\n${cStderr || cError.message}`
+                    });
                 }
 
-                exec(`"${binPath}"`, { timeout: this.timeout }, (rError, rStdout, rStderr) => {
-                    // Cleanup
-                    try { fs.unlinkSync(srcPath); fs.unlinkSync(binPath); } catch (e) { }
-
-                    if (rError && rError.killed) {
-                        return resolve({ id, success: false, error: 'Execution timed out' });
-                    }
-
-                    const logs = rStdout ? rStdout.trim().split('\n') : [];
-                    if (rStderr) logs.push(`STDERR: ${rStderr.trim()}`);
-
+                try {
+                    const execResult = await this._runBinaryWithStdin(binPath, [], stdin, this.timeout);
                     resolve({
                         id,
-                        success: !rError,
-                        result: null,
-                        logs,
-                        error: rError ? rError.message : null
+                        ...execResult
                     });
-                });
+                } finally {
+                    try { fs.unlinkSync(srcPath); } catch (e) { }
+                    try { fs.unlinkSync(binPath); } catch (e) { }
+                }
             });
         });
     }
 
-    async _executeJava(code) {
+    async _executeJava(code, stdin = '') {
         const id = crypto.randomUUID();
-        // Java requires filename to match public class name
-        // Java requires filename to match public class name
         const classNameMatch = code.match(/public\s+class\s+([A-Za-z0-9_$]+)/);
         const className = classNameMatch ? classNameMatch[1] : 'Main';
 
-        // Use a unique subfolder for each java execution to avoid class file conflicts
         const execDir = path.join(this.tempDir, id);
         fs.mkdirSync(execDir, { recursive: true });
 
@@ -265,31 +325,26 @@ class AntigravityEngine {
 
         return new Promise((resolve) => {
             const compileCmd = `javac "${srcPath}"`;
-            exec(compileCmd, (cError, cStdout, cStderr) => {
+            exec(compileCmd, async (cError, cStdout, cStderr) => {
                 if (cError) {
                     try { fs.rmSync(execDir, { recursive: true, force: true }); } catch (e) { }
-                    return resolve({ id, success: false, error: `Compilation Error: ${cStderr || cError.message}` });
+                    return resolve({
+                        id,
+                        success: false,
+                        logs: [],
+                        error: `Java Compilation Error:\n${cStderr || cError.message}`
+                    });
                 }
 
-                exec(`java -cp "${execDir}" ${className}`, { timeout: this.timeout }, (rError, rStdout, rStderr) => {
-                    // Cleanup
-                    try { fs.rmSync(execDir, { recursive: true, force: true }); } catch (e) { }
-
-                    if (rError && rError.killed) {
-                        return resolve({ id, success: false, error: 'Execution timed out' });
-                    }
-
-                    const logs = rStdout ? rStdout.trim().split('\n') : [];
-                    if (rStderr) logs.push(`STDERR: ${rStderr.trim()}`);
-
+                try {
+                    const execResult = await this._runBinaryWithStdin('java', ['-cp', execDir, className], stdin, this.timeout);
                     resolve({
                         id,
-                        success: !rError,
-                        result: null,
-                        logs,
-                        error: rError ? rError.message : null
+                        ...execResult
                     });
-                });
+                } finally {
+                    try { fs.rmSync(execDir, { recursive: true, force: true }); } catch (e) { }
+                }
             });
         });
     }

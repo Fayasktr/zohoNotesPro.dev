@@ -119,35 +119,35 @@
          * Main Execution Entry Point
          * @param {string} code - Source code to execute
          * @param {string} lang - Language (javascript, typescript, python, c, cpp, java)
-         * @param {object} contextExtension - Optional global context
+         * @param {object} options - Optional execution settings (e.g. stdin)
          * @returns {Promise<{success: boolean, result: any, logs: string[], error: string|null, durationMs: number}>}
          */
-        async execute(code, lang = 'javascript', contextExtension = {}) {
-            const normalizedLang = (lang || 'javascript').toLowerCase().trim();
+        async execute(code, lang = 'javascript', options = {}) {
             const startTime = performance.now();
-
+            const normalizedLang = (lang || 'javascript').toLowerCase();
             let response;
+
             switch (normalizedLang) {
                 case 'javascript':
                 case 'js':
-                    response = await this.executeJS(code, contextExtension);
+                    response = await this.executeJS(code);
                     break;
 
                 case 'typescript':
                 case 'ts':
-                    response = await this.executeTS(code, contextExtension);
+                    response = await this.executeTS(code);
                     break;
 
                 case 'python':
                 case 'py':
-                    response = await this.executePython(code);
+                    response = await this.executePython(code, options);
                     break;
 
                 case 'c':
                 case 'cpp':
                 case 'c++':
                 case 'java':
-                    response = await this.executeOnServer(code, normalizedLang);
+                    response = await this.executeOnServer(code, normalizedLang, options);
                     break;
 
                 default:
@@ -421,8 +421,9 @@
         // 3. PYTHON RUNNER (Pyodide WebAssembly + Multi-CDN + Cloud Fallback)
         // =========================================================================
 
-        async executePython(code) {
+        async executePython(code, options = {}) {
             const logs = [];
+            const stdin = options?.stdin || '';
 
             try {
                 if (!this.pyodide) {
@@ -443,6 +444,19 @@
                         }
                     });
 
+                    if (typeof this.pyodide.setStdin === 'function') {
+                        let lines = (stdin ? stdin.split('\n') : []);
+                        let idx = 0;
+                        this.pyodide.setStdin({
+                            read: () => {
+                                if (idx < lines.length) {
+                                    return lines[idx++] + '\n';
+                                }
+                                return null;
+                            }
+                        });
+                    }
+
                     const result = await this.pyodide.runPythonAsync(code);
 
                     return {
@@ -455,10 +469,10 @@
             } catch (wasmErr) {
                 console.warn('[BrowserEngine] Local Pyodide execution failed, routing to Cloud Runner fallback:', wasmErr.message);
                 this.showToast('⚡ Executing Python via Cloud Runner (WASM fallback)...', 'info');
-                return this.executeOnServer(code, 'python');
+                return this.executeOnServer(code, 'python', options);
             }
 
-            return this.executeOnServer(code, 'python');
+            return this.executeOnServer(code, 'python', options);
         }
 
         async loadPyodide() {
@@ -510,7 +524,7 @@
         // 4. SERVER RUNNER (C, C++, Java & WASM Fallback via Cloud Runner)
         // =========================================================================
 
-        async executeOnServer(code, lang) {
+        async executeOnServer(code, lang, options = {}) {
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
             const headers = {
                 'Content-Type': 'application/json',
@@ -523,7 +537,12 @@
                     method: 'POST',
                     headers,
                     credentials: 'same-origin',
-                    body: JSON.stringify({ code, lang })
+                    body: JSON.stringify({
+                        code,
+                        lang,
+                        stdin: options?.stdin || '',
+                        args: options?.args || []
+                    })
                 });
 
                 const data = await res.json();

@@ -724,9 +724,9 @@ app.post('/api/user/settings', isAuthenticated, async (req, res) => {
 });
 
 app.post('/api/execute', isAuthenticated, async (req, res) => {
-    const { code, lang } = req.body;
+    const { code, lang, stdin, args } = req.body;
     try {
-        const result = await engine.execute(code, lang);
+        const result = await engine.execute(code, lang, { stdin: stdin || '', args: args || [] });
         res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });

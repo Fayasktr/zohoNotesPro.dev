@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zoho-notes-v7-localfirst';
+const CACHE_NAME = 'zoho-notes-v8-localfirst';
 const OFFLINE_URL = '/offline.html';
 
 // Static Shell & Local-First Engine Assets to Pre-cache
