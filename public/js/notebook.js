@@ -876,8 +876,8 @@ class NotebookApp {
 
             if (this.db) {
                 data = await this.db.getNote(id);
-                // If data does not have full cells content yet (lazy loading), pull from Atlas
-                if (!data || !data._hasFullContent || !data.cells || data.cells.length === 0) {
+                // If data is missing locally and we are online, try pulling from cloud
+                if ((!data || !data._hasFullContent || !data.cells) && navigator.onLine) {
                     if (this.sync) {
                         data = await this.sync.pullNote(id);
                     }
@@ -885,17 +885,22 @@ class NotebookApp {
             }
 
             if (!data) {
-                const res = await this.safeFetch(`/api/notebooks/${id}`);
-                if (!res.ok) throw new Error('Not found');
-                data = await res.json();
-                if (this.db) await this.db.putNote(data, { isRemoteSync: true });
+                if (navigator.onLine) {
+                    const res = await this.safeFetch(`/api/notebooks/${id}`);
+                    if (!res.ok) throw new Error('Not found');
+                    data = await res.json();
+                    if (this.db) await this.db.putNote(data, { isRemoteSync: true, hasFullContent: true });
+                } else {
+                    console.warn('[NotebookApp] Note not cached locally for offline viewing');
+                    return;
+                }
             }
 
             this.disposeEditors();
             this.notebook = data;
 
             document.getElementById('cells-list').innerHTML = '';
-            document.getElementById('notebook-title').value = this.notebook.title;
+            document.getElementById('notebook-title').value = this.notebook.title || 'Untitled';
             localStorage.setItem('zoho-notebook-current-id', id);
 
             this.setActiveNotebookUI(id);
@@ -919,6 +924,19 @@ class NotebookApp {
         } catch (e) {
             console.error('Failed to load notebook', e);
             localStorage.removeItem('zoho-notebook-current-id');
+        }
+    }
+
+    renderAllCells() {
+        this.disposeEditors();
+        const container = document.getElementById('cells-list');
+        if (container) {
+            container.innerHTML = '';
+            if (this.notebook && this.notebook.cells && this.notebook.cells.length > 0) {
+                this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
+            } else {
+                this.addCell('code');
+            }
         }
     }
 
@@ -2051,8 +2069,11 @@ class NotebookApp {
 
     async saveToBackend() {
         try {
+            if (!this.notebook || !this.notebook.id) return;
+            if (this.notebook.id === 'starred' || this.notebook.id === 'trash') return;
+
             if (this.db) {
-                await this.db.putNote(this.notebook);
+                await this.db.putNote(this.notebook, { hasFullContent: true });
                 if (this.sync) {
                     this.sync.notifyLocalChange(this.notebook.id, 'UPDATE');
                 }

@@ -4,8 +4,51 @@ const Note = require('../models/Note');
 const TrashedCell = require('../models/TrashedCell');
 
 /**
+ * GET /api/sync/hydrate
+ * Returns full hydration dataset (all notes with complete cells & metadata)
+ * Ensures 100% offline availability of all notes on the client without empty stubs.
+ */
+router.get('/hydrate', async (req, res) => {
+    try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const notes = await Note.find({
+            $or: [
+                { owner: userId },
+                { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }
+            ]
+        }).sort({ updatedAt: -1 }).lean();
+
+        const formatted = notes.map(n => ({
+            id: n.id,
+            title: n.title || 'Untitled Notebook',
+            folder: n.folder || 'root',
+            isStarred: !!n.isStarred,
+            isTrashed: !!n.isTrashed,
+            trashedAt: n.trashedAt ? new Date(n.trashedAt).getTime() : null,
+            cells: Array.isArray(n.content?.cells) ? n.content.cells : (Array.isArray(n.cells) ? n.cells : []),
+            tags: Array.isArray(n.content?.tags) ? n.content.tags : (Array.isArray(n.tags) ? n.tags : []),
+            updatedAt: n.updatedAt ? new Date(n.updatedAt).getTime() : Date.now(),
+            _version: typeof n._version === 'number' ? n._version : 1,
+            owner: String(n.owner)
+        }));
+
+        res.json({
+            success: true,
+            count: formatted.length,
+            serverTime: Date.now(),
+            notes: formatted
+        });
+    } catch (err) {
+        console.error('[SyncRoute] Hydrate error:', err);
+        res.status(500).json({ error: 'Failed to hydrate notes' });
+    }
+});
+
+/**
  * GET /api/sync/manifest
- * Returns lightweight manifest of notes for lazy-loading in browser RxDB/IndexedDB
+ * Returns lightweight manifest of notes with versions & timestamps
  */
 router.get('/manifest', async (req, res) => {
     try {
@@ -18,7 +61,7 @@ router.get('/manifest', async (req, res) => {
                 { owner: userId },
                 { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }
             ]
-        }, 'id title folder isStarred isTrashed trashedAt updatedAt owner').sort({ updatedAt: -1 }).lean();
+        }, 'id title folder isStarred isTrashed trashedAt updatedAt _version owner').sort({ updatedAt: -1 }).lean();
 
         const manifest = notes.map(n => ({
             id: n.id,
@@ -28,6 +71,7 @@ router.get('/manifest', async (req, res) => {
             isTrashed: !!n.isTrashed,
             trashedAt: n.trashedAt ? new Date(n.trashedAt).getTime() : null,
             updatedAt: n.updatedAt ? new Date(n.updatedAt).getTime() : Date.now(),
+            _version: typeof n._version === 'number' ? n._version : 1,
             owner: String(n.owner)
         }));
 
@@ -40,7 +84,7 @@ router.get('/manifest', async (req, res) => {
 
 /**
  * POST /api/sync/pull
- * Pulls full note content on-demand for requested note IDs (Lazy Loading)
+ * Pulls full note content on-demand for requested note IDs
  */
 router.post('/pull', async (req, res) => {
     try {
@@ -68,9 +112,10 @@ router.post('/pull', async (req, res) => {
             isTrashed: n.isTrashed,
             trashedAt: n.trashedAt,
             content: n.content || {},
-            cells: n.content?.cells || [],
-            tags: n.content?.tags || [],
-            updatedAt: n.updatedAt,
+            cells: Array.isArray(n.content?.cells) ? n.content.cells : (Array.isArray(n.cells) ? n.cells : []),
+            tags: Array.isArray(n.content?.tags) ? n.content.tags : (Array.isArray(n.tags) ? n.tags : []),
+            updatedAt: n.updatedAt ? new Date(n.updatedAt).getTime() : Date.now(),
+            _version: typeof n._version === 'number' ? n._version : 1,
             owner: String(n.owner)
         }));
 
@@ -84,6 +129,7 @@ router.post('/pull', async (req, res) => {
 /**
  * POST /api/sync/push
  * Receives batch of locally updated notes & cells from RxDB/IndexedDB and saves to MongoDB Atlas
+ * Protected with Anti-Wipeout Guards and Monotonic Versioning
  */
 router.post('/push', async (req, res) => {
     try {
@@ -123,21 +169,70 @@ router.post('/push', async (req, res) => {
                 ]
             });
 
-            const clientUpdated = new Date(note.updatedAt || Date.now());
+            const clientCells = Array.isArray(note.cells) ? note.cells : (note.content?.cells || []);
+            const existingCells = existing && existing.content && Array.isArray(existing.content.cells)
+                ? existing.content.cells
+                : (existing && Array.isArray(existing.cells) ? existing.cells : []);
 
-            // Multi-device conflict check
-            if (existing && existing.updatedAt && (existing.updatedAt.getTime() > clientUpdated.getTime() + 1000)) {
-                // Remote note is strictly newer than client's edit base
+            // 🛡️ Guard 1: Anti-Wipeout Protection
+            // Never allow an empty stub or unhydrated note from an offline client to destroy real cloud cells
+            if (existing && existingCells.length > 0 && clientCells.length === 0 && action !== 'DELETE' && !note.isTrashed) {
+                console.warn(`[SyncRoute] Anti-Wipeout Guard triggered for note ${note.id}: Rejected empty client update over existing ${existingCells.length} cells.`);
                 conflicts.push({
                     noteId: note.id,
-                    serverNote: existing.toObject(),
-                    clientVersion: note._version || 1
+                    serverNote: {
+                        id: existing.id,
+                        title: existing.title,
+                        folder: existing.folder,
+                        isStarred: existing.isStarred,
+                        isTrashed: existing.isTrashed,
+                        trashedAt: existing.trashedAt,
+                        cells: existingCells,
+                        tags: existing.content?.tags || [],
+                        updatedAt: existing.updatedAt ? new Date(existing.updatedAt).getTime() : Date.now(),
+                        _version: existing._version || 1,
+                        owner: String(existing.owner)
+                    },
+                    clientVersion: note._version || 1,
+                    reason: 'anti_wipeout_protection'
                 });
                 if (allItemQueueIds.length > 0) processedQueueIds.push(...allItemQueueIds);
                 continue;
             }
 
-            // Save / Upsert to MongoDB
+            const clientUpdated = new Date(note.updatedAt || Date.now()).getTime();
+            const serverUpdated = existing && existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+            const clientVersion = typeof note._version === 'number' ? note._version : 1;
+            const serverVersion = existing && typeof existing._version === 'number' ? existing._version : 0;
+
+            // 🛡️ Guard 2: Bi-Directional Monotonic Version & Timestamp Check
+            if (existing && (serverVersion > clientVersion || (serverVersion === clientVersion && serverUpdated > clientUpdated + 1000))) {
+                // Cloud version is strictly newer than client version
+                console.log(`[SyncRoute] Cloud version newer for note ${note.id} (Server v${serverVersion} @ ${serverUpdated} vs Client v${clientVersion} @ ${clientUpdated})`);
+                conflicts.push({
+                    noteId: note.id,
+                    serverNote: {
+                        id: existing.id,
+                        title: existing.title,
+                        folder: existing.folder,
+                        isStarred: existing.isStarred,
+                        isTrashed: existing.isTrashed,
+                        trashedAt: existing.trashedAt,
+                        cells: existingCells,
+                        tags: existing.content?.tags || [],
+                        updatedAt: serverUpdated,
+                        _version: serverVersion || 1,
+                        owner: String(existing.owner)
+                    },
+                    clientVersion: clientVersion,
+                    reason: 'server_is_newer'
+                });
+                if (allItemQueueIds.length > 0) processedQueueIds.push(...allItemQueueIds);
+                continue;
+            }
+
+            // Save / Upsert to MongoDB with next monotonic version
+            const nextVersion = Math.max(serverVersion, clientVersion) + 1;
             const updateDoc = {
                 id: note.id,
                 title: note.title || 'Untitled Notebook',
@@ -145,15 +240,16 @@ router.post('/push', async (req, res) => {
                 isStarred: !!note.isStarred,
                 isTrashed: !!note.isTrashed,
                 trashedAt: note.trashedAt ? new Date(note.trashedAt) : null,
+                _version: nextVersion,
                 content: {
                     id: note.id,
                     title: note.title || 'Untitled Notebook',
                     folder: note.folder || 'root',
                     isStarred: !!note.isStarred,
-                    cells: Array.isArray(note.cells) ? note.cells : (note.content?.cells || []),
+                    cells: clientCells,
                     tags: Array.isArray(note.tags) ? note.tags : (note.content?.tags || [])
                 },
-                updatedAt: clientUpdated
+                updatedAt: new Date(clientUpdated)
             };
 
             await Note.findOneAndUpdate(

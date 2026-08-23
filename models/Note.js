@@ -15,7 +15,8 @@ const noteSchema = new mongoose.Schema({
         joinedAt: { type: Date, default: Date.now }
     }],
     updatedAt: { type: Date, default: Date.now },
-    trashedAt: { type: Date } // Date when the note was moved to trash
+    trashedAt: { type: Date }, // Date when the note was moved to trash
+    _version: { type: Number, default: 1 } // Monotonic version vector for multi-device sync
 }, { collection: 'notes' });
 
 module.exports = mongoose.model('Note', noteSchema);

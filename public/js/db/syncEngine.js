@@ -3,10 +3,11 @@
  * Synchronizes Local RxDB/IndexedDB with MongoDB Atlas
  * 
  * Features:
- * - Lazy Loading: Fetches manifest on load, pulls full note contents on-demand
+ * - Full Local Hydration: Prefetches ALL notes with full cell content for 100% offline availability
+ * - Anti-Wipeout Protection: Prevents unhydrated or empty offline stubs from destroying cloud notes
+ * - Monotonic Versioning: Bi-directional sync comparing latest monotonic versions & timestamps
  * - Event-Driven Debounced Sync: 10s debounce on typing, immediate on blur/switch/reconnect/logout
- * - Offline Queueing: Zero data loss during disconnection or unexpected crashes
- * - Multi-Device Conflict Resolution: Automatic merging + version history archival
+ * - Multi-Device Conflict Resolution: Automatic merging + local version history archival
  * - Real-Time Status Telemetry: Broadcasts sync states to UI badge
  */
 
@@ -16,7 +17,7 @@
     class ZohoSyncEngine {
         constructor() {
             this.db = window.ZohoLocalDB;
-            this.status = 'SYNCED'; // 'SYNCED' | 'SYNCING' | 'PENDING' | 'OFFLINE'
+            this.status = 'SYNCED'; // 'SYNCED' | 'SYNCING' | 'PENDING' | 'OFFLINE' | 'AUTH_REQUIRED'
             this.lastSyncTime = null;
             this.unsyncedCount = 0;
             this.listeners = new Set();
@@ -40,7 +41,7 @@
             // Calculate current unsynced count
             await this.updateUnsyncedCount();
 
-            // Perform initial synchronization
+            // Perform initial synchronization & full hydration
             if (navigator.onLine) {
                 this.syncNow({ isInitial: true }).catch(err => {
                     console.warn('[SyncEngine] Initial sync deferred:', err);
@@ -55,13 +56,13 @@
 
         setupNetworkListeners() {
             window.addEventListener('online', () => {
-                console.log('[SyncEngine] Internet reconnected, flushing sync queue...');
+                console.log('[SyncEngine] Internet reconnected, flushing sync queue & hydrating...');
                 this.setStatus('SYNCING');
                 this.syncNow({ immediate: true });
             });
 
             window.addEventListener('offline', () => {
-                console.log('[SyncEngine] Network went offline, switching to offline-first mode.');
+                console.log('[SyncEngine] Network went offline, switching to 100% offline-first mode.');
                 this.setStatus('OFFLINE');
             });
         }
@@ -81,10 +82,9 @@
                 }
             });
 
-            // Warn user before closing tab if unsynced changes exist (though data is safe in IndexedDB)
+            // Warn user before closing tab if unsynced changes exist
             window.addEventListener('beforeunload', () => {
                 if (this.unsyncedCount > 0 && navigator.onLine) {
-                    // Trigger asynchronous beacon or fetch if needed
                     this.flushPendingSyncs();
                 }
             });
@@ -94,7 +94,7 @@
             if (this.pollTimer) clearInterval(this.pollTimer);
             this.pollTimer = setInterval(() => {
                 if (navigator.onLine && !this.isSyncing) {
-                    this.syncManifest();
+                    this.hydrateAllNotes();
                 }
             }, this.pollIntervalMs);
         }
@@ -155,7 +155,8 @@
 
             const response = await window.fetch(url, {
                 ...options,
-                headers
+                headers,
+                credentials: 'same-origin'
             });
 
             return response;
@@ -166,6 +167,14 @@
          * Enqueues the change into syncQueue and starts debounced timer.
          */
         async notifyLocalChange(noteId, action = 'UPDATE', payload = null) {
+            if (!noteId || noteId === 'starred' || noteId === 'trash') return;
+
+            // Anti-Wipeout safety: if action is UPDATE, verify note exists
+            if (action === 'UPDATE') {
+                const note = await this.db.getNote(noteId);
+                if (!note) return;
+            }
+
             await this.db.addToSyncQueue({
                 action,
                 entityType: 'note',
@@ -197,7 +206,7 @@
         }
 
         /**
-         * Full Synchronization Cycle (Push Queue -> Pull Manifest -> Update State)
+         * Full Synchronization Cycle (Push Queue -> Hydrate All Notes -> Update State)
          */
         async syncNow(options = {}) {
             if (this.isSyncing) return;
@@ -213,8 +222,8 @@
                 // Step 1: Push all pending local modifications to Atlas
                 await this.pushPendingChanges();
 
-                // Step 2: Fetch manifest from Atlas to discover new/updated notes
-                await this.syncManifest();
+                // Step 2: Full hydration - download ALL user notes with complete cell data
+                await this.hydrateAllNotes();
 
                 this.lastSyncTime = new Date();
                 await this.db.setSetting('lastAtlasSyncTime', this.lastSyncTime.toISOString());
@@ -310,7 +319,7 @@
                 }
             }
 
-            // Handle server-side conflict resolutions if any
+            // Handle server-side conflict resolutions if any (e.g. anti-wipeout or server is newer)
             if (result.conflicts && Array.isArray(result.conflicts)) {
                 for (const conf of result.conflicts) {
                     await this.handleConflict(conf);
@@ -319,72 +328,98 @@
         }
 
         /**
-         * Synchronize Note Manifest from MongoDB Atlas (Lazy Loading Index)
+         * Full Local Hydration: Fetches ALL notes with full cells from MongoDB Atlas.
+         * Guarantees 100% offline availability of all notebook contents.
          */
-        async syncManifest() {
-            const response = await this.safeFetch('/api/sync/manifest');
-            if (response.status === 401 || response.status === 403) {
-                this.setStatus('AUTH_REQUIRED');
-                return;
-            }
-            if (!response.ok) {
-                throw new Error(`Manifest fetch failed (${response.status})`);
-            }
+        async hydrateAllNotes() {
+            try {
+                const response = await this.safeFetch('/api/sync/hydrate');
+                if (response.status === 401 || response.status === 403) {
+                    this.setStatus('AUTH_REQUIRED');
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error(`Hydrate fetch failed (${response.status})`);
+                }
 
-            const remoteManifest = await response.json(); // Array of { id, title, folder, isStarred, isTrashed, updatedAt, trashedAt, _version }
-            if (!Array.isArray(remoteManifest)) return;
+                const data = await response.json();
+                const remoteNotes = data.notes;
+                if (!Array.isArray(remoteNotes)) return;
 
-            const localNotes = await this.db.getAllNotes({ folder: 'all' });
-            const localTrash = await this.db.getTrash();
-            const localMap = new Map();
+                const pendingQueue = await this.db.getSyncQueue();
+                const pendingIds = new Set(pendingQueue.map(q => q.entityId));
 
-            for (const n of localNotes) localMap.set(n.id, n);
-            for (const n of localTrash.notebooks) localMap.set(n.id, n);
+                for (const remote of remoteNotes) {
+                    const local = await this.db.getNote(remote.id);
+                    const isPendingLocalEdit = pendingIds.has(remote.id);
 
-            for (const remote of remoteManifest) {
-                const local = localMap.get(remote.id);
-                const remoteUpdated = new Date(remote.updatedAt).getTime();
-
-                if (!local) {
-                    // Note exists in cloud but not locally -> Create stub for lazy loading
-                    await this.db.putNote({
-                        id: remote.id,
-                        title: remote.title || 'Untitled Notebook',
-                        folder: remote.folder || 'root',
-                        isStarred: !!remote.isStarred,
-                        isTrashed: !!remote.isTrashed,
-                        trashedAt: remote.trashedAt || null,
-                        cells: [],
-                        updatedAt: remoteUpdated,
-                        owner: remote.owner,
-                        _version: remote._version || 1,
-                        _syncStatus: 'synced',
-                        _hasFullContent: false
-                    }, { isRemoteSync: true, hasFullContent: false, isNew: true });
-                } else {
-                    const localUpdated = local.updatedAt || 0;
-                    // If cloud is newer and note is not pending local push -> update local metadata
-                    if (remoteUpdated > localUpdated && local._syncStatus === 'synced') {
+                    if (!local) {
+                        // Brand new note from cloud -> store full content locally
                         await this.db.putNote({
-                            ...local,
-                            title: remote.title,
-                            folder: remote.folder,
-                            isStarred: remote.isStarred,
-                            isTrashed: remote.isTrashed,
-                            trashedAt: remote.trashedAt,
-                            updatedAt: remoteUpdated,
-                            _version: remote._version || local._version,
+                            id: remote.id,
+                            title: remote.title || 'Untitled Notebook',
+                            folder: remote.folder || 'root',
+                            isStarred: !!remote.isStarred,
+                            isTrashed: !!remote.isTrashed,
+                            trashedAt: remote.trashedAt || null,
+                            cells: remote.cells || [],
+                            tags: remote.tags || [],
+                            updatedAt: remote.updatedAt || Date.now(),
+                            owner: remote.owner,
+                            _version: remote._version || 1,
                             _syncStatus: 'synced',
-                            _hasFullContent: false // Mark to re-pull cells when opened
-                        }, { isRemoteSync: true, hasFullContent: false });
+                            _hasFullContent: true
+                        }, { isRemoteSync: true, hasFullContent: true });
+                    } else if (!isPendingLocalEdit) {
+                        // Local has no unsaved changes -> apply cloud note if cloud version is >= local version
+                        const localVer = typeof local._version === 'number' ? local._version : 0;
+                        const remoteVer = typeof remote._version === 'number' ? remote._version : 1;
+                        const localUpdated = local.updatedAt || 0;
+                        const remoteUpdated = remote.updatedAt || 0;
+
+                        if (remoteVer >= localVer || remoteUpdated >= localUpdated || !local._hasFullContent) {
+                            await this.db.putNote({
+                                id: remote.id,
+                                title: remote.title || local.title,
+                                folder: remote.folder || local.folder,
+                                isStarred: remote.isStarred !== undefined ? remote.isStarred : local.isStarred,
+                                isTrashed: remote.isTrashed !== undefined ? remote.isTrashed : local.isTrashed,
+                                trashedAt: remote.trashedAt || null,
+                                cells: remote.cells || local.cells || [],
+                                tags: remote.tags || local.tags || [],
+                                updatedAt: remoteUpdated,
+                                owner: remote.owner || local.owner,
+                                _version: remoteVer,
+                                _syncStatus: 'synced',
+                                _hasFullContent: true
+                            }, { isRemoteSync: true, hasFullContent: true });
+
+                            // If this note is currently open in active UI, refresh UI
+                            if (window.app && window.app.notebook && window.app.notebook.id === remote.id) {
+                                if (window.app.notebook._version !== remoteVer) {
+                                    window.app.notebook.cells = remote.cells || [];
+                                    window.app.notebook.title = remote.title || window.app.notebook.title;
+                                    window.app.notebook._version = remoteVer;
+                                    if (typeof window.app.renderAllCells === 'function') {
+                                        window.app.renderAllCells();
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
+
+                // Also update sidebar list in notebook UI if available
+                if (window.app && typeof window.app.loadSidebarNotes === 'function') {
+                    window.app.loadSidebarNotes(false);
+                }
+            } catch (err) {
+                console.warn('[SyncEngine] Hydration warning:', err.message);
             }
         }
 
         /**
-         * Pull full note content on-demand (Lazy Loading)
-         * Used when the user opens a note that doesn't have full cells loaded locally.
+         * Pull single note content on-demand (Fallback)
          */
         async pullNote(noteId) {
             const local = await this.db.getNote(noteId);
@@ -429,10 +464,10 @@
         }
 
         /**
-         * Handle conflict resolution when server detected concurrent multi-device edit
+         * Handle conflict resolution when server detected anti-wipeout or newer cloud note
          */
         async handleConflict(conflict) {
-            console.log('[SyncEngine] Resolving conflict for note:', conflict.noteId);
+            console.log('[SyncEngine] Resolving conflict for note:', conflict.noteId, 'Reason:', conflict.reason);
             const { noteId, serverNote, clientVersion } = conflict;
             const local = await this.db.getNote(noteId);
 
@@ -446,24 +481,45 @@
                     localContent: local,
                     remoteContent: serverNote,
                     resolvedContent: serverNote,
-                    resolutionType: 'last-write-wins-server',
+                    resolutionType: conflict.reason || 'server-reconciliation',
                     timestamp: Date.now()
                 });
             }
 
-            // Apply server version locally
+            // Apply safe server version locally
+            const serverCells = serverNote.cells || serverNote.content?.cells || [];
             await this.db.putNote({
                 id: serverNote.id,
                 title: serverNote.title,
                 folder: serverNote.folder,
                 isStarred: serverNote.isStarred,
                 isTrashed: serverNote.isTrashed,
-                cells: serverNote.content?.cells || serverNote.cells || [],
-                updatedAt: new Date(serverNote.updatedAt).getTime(),
-                _version: serverNote._version,
+                trashedAt: serverNote.trashedAt,
+                cells: serverCells,
+                tags: serverNote.tags || serverNote.content?.tags || [],
+                updatedAt: typeof serverNote.updatedAt === 'number' ? serverNote.updatedAt : new Date(serverNote.updatedAt).getTime(),
+                _version: serverNote._version || 1,
                 _syncStatus: 'synced',
                 _hasFullContent: true
             }, { isRemoteSync: true, hasFullContent: true });
+
+            // Refresh UI if this note is currently displayed
+            if (window.app && window.app.notebook && window.app.notebook.id === noteId) {
+                window.app.notebook = {
+                    ...window.app.notebook,
+                    title: serverNote.title,
+                    cells: serverCells,
+                    _version: serverNote._version || 1
+                };
+                window.app.disposeEditors();
+                const cellsList = document.getElementById('cells-list');
+                if (cellsList) {
+                    cellsList.innerHTML = '';
+                    serverCells.forEach((cell, idx) => window.app.renderCell(cell, idx + 1));
+                }
+                const titleInput = document.getElementById('notebook-title');
+                if (titleInput) titleInput.value = serverNote.title;
+            }
         }
     }
 
