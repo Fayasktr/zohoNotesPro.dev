@@ -688,33 +688,32 @@ body.light-theme .nav-item.active {
 
 /* Connector Lines */
 .tree-children {
-    margin-left: 6px;
-    /* Compact Indent level */
-    padding-left: 6px;
-    /* Space for line */
+    margin-left: 8px;
+    padding-left: 8px;
     border-left: 1px solid rgba(255, 255, 255, 0.1);
-    overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
+}
+
+[data-theme="light"] .tree-children {
+    border-left: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .tree-children .tree-item::before {
     content: '';
     position: absolute;
-    left: -6px;
-    /* Reach back to the border */
+    left: -8px;
     top: 50%;
-    width: 6px;
+    width: 8px;
     height: 1px;
     background: rgba(255, 255, 255, 0.1);
 }
 
+[data-theme="light"] .tree-children .tree-item::before {
+    background: rgba(0, 0, 0, 0.1);
+}
+
 .tree-children.collapsed {
-    max-height: 0;
-    opacity: 0;
-    pointer-events: none;
-    margin-top: 0;
-    margin-bottom: 0;
+    display: none;
 }
 
 /* Icons */

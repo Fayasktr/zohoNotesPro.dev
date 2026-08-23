@@ -246,11 +246,11 @@ runTest('Multi-CDN Fallback URLs for Python Pyodide WASM and TypeScript', () => 
 // -----------------------------------------------------------------------------
 console.log('\n--- 5. SERVICE WORKER & CLIENT HYGIENE AUDIT ---');
 
-runTest('Service Worker Cache Version is v9-localfirst', () => {
+runTest('Service Worker Cache Version is v10-localfirst', () => {
     const fs = require('fs');
     const path = require('path');
     const swContent = fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8');
-    assert(swContent.includes('zoho-notes-v9-localfirst'), 'sw.js must use cache zoho-notes-v9-localfirst');
+    assert(swContent.includes('zoho-notes-v10-localfirst'), 'sw.js must use cache zoho-notes-v10-localfirst');
 });
 
 runTest('Terminal STDIN Support for C, C++, and Python in AntigravityEngine', () => {

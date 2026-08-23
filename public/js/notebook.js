@@ -32,6 +32,7 @@ class NotebookApp {
         this.sync = window.ZohoSyncEngine;
         this.engine = window.ZohoBrowserEngine;
 
+        this.expandedFolders = new Set(JSON.parse(localStorage.getItem('zoho-expanded-folders') || '[]'));
         this.currentPendingFolder = 'root';
         this.modalHistoryPushed = false;
         this.setupTheme();
@@ -252,9 +253,18 @@ class NotebookApp {
                 // Toggle Collapse
                 const children = folderItem.nextElementSibling;
                 const arrow = folderItem.querySelector('.tree-arrow');
+                const path = folderItem.getAttribute('data-full-path') || folderItem.getAttribute('data-path');
                 if (children && children.classList.contains('tree-children')) {
-                    children.classList.toggle('collapsed');
-                    if (arrow) arrow.classList.toggle('rotated');
+                    const isCollapsed = children.classList.toggle('collapsed');
+                    if (arrow) arrow.classList.toggle('rotated', !isCollapsed);
+                    if (path) {
+                        if (isCollapsed) {
+                            this.expandedFolders.delete(path);
+                        } else {
+                            this.expandedFolders.add(path);
+                        }
+                        localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
+                    }
                 }
                 return;
             }
@@ -802,11 +812,15 @@ class NotebookApp {
             // Render Folders First (Alphabetical)
             Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name)).forEach(child => {
                 const folderId = `folder-${Math.random().toString(36).substr(2, 9)}`;
+                const currentNoteFolder = this.notebook ? this.notebook.folder : null;
+                const isCurrentNoteAncestor = currentNoteFolder && (currentNoteFolder === child.fullPath || currentNoteFolder.startsWith(child.fullPath + '/'));
+                const isExpanded = this.expandedFolders.has(child.fullPath) || isCurrentNoteAncestor;
 
                 const item = document.createElement('div');
+                item.className = 'tree-branch';
                 item.innerHTML = `
-                    <div class="tree-item is-folder" data-path="${child.name}">
-                        <i data-lucide="chevron-right" class="tree-arrow"></i>
+                    <div class="tree-item is-folder" data-path="${child.name}" data-full-path="${child.fullPath}">
+                        <i data-lucide="chevron-right" class="tree-arrow ${isExpanded ? 'rotated' : ''}"></i>
                         <i data-lucide="folder" class="tree-icon" style="color: #6d5dfc;"></i>
                         <span class="tree-label" title="${child.fullPath}">${child.name}</span>
                         <div class="tree-actions">
@@ -821,7 +835,7 @@ class NotebookApp {
                             </button>
                         </div>
                     </div>
-                    <div class="tree-children collapsed" id="${folderId}"></div>
+                    <div class="tree-children ${isExpanded ? '' : 'collapsed'}" id="${folderId}"></div>
                 `;
                 container.appendChild(item);
 
@@ -951,15 +965,27 @@ class NotebookApp {
         });
 
         if (activeEl) {
-            // Expand parent folder if collapsed
-            const parentFolder = activeEl.closest('.folder-content');
-            if (parentFolder && parentFolder.classList.contains('collapsed')) {
-                parentFolder.classList.remove('collapsed');
-                const header = parentFolder.previousElementSibling;
-                if (header && header.classList.contains('folder-header')) {
-                    const icon = header.querySelector('.folder-chevron');
-                    if (icon) icon.classList.remove('collapsed-chevron');
+            // Expand all ancestor parent folders up the tree
+            let parent = activeEl.parentElement;
+            let hasExpandedAny = false;
+            while (parent && !parent.classList.contains('tree-root')) {
+                if (parent.classList.contains('tree-children')) {
+                    parent.classList.remove('collapsed');
+                    const folderItem = parent.previousElementSibling;
+                    if (folderItem && folderItem.classList.contains('is-folder')) {
+                        const arrow = folderItem.querySelector('.tree-arrow');
+                        if (arrow) arrow.classList.add('rotated');
+                        const pPath = folderItem.getAttribute('data-full-path');
+                        if (pPath) {
+                            this.expandedFolders.add(pPath);
+                            hasExpandedAny = true;
+                        }
+                    }
                 }
+                parent = parent.parentElement;
+            }
+            if (hasExpandedAny) {
+                localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
             }
 
             // Expand notebook list if collapsed
@@ -1838,6 +1864,21 @@ class NotebookApp {
                 } else if (this.notebook.folder && this.notebook.folder.startsWith(oldPath + '/')) {
                     this.notebook.folder = newPath + this.notebook.folder.slice(oldPath.length);
                 }
+
+                // Update expandedFolders cache
+                const updatedExpanded = new Set();
+                for (const path of this.expandedFolders) {
+                    if (path === oldPath) {
+                        updatedExpanded.add(newPath);
+                    } else if (path.startsWith(oldPath + '/')) {
+                        updatedExpanded.add(newPath + path.slice(oldPath.length));
+                    } else {
+                        updatedExpanded.add(path);
+                    }
+                }
+                this.expandedFolders = updatedExpanded;
+                localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
+
                 await this.refreshNotebookList();
             } catch (e) {
                 console.error('Folder rename failed', e);
@@ -1860,7 +1901,15 @@ class NotebookApp {
                     await this.safeFetch(`/api/folders/${folderName}`, { method: 'DELETE' });
                 }
 
-                if (this.notebook.folder === folderName) {
+                // Remove from expandedFolders cache
+                for (const path of [...this.expandedFolders]) {
+                    if (path === folderName || path.startsWith(folderName + '/')) {
+                        this.expandedFolders.delete(path);
+                    }
+                }
+                localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
+
+                if (this.notebook.folder === folderName || (this.notebook.folder && this.notebook.folder.startsWith(folderName + '/'))) {
                     localStorage.removeItem('zoho-notebook-current-id');
                     await this.init();
                 } else {
