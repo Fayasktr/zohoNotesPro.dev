@@ -476,6 +476,8 @@ body.light-theme .nav-item.active {
     padding: 10px;
     border-radius: 8px;
     border-left: 4px solid #ff3b30;
+}
+
 /* Terminal / STDIN Input Container */
 .btn-toggle-stdin.active {
     background: rgba(109, 93, 252, 0.25);
