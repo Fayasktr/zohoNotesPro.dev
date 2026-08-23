@@ -1282,35 +1282,45 @@ class NotebookApp {
                         const newLang = e.target.value;
                         cell.lang = newLang;
 
-                        // Default templates
+                        // Default templates for all languages
                         const templates = {
+                            'javascript': 'console.log("Hello, World!");',
+                            'typescript': 'let message: string = "Hello, TypeScript!";\nconsole.log(message);',
+                            'python': 'print("Hello, Python!")',
                             'c': '#include <stdio.h>\n\nint main() {\n    printf("Hello, World!\\n");\n    return 0;\n}',
                             'cpp': '#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!" << std::endl;\n    return 0;\n}',
-                            'java': 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}',
-                            'typescript': 'let message: string = "Hello, TypeScript!";\nconsole.log(message);'
+                            'java': 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}'
                         };
 
-                        // Update Monaco Language and Model URI
+                        // Map to Monaco Language identifier
                         let monacoLang = 'javascript';
-                        let ext = 'js';
-                        if (newLang === 'python') { monacoLang = 'python'; ext = 'py'; }
-                        else if (newLang === 'java') { monacoLang = 'java'; ext = 'java'; }
-                        else if (newLang === 'c') { monacoLang = 'c'; ext = 'c'; }
-                        else if (newLang === 'cpp') { monacoLang = 'cpp'; ext = 'cpp'; }
-                        else if (newLang === 'typescript') { monacoLang = 'typescript'; ext = 'ts'; }
+                        if (newLang === 'python') { monacoLang = 'python'; }
+                        else if (newLang === 'java') { monacoLang = 'java'; }
+                        else if (newLang === 'c') { monacoLang = 'c'; }
+                        else if (newLang === 'cpp') { monacoLang = 'cpp'; }
+                        else if (newLang === 'typescript') { monacoLang = 'typescript'; }
 
-                        const newModelUri = monaco.Uri.parse(`file:///${cell.id}_${Date.now()}.${ext}`);
-                        const newModel = monaco.editor.createModel(editor.getValue(), monacoLang, newModelUri);
-                        editor.setModel(newModel);
+                        const currentModel = editor.getModel();
+                        if (currentModel) {
+                            monaco.editor.setModelLanguage(currentModel, monacoLang);
+                        }
+
+                        const currentVal = editor.getValue().trim();
+                        const isDefaultTemplate = Object.values(templates).some(t => t.trim() === currentVal) || currentVal === '' || currentVal === 'console.log("Hello, World!");';
+
+                        if (isDefaultTemplate && templates[newLang]) {
+                            editor.setValue(templates[newLang]);
+                        }
 
                         editor.updateOptions({
                             hover: { enabled: newLang === 'typescript' },
                             parameterHints: { enabled: newLang === 'typescript' }
                         });
 
-                        // Auto-populate if empty
-                        if (!editor.getValue().trim()) {
-                            editor.setValue(templates[newLang] || '');
+                        const currentCell = this.notebook.cells.find(c => c.id === cell.id);
+                        if (currentCell) {
+                            currentCell.lang = newLang;
+                            currentCell.content = editor.getValue();
                         }
 
                         this._autoSave();

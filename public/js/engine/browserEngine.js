@@ -370,44 +370,55 @@
         }
 
         // =========================================================================
-        // 2. TYPESCRIPT RUNNER (In-Browser Transpile -> Web Worker Sandbox)
+        // 2. TYPESCRIPT RUNNER (In-Browser Transpile -> Web Worker Sandbox -> Cloud Fallback)
         // =========================================================================
 
         async executeTS(code, contextExtension = {}) {
+            const tsCdnMirrors = [
+                'https://cdnjs.cloudflare.com/ajax/libs/typescript/5.3.3/typescript.min.js',
+                'https://cdn.jsdelivr.net/npm/typescript@5.3.3/lib/typescript.min.js',
+                'https://unpkg.com/typescript@5.3.3/lib/typescript.js'
+            ];
+
             try {
                 if (!this.tsLoaded && (typeof window.ts === 'undefined' || !window.ts.transpileModule)) {
-                    this.showToast('⚡ Loading TypeScript compiler...', 'info');
-                    await this.loadScript('https://cdnjs.cloudflare.com/ajax/libs/typescript/5.3.3/typescript.min.js');
-                    this.tsLoaded = true;
-                }
-
-                if (typeof window.ts === 'undefined' || !window.ts.transpileModule) {
-                    throw new Error('TypeScript compiler failed to load.');
-                }
-
-                const transpileResult = window.ts.transpileModule(code, {
-                    compilerOptions: {
-                        module: window.ts.ModuleKind.ESNext,
-                        target: window.ts.ScriptTarget.ES2022,
-                        jsx: window.ts.JsxEmit.None,
-                        removeComments: false,
-                        alwaysStrict: true
+                    for (const mirror of tsCdnMirrors) {
+                        try {
+                            await this.loadScript(mirror);
+                            if (typeof window.ts !== 'undefined' && window.ts.transpileModule) {
+                                this.tsLoaded = true;
+                                break;
+                            }
+                        } catch (e) {
+                            console.warn('[BrowserEngine] TS CDN mirror failed:', mirror);
+                        }
                     }
-                });
+                }
 
-                return await this.executeJS(transpileResult.outputText, contextExtension);
-            } catch (err) {
-                return {
-                    success: false,
-                    result: null,
-                    logs: [],
-                    error: `TypeScript Compilation Error: ${err.message}`
-                };
+                if (typeof window.ts !== 'undefined' && window.ts.transpileModule) {
+                    const transpileResult = window.ts.transpileModule(code, {
+                        compilerOptions: {
+                            module: (window.ts.ModuleKind && window.ts.ModuleKind.ESNext) || 99,
+                            target: (window.ts.ScriptTarget && window.ts.ScriptTarget.ES2022) || 9,
+                            jsx: (window.ts.JsxEmit && window.ts.JsxEmit.None) || 0,
+                            removeComments: false,
+                            alwaysStrict: false
+                        }
+                    });
+
+                    return await this.executeJS(transpileResult.outputText, contextExtension);
+                }
+            } catch (tsErr) {
+                console.warn('[BrowserEngine] Local TS transpilation failed, falling back to Cloud Runner:', tsErr.message);
+                return this.executeOnServer(code, 'typescript');
             }
+
+            // Fallback to Cloud Runner if local TS compiler is unavailable
+            return this.executeOnServer(code, 'typescript');
         }
 
         // =========================================================================
-        // 3. PYTHON RUNNER (Pyodide WebAssembly)
+        // 3. PYTHON RUNNER (Pyodide WebAssembly + Multi-CDN + Cloud Fallback)
         // =========================================================================
 
         async executePython(code) {
@@ -419,75 +430,84 @@
                     await this.loadPyodide();
                 }
 
-                if (!this.pyodide) {
-                    throw new Error('Failed to initialize Pyodide WebAssembly runtime.');
+                if (this.pyodide) {
+                    this.pyodide.setStdout({
+                        batched: (text) => {
+                            if (text && text.trim()) logs.push(text);
+                        }
+                    });
+
+                    this.pyodide.setStderr({
+                        batched: (text) => {
+                            if (text && text.trim()) logs.push(`STDERR: ${text}`);
+                        }
+                    });
+
+                    const result = await this.pyodide.runPythonAsync(code);
+
+                    return {
+                        success: true,
+                        result: result !== undefined && result !== null ? String(result) : null,
+                        logs,
+                        error: null
+                    };
                 }
-
-                this.pyodide.setStdout({
-                    batched: (text) => {
-                        if (text && text.trim()) logs.push(text);
-                    }
-                });
-
-                this.pyodide.setStderr({
-                    batched: (text) => {
-                        if (text && text.trim()) logs.push(`STDERR: ${text}`);
-                    }
-                });
-
-                const result = await this.pyodide.runPythonAsync(code);
-
-                return {
-                    success: true,
-                    result: result !== undefined && result !== null ? String(result) : null,
-                    logs,
-                    error: null
-                };
-            } catch (err) {
-                let errorMsg = err.message || String(err);
-                if (errorMsg.includes('PythonError:')) {
-                    const lines = errorMsg.split('\n');
-                    errorMsg = lines.slice(-2).join('\n');
-                }
-
-                return {
-                    success: false,
-                    result: null,
-                    logs,
-                    error: errorMsg
-                };
+            } catch (wasmErr) {
+                console.warn('[BrowserEngine] Local Pyodide execution failed, routing to Cloud Runner fallback:', wasmErr.message);
+                this.showToast('⚡ Executing Python via Cloud Runner (WASM fallback)...', 'info');
+                return this.executeOnServer(code, 'python');
             }
+
+            return this.executeOnServer(code, 'python');
         }
 
         async loadPyodide() {
+            if (this.pyodide) return this.pyodide;
             if (this.pyodideLoadPromise) return this.pyodideLoadPromise;
 
-            this.pyodideLoadPromise = new Promise(async (resolve, reject) => {
-                try {
-                    if (typeof window.loadPyodide !== 'function') {
-                        await this.loadScript('https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js');
-                    }
-
-                    console.log('[BrowserEngine] Initializing Pyodide WASM...');
-                    this.pyodide = await window.loadPyodide({
-                        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/'
-                    });
-                    console.log('[BrowserEngine] Pyodide WASM initialized successfully');
-                    this.showToast('✅ Python WASM runtime is ready!', 'success');
-                    resolve(this.pyodide);
-                } catch (err) {
-                    console.error('[BrowserEngine] Failed to load Pyodide WASM', err);
-                    this.showToast('❌ Failed to load Python WASM runtime. Check internet.', 'error');
-                    this.pyodideLoadPromise = null;
-                    reject(err);
+            const cdnMirrors = [
+                {
+                    script: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js',
+                    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/'
+                },
+                {
+                    script: 'https://cdnjs.cloudflare.com/ajax/libs/pyodide/0.25.0/full/pyodide.js',
+                    indexURL: 'https://cdnjs.cloudflare.com/ajax/libs/pyodide/0.25.0/full/'
+                },
+                {
+                    script: 'https://unpkg.com/pyodide@0.25.0/full/pyodide.js',
+                    indexURL: 'https://unpkg.com/pyodide@0.25.0/full/'
                 }
-            });
+            ];
+
+            this.pyodideLoadPromise = (async () => {
+                let lastErr = null;
+                for (const mirror of cdnMirrors) {
+                    try {
+                        console.log(`[BrowserEngine] Attempting to load Pyodide from ${mirror.indexURL}...`);
+                        if (typeof window.loadPyodide !== 'function') {
+                            await this.loadScript(mirror.script);
+                        }
+                        if (typeof window.loadPyodide === 'function') {
+                            this.pyodide = await window.loadPyodide({ indexURL: mirror.indexURL });
+                            console.log('[BrowserEngine] Pyodide WASM initialized successfully from', mirror.indexURL);
+                            this.showToast('✅ Python WASM runtime is ready!', 'success');
+                            return this.pyodide;
+                        }
+                    } catch (err) {
+                        console.warn(`[BrowserEngine] Pyodide mirror failed (${mirror.indexURL}):`, err.message);
+                        lastErr = err;
+                    }
+                }
+                this.pyodideLoadPromise = null;
+                throw lastErr || new Error('All Pyodide CDN mirrors failed to load.');
+            })();
 
             return this.pyodideLoadPromise;
         }
 
         // =========================================================================
-        // 4. SERVER RUNNER (C, C++, Java Fallback)
+        // 4. SERVER RUNNER (C, C++, Java & WASM Fallback via Cloud Runner)
         // =========================================================================
 
         async executeOnServer(code, lang) {
@@ -502,6 +522,7 @@
                 const res = await window.fetch('/api/execute', {
                     method: 'POST',
                     headers,
+                    credentials: 'same-origin',
                     body: JSON.stringify({ code, lang })
                 });
 
@@ -601,11 +622,20 @@
             return new Promise((resolve, reject) => {
                 const existing = document.querySelector(`script[src="${src}"]`);
                 if (existing) {
-                    return resolve();
+                    if (existing.getAttribute('data-loaded') === 'true') {
+                        return resolve();
+                    }
+                    existing.addEventListener('load', () => resolve());
+                    existing.addEventListener('error', (e) => reject(new Error(`Failed to load external script: ${src}`)));
+                    return;
                 }
                 const script = document.createElement('script');
                 script.src = src;
-                script.onload = () => resolve();
+                script.crossOrigin = 'anonymous';
+                script.onload = () => {
+                    script.setAttribute('data-loaded', 'true');
+                    resolve();
+                };
                 script.onerror = (e) => reject(new Error(`Failed to load external script: ${src}`));
                 document.head.appendChild(script);
             });

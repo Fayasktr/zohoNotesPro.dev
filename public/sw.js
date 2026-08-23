@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zoho-notes-v5-localfirst';
+const CACHE_NAME = 'zoho-notes-v6-localfirst';
 const OFFLINE_URL = '/offline.html';
 
 // Static Shell & Local-First Engine Assets to Pre-cache
@@ -85,17 +85,17 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Strategy 2: Pyodide WASM & Heavy Libraries -> Cache First with Network Fallback
-  if (url.hostname.includes('jsdelivr.net') || url.hostname.includes('cdnjs.cloudflare.com') || url.pathname.endsWith('.wasm')) {
+  if (url.hostname.includes('jsdelivr.net') || url.hostname.includes('cdnjs.cloudflare.com') || url.hostname.includes('unpkg.com') || url.pathname.endsWith('.wasm') || url.pathname.endsWith('.zip')) {
     event.respondWith(
       caches.match(request).then((cachedResponse) => {
         if (cachedResponse) return cachedResponse;
         return fetch(request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
+          if (networkResponse && (networkResponse.status === 200 || networkResponse.type === 'opaque')) {
             const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone).catch(() => {}));
           }
           return networkResponse;
-        });
+        }).catch(() => cachedResponse || new Response(null, { status: 504, statusText: 'CDN Gateway Error' }));
       })
     );
     return;
