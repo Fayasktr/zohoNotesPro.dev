@@ -176,13 +176,52 @@
             return this.workerBlobUrl;
         }
 
+        prepareCodeWithReturn(code) {
+            if (!code || typeof code !== 'string') return code || '';
+            const trimmed = code.trim();
+            if (!trimmed || /\breturn\b/.test(trimmed)) return code;
+
+            const lines = trimmed.split('\n');
+            let lastIdx = lines.length - 1;
+            while (lastIdx >= 0 && !lines[lastIdx].trim()) lastIdx--;
+            if (lastIdx < 0) return code;
+
+            let lastLine = lines[lastIdx].trim();
+            if (lastLine.endsWith(';')) lastLine = lastLine.slice(0, -1).trim();
+
+            const nonReturnableKeywords = [
+                'const', 'let', 'var', 'function', 'class', 'if', 'else', 'for',
+                'while', 'do', 'switch', 'case', 'try', 'catch', 'finally', 'throw',
+                'import', 'export', 'debugger', 'break', 'continue'
+            ];
+
+            const firstWord = lastLine.split(/[\s\(\{]/)[0];
+            if (nonReturnableKeywords.includes(firstWord) || lastLine.endsWith('}') || lastLine.endsWith('{')) {
+                return code;
+            }
+
+            lines[lastIdx] = `return (${lastLine});`;
+            return lines.join('\n');
+        }
+
         async executeJS(code, contextExtension = {}) {
+            const preparedCode = this.prepareCodeWithReturn(code);
             // Check if Web Workers are supported
             if (typeof Worker !== 'undefined' && this.getWorkerBlobUrl()) {
-                return this.executeJSInWorker(code);
+                try {
+                    const res = await this.executeJSInWorker(preparedCode);
+                    if (res && res.success) {
+                        return res;
+                    }
+                    if (res && res.error && !res.error.includes('Worker') && !res.error.includes('blob:')) {
+                        return res;
+                    }
+                } catch (workerErr) {
+                    console.warn('[BrowserEngine] Worker initialization failed, falling back to main-thread sandbox:', workerErr);
+                }
             }
-            // Fallback for environments without Worker support
-            return this.executeJSFallback(code, contextExtension);
+            // Fallback for environments without Worker support or where Blob Worker fails (e.g. CSP restrictions)
+            return this.executeJSFallback(preparedCode, contextExtension);
         }
 
         executeJSInWorker(code) {

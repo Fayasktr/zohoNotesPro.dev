@@ -1341,9 +1341,10 @@ class NotebookApp {
 
         try {
             let data;
-            if (this.engine) {
+            const activeEngine = this.engine || window.ZohoBrowserEngine;
+            if (activeEngine) {
                 // Execute via Polyglot Browser Engine (Local JS/TS/Python WASM, Cloud for C/C++/Java)
-                data = await this.engine.execute(code, cell.lang || 'javascript');
+                data = await activeEngine.execute(code, cell.lang || 'javascript');
             } else {
                 // Fallback to direct server execution
                 const response = await this.safeFetch('/api/execute', {
