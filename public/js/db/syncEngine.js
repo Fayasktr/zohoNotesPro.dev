@@ -410,12 +410,21 @@
                 }
 
                 // Also update sidebar list in notebook UI if available
-                if (window.app && typeof window.app.loadSidebarNotes === 'function') {
+                if (window.app && typeof window.app.refreshNotebookList === 'function') {
+                    window.app.refreshNotebookList(false);
+                } else if (window.app && typeof window.app.loadSidebarNotes === 'function') {
                     window.app.loadSidebarNotes(false);
                 }
             } catch (err) {
                 console.warn('[SyncEngine] Hydration warning:', err.message);
             }
+        }
+
+        /**
+         * Manifest Synchronization: Hydrates all notes from MongoDB Atlas into IndexedDB.
+         */
+        async syncManifest() {
+            return this.hydrateAllNotes();
         }
 
         /**

@@ -140,17 +140,40 @@ class NotebookApp {
 
         const savedId = localStorage.getItem('zoho-notebook-current-id');
         if (savedId) {
-            const exists = notebooks.some(nb => nb.id === savedId);
-            if (exists) {
+            const existsInList = Array.isArray(notebooks) && notebooks.some(nb => nb.id === savedId);
+            if (existsInList) {
                 await this.loadNotebook(savedId);
                 return;
             }
+
+            // If not in the immediate list array (e.g. during background hydration), check DB directly
+            if (this.db) {
+                const localNote = await this.db.getNote(savedId);
+                if (localNote && !localNote.isTrashed) {
+                    await this.loadNotebook(savedId);
+                    return;
+                }
+            }
         }
 
-        if (notebooks.length > 0) {
+        if (Array.isArray(notebooks) && notebooks.length > 0) {
             await this.loadNotebook(notebooks[0].id);
         } else {
-            await this.createNewNotebookInternal('new folder', 'New Note');
+            // Check local DB before creating any new note
+            let localCount = 0;
+            if (this.db) {
+                const allNotes = await this.db.getAllNotes();
+                if (allNotes && allNotes.length > 0) {
+                    await this.loadNotebook(allNotes[0].id);
+                    return;
+                }
+                localCount = allNotes ? allNotes.length : 0;
+            }
+
+            // Only create if completely empty
+            if (localCount === 0) {
+                await this.createNewNotebookInternal('root', 'Getting Started');
+            }
         }
 
         // Clear search on refresh
@@ -698,27 +721,46 @@ class NotebookApp {
                 list = await this.db.getAllNotes();
             }
 
-            // If remote fetch requested, sync manifest from Atlas to discover new/updated notes from other devices
-            if (fetchRemote && this.sync) {
-                await this.sync.syncManifest();
+            // If remote fetch requested, sync manifest/hydrate from Atlas to discover new/updated notes from other devices
+            if (fetchRemote && this.sync && typeof this.sync.syncManifest === 'function') {
+                try {
+                    await this.sync.syncManifest();
+                } catch (syncErr) {
+                    console.warn('[NotebookApp] Sync manifest deferred:', syncErr);
+                }
                 if (this.db) list = await this.db.getAllNotes();
             }
 
             // Fallback to server endpoint if local is still empty
             if (list.length === 0 && fetchRemote) {
-                const res = await this.safeFetch('/api/notebooks');
-                if (res.ok) {
-                    list = await res.json();
+                try {
+                    const res = await this.safeFetch('/api/notebooks');
+                    if (res.ok) {
+                        list = await res.json();
+                    }
+                } catch (fetchErr) {
+                    console.warn('[NotebookApp] Server fallback fetch failed:', fetchErr);
                 }
             }
 
-            this.allNotebooks = list;
-            this.filteredNotebooks = list;
-            this.renderNotebookList(list);
-            return list;
+            this.allNotebooks = list || [];
+            this.filteredNotebooks = list || [];
+            this.renderNotebookList(this.allNotebooks);
+            return this.allNotebooks;
         } catch (e) {
             console.error('Failed to load notebook list', e);
-            return [];
+            if (this.db) {
+                try {
+                    const fallback = await this.db.getAllNotes();
+                    if (fallback && fallback.length > 0) {
+                        this.allNotebooks = fallback;
+                        this.filteredNotebooks = fallback;
+                        this.renderNotebookList(fallback);
+                        return fallback;
+                    }
+                } catch (err) { }
+            }
+            return this.allNotebooks || [];
         }
     }
 
@@ -937,7 +979,6 @@ class NotebookApp {
             }
         } catch (e) {
             console.error('Failed to load notebook', e);
-            localStorage.removeItem('zoho-notebook-current-id');
         }
     }
 

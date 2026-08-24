@@ -246,11 +246,11 @@ runTest('Multi-CDN Fallback URLs for Python Pyodide WASM and TypeScript', () => 
 // -----------------------------------------------------------------------------
 console.log('\n--- 5. SERVICE WORKER & CLIENT HYGIENE AUDIT ---');
 
-runTest('Service Worker Cache Version is v11-interactive', () => {
+runTest('Service Worker Cache Version is v12-persistence', () => {
     const fs = require('fs');
     const path = require('path');
     const swContent = fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8');
-    assert(swContent.includes('zoho-notes-v11-interactive'), 'sw.js must use cache zoho-notes-v11-interactive');
+    assert(swContent.includes('zoho-notes-v12-persistence'), 'sw.js must use cache zoho-notes-v12-persistence');
 });
 
 runTest('Terminal STDIN Support & Interactive Execution in AntigravityEngine', () => {
