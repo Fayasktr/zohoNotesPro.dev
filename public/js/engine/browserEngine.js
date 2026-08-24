@@ -591,6 +591,129 @@
         }
 
         // =========================================================================
+        // 6. INTERACTIVE TERMINAL DETECTION & EXECUTION (WebSocket Streaming)
+        // =========================================================================
+
+        /**
+         * Determines if code in the given language needs an interactive terminal.
+         * Returns true only for server-executed languages (C, C++, Java, Python)
+         * that contain stdin-reading patterns (scanf, cin, input(), Scanner, etc.)
+         * @param {string} code - Source code to analyze
+         * @param {string} lang - Language identifier
+         * @returns {boolean}
+         */
+        needsInteractiveTerminal(code, lang) {
+            const normalizedLang = (lang || '').toLowerCase();
+
+            // Only server-executed languages can be interactive
+            const interactiveLangs = ['c', 'cpp', 'c++', 'java', 'python', 'py'];
+            if (!interactiveLangs.includes(normalizedLang)) return false;
+
+            // Strip comments to avoid false positives
+            const stripped = code
+                .replace(/\/\/.*$/gm, '')         // C-style line comments
+                .replace(/\/\*[\s\S]*?\*\//g, '')  // C-style block comments
+                .replace(/#.*$/gm, normalizedLang === 'python' || normalizedLang === 'py' ? '' : '$&'); // Python comments
+
+            switch (normalizedLang) {
+                case 'c':
+                    return /\b(scanf|gets|getchar|getline)\b|fgets\s*\([^)]*stdin/.test(stripped);
+
+                case 'cpp':
+                case 'c++':
+                    return /\b(scanf|gets|getchar|getline)\b|cin\s*>>|getline\s*\(\s*cin/.test(stripped);
+
+                case 'java':
+                    return /\b(Scanner|BufferedReader)\b|System\.in/.test(stripped);
+
+                case 'python':
+                case 'py':
+                    return /\binput\s*\(|sys\.stdin/.test(stripped);
+
+                default:
+                    return false;
+            }
+        }
+
+        /**
+         * Execute code interactively via WebSocket streaming.
+         * Returns a handle object with sendStdin(text) and kill() methods.
+         * @param {string} code - Source code
+         * @param {string} lang - Language
+         * @param {object} callbacks - { onStdout, onStderr, onExit, onError, onStatus }
+         * @returns {{ sendStdin: Function, kill: Function }}
+         */
+        executeInteractive(code, lang, callbacks = {}) {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/terminal`;
+
+            let ws;
+            try {
+                ws = new WebSocket(wsUrl);
+            } catch (err) {
+                if (callbacks.onError) callbacks.onError(`WebSocket connection failed: ${err.message}`);
+                return { sendStdin: () => {}, kill: () => {} };
+            }
+
+            const handle = {
+                sendStdin: (text) => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'stdin', data: text }));
+                    }
+                },
+                kill: () => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'kill' }));
+                    }
+                    try { ws.close(); } catch (e) { }
+                }
+            };
+
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ type: 'start', code, lang }));
+            };
+
+            ws.onmessage = (event) => {
+                let msg;
+                try {
+                    msg = JSON.parse(event.data);
+                } catch (e) {
+                    return;
+                }
+
+                switch (msg.type) {
+                    case 'stdout':
+                        if (callbacks.onStdout) callbacks.onStdout(msg.data);
+                        break;
+                    case 'stderr':
+                        if (callbacks.onStderr) callbacks.onStderr(msg.data);
+                        break;
+                    case 'exit':
+                        if (callbacks.onExit) callbacks.onExit(msg.code);
+                        try { ws.close(); } catch (e) { }
+                        break;
+                    case 'error':
+                        if (callbacks.onError) callbacks.onError(msg.data);
+                        try { ws.close(); } catch (e) { }
+                        break;
+                    case 'status':
+                        if (callbacks.onStatus) callbacks.onStatus(msg.data);
+                        break;
+                }
+            };
+
+            ws.onerror = () => {
+                if (callbacks.onError) callbacks.onError('WebSocket connection lost. Falling back to batch mode may be required.');
+            };
+
+            ws.onclose = () => {
+                // Ensure exit is called if not already
+            };
+
+            return handle;
+        }
+
+        // =========================================================================
         // UTILITIES: Object Serializer & Loader
         // =========================================================================
 

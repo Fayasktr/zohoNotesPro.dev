@@ -246,16 +246,17 @@ runTest('Multi-CDN Fallback URLs for Python Pyodide WASM and TypeScript', () => 
 // -----------------------------------------------------------------------------
 console.log('\n--- 5. SERVICE WORKER & CLIENT HYGIENE AUDIT ---');
 
-runTest('Service Worker Cache Version is v10-localfirst', () => {
+runTest('Service Worker Cache Version is v11-interactive', () => {
     const fs = require('fs');
     const path = require('path');
     const swContent = fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8');
-    assert(swContent.includes('zoho-notes-v10-localfirst'), 'sw.js must use cache zoho-notes-v10-localfirst');
+    assert(swContent.includes('zoho-notes-v11-interactive'), 'sw.js must use cache zoho-notes-v11-interactive');
 });
 
-runTest('Terminal STDIN Support for C, C++, and Python in AntigravityEngine', () => {
+runTest('Terminal STDIN Support & Interactive Execution in AntigravityEngine', () => {
     const engine = require('../engine/AntigravityEngine');
     assert(typeof engine.execute === 'function', 'engine.execute must be a function');
+    assert(typeof engine.prepareExecution === 'function', 'engine must have prepareExecution for interactive terminal');
     assert(typeof engine._runBinaryWithStdin === 'function', 'engine must have _runBinaryWithStdin helper');
 });
 

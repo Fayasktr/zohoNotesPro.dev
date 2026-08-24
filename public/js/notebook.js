@@ -1416,6 +1416,7 @@ class NotebookApp {
         if (!cell || cell.type !== 'code') return;
         const editor = this.editors[cellId];
         const code = editor.getValue();
+        const lang = cell.lang || 'javascript';
         const runBtn = document.getElementById(`run-${cellId}`);
         if (runBtn) {
             runBtn.innerText = 'Running...';
@@ -1430,22 +1431,31 @@ class NotebookApp {
 
         this.currentRunningCellId = cellId;
 
+        const activeEngine = this.engine || window.ZohoBrowserEngine;
+
+        // ── Interactive Terminal Mode ──
+        // Activates only for server-executed languages with stdin-reading code
+        if (activeEngine && activeEngine.needsInteractiveTerminal && activeEngine.needsInteractiveTerminal(code, lang)) {
+            this._runInteractiveTerminal(cellId, code, lang, activeEngine, outputDiv, runBtn);
+            return;
+        }
+
+        // ── Batch Execution Mode (existing behavior, unchanged) ──
         // Retrieve stdin input from cell or textarea
         const stdinInputElem = document.getElementById(`stdin-input-${cellId}`);
         const stdin = cell.stdin !== undefined ? cell.stdin : (stdinInputElem ? stdinInputElem.value : '');
 
         try {
             let data;
-            const activeEngine = this.engine || window.ZohoBrowserEngine;
             if (activeEngine) {
                 // Execute via Polyglot Browser Engine (Local JS/TS/Python WASM, Cloud for C/C++/Java with stdin)
-                data = await activeEngine.execute(code, cell.lang || 'javascript', { stdin });
+                data = await activeEngine.execute(code, lang, { stdin });
             } else {
                 // Fallback to direct server execution
                 const response = await this.safeFetch('/api/execute', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code, lang: cell.lang || 'javascript', stdin })
+                    body: JSON.stringify({ code, lang, stdin })
                 });
                 data = await response.json();
             }
@@ -1467,6 +1477,166 @@ class NotebookApp {
             setTimeout(() => {
                 if (this.currentRunningCellId === cellId) this.currentRunningCellId = null;
             }, 1000);
+        }
+    }
+
+    /**
+     * Render a live interactive terminal in the output area.
+     * Streams stdout/stderr in real-time and accepts stdin line-by-line via WebSocket.
+     */
+    _runInteractiveTerminal(cellId, code, lang, engine, outputDiv, runBtn) {
+        if (!outputDiv) return;
+
+        // Build interactive terminal UI
+        outputDiv.innerHTML = `
+            <div class="interactive-terminal" id="terminal-${cellId}">
+                <div class="terminal-header">
+                    <span class="terminal-title"><i data-lucide="terminal" style="width:12px;height:12px;margin-right:5px;vertical-align:-2px;"></i> Interactive Terminal</span>
+                    <span class="terminal-status" id="terminal-status-${cellId}">Connecting...</span>
+                    <button class="terminal-kill-btn" id="terminal-kill-${cellId}" title="Kill Process">
+                        <i data-lucide="square" style="width:12px;height:12px;"></i>
+                    </button>
+                </div>
+                <div class="terminal-output" id="terminal-output-${cellId}"></div>
+                <div class="terminal-input-line" id="terminal-input-line-${cellId}">
+                    <span class="terminal-prompt">❯</span>
+                    <input type="text" class="terminal-input" id="terminal-input-${cellId}" placeholder="Type input and press Enter..." autocomplete="off" spellcheck="false" />
+                </div>
+            </div>
+        `;
+        outputDiv.classList.remove('hidden');
+
+        // Re-render Lucide icons
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+
+        const termOutput = document.getElementById(`terminal-output-${cellId}`);
+        const termInput = document.getElementById(`terminal-input-${cellId}`);
+        const termInputLine = document.getElementById(`terminal-input-line-${cellId}`);
+        const termStatus = document.getElementById(`terminal-status-${cellId}`);
+        const termKill = document.getElementById(`terminal-kill-${cellId}`);
+
+        let isFinished = false;
+        const collectedLogs = [];
+
+        // Helper: append text to terminal output
+        const appendOutput = (text, className = 'terminal-stdout') => {
+            const span = document.createElement('span');
+            span.className = className;
+            span.textContent = text;
+            termOutput.appendChild(span);
+            termOutput.scrollTop = termOutput.scrollHeight;
+        };
+
+        // Start interactive execution via WebSocket
+        const handle = engine.executeInteractive(code, lang, {
+            onStatus: (statusText) => {
+                if (termStatus) termStatus.textContent = statusText;
+            },
+
+            onStdout: (data) => {
+                appendOutput(data, 'terminal-stdout');
+                collectedLogs.push(data);
+                if (termInput && !isFinished) termInput.focus();
+            },
+
+            onStderr: (data) => {
+                appendOutput(data, 'terminal-stderr');
+                collectedLogs.push(`STDERR: ${data}`);
+            },
+
+            onExit: (exitCode) => {
+                isFinished = true;
+                const exitClass = exitCode === 0 ? 'terminal-exit-success' : 'terminal-exit-error';
+                const exitSpan = document.createElement('div');
+                exitSpan.className = `terminal-exit-line ${exitClass}`;
+                exitSpan.textContent = `\n[Process exited with code ${exitCode}]`;
+                termOutput.appendChild(exitSpan);
+                termOutput.scrollTop = termOutput.scrollHeight;
+
+                if (termStatus) {
+                    termStatus.textContent = exitCode === 0 ? 'Exited (0)' : `Exited (${exitCode})`;
+                    termStatus.classList.add(exitCode === 0 ? 'status-success' : 'status-error');
+                }
+                if (termInputLine) termInputLine.classList.add('terminal-disabled');
+                if (termInput) {
+                    termInput.disabled = true;
+                    termInput.placeholder = 'Process has ended';
+                }
+
+                // Save output to cell for persistence
+                const cell = this.notebook.cells.find(c => c.id === cellId);
+                if (cell) {
+                    cell.output = {
+                        success: exitCode === 0,
+                        logs: collectedLogs.join('').split('\n').filter(l => l),
+                        error: exitCode !== 0 ? `Process exited with code ${exitCode}` : null,
+                        interactive: true
+                    };
+                    this._autoSave();
+                }
+
+                // Reset run button
+                if (runBtn) {
+                    runBtn.innerText = 'Run';
+                    runBtn.disabled = false;
+                }
+                setTimeout(() => {
+                    if (this.currentRunningCellId === cellId) this.currentRunningCellId = null;
+                }, 500);
+            },
+
+            onError: (errMsg) => {
+                isFinished = true;
+                appendOutput(`\n[Error: ${errMsg}]`, 'terminal-stderr');
+
+                if (termStatus) {
+                    termStatus.textContent = 'Error';
+                    termStatus.classList.add('status-error');
+                }
+                if (termInputLine) termInputLine.classList.add('terminal-disabled');
+                if (termInput) {
+                    termInput.disabled = true;
+                    termInput.placeholder = 'Process has ended';
+                }
+
+                // Save error output
+                const cell = this.notebook.cells.find(c => c.id === cellId);
+                if (cell) {
+                    cell.output = { success: false, logs: [], error: errMsg, interactive: true };
+                    this._autoSave();
+                }
+
+                if (runBtn) {
+                    runBtn.innerText = 'Run';
+                    runBtn.disabled = false;
+                }
+                setTimeout(() => {
+                    if (this.currentRunningCellId === cellId) this.currentRunningCellId = null;
+                }, 500);
+            }
+        });
+
+        // Handle stdin input
+        if (termInput) {
+            termInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !isFinished) {
+                    e.preventDefault();
+                    const inputValue = termInput.value;
+                    // Echo the input in the terminal
+                    appendOutput(inputValue + '\n', 'terminal-stdin-echo');
+                    collectedLogs.push(inputValue + '\n');
+                    handle.sendStdin(inputValue);
+                    termInput.value = '';
+                }
+            });
+            termInput.focus();
+        }
+
+        // Kill button
+        if (termKill) {
+            termKill.onclick = () => {
+                handle.kill();
+            };
         }
     }
 

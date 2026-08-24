@@ -5,6 +5,8 @@ const path = require('path');
 const cors = require('cors');
 const fs = require('fs');
 const http = require('http');
+const { WebSocketServer } = require('ws');
+const { spawn: spawnProcess } = require('child_process');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const { MongoStore } = require('connect-mongo');
@@ -94,6 +96,7 @@ mongoose.connect(mongoURI)
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const server = http.createServer(app);
 
 // Security Headers
 app.use(helmet({
@@ -1217,6 +1220,137 @@ cron.schedule('*/10 * * * *', async () => {
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// =====================================================
+// WebSocket Interactive Terminal Server
+// =====================================================
+const wss = new WebSocketServer({ server, path: '/ws/terminal' });
+
+wss.on('connection', (ws) => {
+    let child = null;
+    let prepared = null;
+    let killTimer = null;
+    const INTERACTIVE_TIMEOUT = 30000; // 30 seconds max per session
+
+    const resetTimer = () => {
+        if (killTimer) clearTimeout(killTimer);
+        killTimer = setTimeout(() => {
+            if (child) {
+                try { child.kill('SIGKILL'); } catch (e) { }
+            }
+            try {
+                ws.send(JSON.stringify({ type: 'stderr', data: '\n[Process timed out after 30 seconds]' }));
+                ws.send(JSON.stringify({ type: 'exit', code: -1 }));
+            } catch (e) { }
+            ws.close();
+        }, INTERACTIVE_TIMEOUT);
+    };
+
+    ws.on('message', async (raw) => {
+        let msg;
+        try {
+            msg = JSON.parse(raw.toString());
+        } catch (e) {
+            return;
+        }
+
+        if (msg.type === 'start' && !child) {
+            const { code, lang } = msg;
+            if (!code || !lang) {
+                ws.send(JSON.stringify({ type: 'error', data: 'Missing code or lang' }));
+                ws.close();
+                return;
+            }
+
+            // Compile / prepare the binary
+            ws.send(JSON.stringify({ type: 'status', data: 'Compiling...' }));
+            try {
+                prepared = await engine.prepareExecution(code, lang);
+            } catch (err) {
+                ws.send(JSON.stringify({ type: 'error', data: `Preparation failed: ${err.message}` }));
+                ws.close();
+                return;
+            }
+
+            if (prepared.error) {
+                ws.send(JSON.stringify({ type: 'error', data: prepared.error }));
+                ws.close();
+                return;
+            }
+
+            // Spawn the process with stdin pipe open
+            resetTimer();
+            child = spawnProcess(prepared.binaryPath, prepared.args, {
+                windowsHide: true,
+                stdio: ['pipe', 'pipe', 'pipe']
+            });
+
+            child.stdout.on('data', (data) => {
+                try {
+                    ws.send(JSON.stringify({ type: 'stdout', data: data.toString() }));
+                } catch (e) { }
+            });
+
+            child.stderr.on('data', (data) => {
+                try {
+                    ws.send(JSON.stringify({ type: 'stderr', data: data.toString() }));
+                } catch (e) { }
+            });
+
+            child.on('error', (err) => {
+                if (killTimer) clearTimeout(killTimer);
+                try {
+                    ws.send(JSON.stringify({ type: 'error', data: err.message }));
+                    ws.send(JSON.stringify({ type: 'exit', code: -1 }));
+                } catch (e) { }
+                engine.cleanupExecution(prepared);
+            });
+
+            child.on('close', (exitCode) => {
+                if (killTimer) clearTimeout(killTimer);
+                try {
+                    ws.send(JSON.stringify({ type: 'exit', code: exitCode || 0 }));
+                } catch (e) { }
+                if (prepared) engine.cleanupExecution(prepared);
+                child = null;
+            });
+
+            ws.send(JSON.stringify({ type: 'status', data: 'Running...' }));
+
+        } else if (msg.type === 'stdin' && child && child.stdin && !child.stdin.destroyed) {
+            // Forward user input to the running process
+            resetTimer();
+            try {
+                child.stdin.write(msg.data + '\n');
+            } catch (e) { }
+
+        } else if (msg.type === 'kill' && child) {
+            try { child.kill('SIGKILL'); } catch (e) { }
+        }
+    });
+
+    ws.on('close', () => {
+        if (killTimer) clearTimeout(killTimer);
+        if (child) {
+            try { child.kill('SIGKILL'); } catch (e) { }
+        }
+        if (prepared) {
+            engine.cleanupExecution(prepared);
+            prepared = null;
+        }
+    });
+
+    ws.on('error', () => {
+        if (killTimer) clearTimeout(killTimer);
+        if (child) {
+            try { child.kill('SIGKILL'); } catch (e) { }
+        }
+        if (prepared) {
+            engine.cleanupExecution(prepared);
+            prepared = null;
+        }
+    });
+});
+
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server on http://localhost:${PORT}`);
 });

@@ -349,6 +349,121 @@ class AntigravityEngine {
         });
     }
 
+    /**
+     * Prepare code for interactive execution (compile only, don't run).
+     * Returns { binaryPath, args, cleanupPaths, execDir } or { error }.
+     * Used by WebSocket interactive terminal handler.
+     */
+    async prepareExecution(code, lang) {
+        const id = crypto.randomUUID();
+        const isWindows = process.platform === 'win32';
+
+        switch (lang.toLowerCase()) {
+            case 'c': {
+                const srcPath = path.join(this.tempDir, `${id}.c`);
+                const binPath = path.join(this.tempDir, isWindows ? `${id}.exe` : `${id}.out`);
+                fs.writeFileSync(srcPath, code);
+
+                return new Promise((resolve) => {
+                    exec(`gcc "${srcPath}" -o "${binPath}"`, (err, stdout, stderr) => {
+                        if (err) {
+                            try { fs.unlinkSync(srcPath); } catch (e) { }
+                            return resolve({ error: `C Compilation Error:\n${stderr || err.message}` });
+                        }
+                        resolve({
+                            binaryPath: binPath,
+                            args: [],
+                            cleanupPaths: [srcPath, binPath]
+                        });
+                    });
+                });
+            }
+
+            case 'cpp':
+            case 'c++': {
+                const srcPath = path.join(this.tempDir, `${id}.cpp`);
+                const binPath = path.join(this.tempDir, isWindows ? `${id}.exe` : `${id}.out`);
+                fs.writeFileSync(srcPath, code);
+
+                return new Promise((resolve) => {
+                    exec(`g++ "${srcPath}" -o "${binPath}"`, (err, stdout, stderr) => {
+                        if (err) {
+                            try { fs.unlinkSync(srcPath); } catch (e) { }
+                            return resolve({ error: `C++ Compilation Error:\n${stderr || err.message}` });
+                        }
+                        resolve({
+                            binaryPath: binPath,
+                            args: [],
+                            cleanupPaths: [srcPath, binPath]
+                        });
+                    });
+                });
+            }
+
+            case 'java': {
+                const classNameMatch = code.match(/public\s+class\s+([A-Za-z0-9_$]+)/);
+                const className = classNameMatch ? classNameMatch[1] : 'Main';
+                const execDir = path.join(this.tempDir, id);
+                fs.mkdirSync(execDir, { recursive: true });
+                const srcPath = path.join(execDir, `${className}.java`);
+                fs.writeFileSync(srcPath, code);
+
+                return new Promise((resolve) => {
+                    exec(`javac "${srcPath}"`, (err, stdout, stderr) => {
+                        if (err) {
+                            try { fs.rmSync(execDir, { recursive: true, force: true }); } catch (e) { }
+                            return resolve({ error: `Java Compilation Error:\n${stderr || err.message}` });
+                        }
+                        resolve({
+                            binaryPath: 'java',
+                            args: ['-cp', execDir, className],
+                            cleanupPaths: [],
+                            execDir
+                        });
+                    });
+                });
+            }
+
+            case 'python':
+            case 'py': {
+                const filePath = path.join(this.tempDir, `${id}.py`);
+                fs.writeFileSync(filePath, code);
+
+                const pythonCmds = isWindows ? ['python', 'py', 'python3'] : ['python3', 'python'];
+                // Find which python command exists
+                for (const cmd of pythonCmds) {
+                    try {
+                        const check = require('child_process').execSync(`${cmd} --version`, { timeout: 3000, windowsHide: true });
+                        return {
+                            binaryPath: cmd,
+                            args: ['-u', filePath],  // -u for unbuffered stdout
+                            cleanupPaths: [filePath]
+                        };
+                    } catch (e) { /* try next */ }
+                }
+                try { fs.unlinkSync(filePath); } catch (e) { }
+                return { error: 'Python not found on this system. Install Python to use interactive mode.' };
+            }
+
+            default:
+                return { error: `Interactive execution not supported for language: ${lang}` };
+        }
+    }
+
+    /**
+     * Cleanup temp files created by prepareExecution
+     */
+    cleanupExecution(prepared) {
+        if (prepared.cleanupPaths) {
+            for (const p of prepared.cleanupPaths) {
+                try { fs.unlinkSync(p); } catch (e) { }
+            }
+        }
+        if (prepared.execDir) {
+            try { fs.rmSync(prepared.execDir, { recursive: true, force: true }); } catch (e) { }
+        }
+    }
+
     _serialize(obj, depth = 5, seen = new WeakSet()) {
         if (obj === undefined) return 'undefined';
         if (obj === null) return 'null';
