@@ -136,7 +136,8 @@ class NotebookApp {
             });
         }
 
-        const notebooks = await this.refreshNotebookList(true);
+        // Fetch local notes first with zero network delay
+        let notebooks = await this.refreshNotebookList(false);
 
         const savedId = localStorage.getItem('zoho-notebook-current-id');
         if (savedId) {
@@ -146,7 +147,7 @@ class NotebookApp {
                 return;
             }
 
-            // If not in the immediate list array (e.g. during background hydration), check DB directly
+            // If not in the immediate list array, check DB directly
             if (this.db) {
                 const localNote = await this.db.getNote(savedId);
                 if (localNote && !localNote.isTrashed) {
@@ -170,7 +171,24 @@ class NotebookApp {
                 localCount = allNotes ? allNotes.length : 0;
             }
 
-            // Only create if completely empty
+            // If local DB is empty, check remote before creating any default note
+            if (localCount === 0 && navigator.onLine && this.sync) {
+                try {
+                    await this.sync.hydrateAllNotes();
+                    if (this.db) {
+                        const hydratedNotes = await this.db.getAllNotes();
+                        if (hydratedNotes && hydratedNotes.length > 0) {
+                            await this.refreshNotebookList(false);
+                            await this.loadNotebook(hydratedNotes[0].id);
+                            return;
+                        }
+                    }
+                } catch (err) {
+                    console.warn('[NotebookApp] Remote hydration check on init:', err);
+                }
+            }
+
+            // Only create if genuinely completely empty across local & remote
             if (localCount === 0) {
                 await this.createNewNotebookInternal('root', 'Getting Started');
             }
@@ -209,6 +227,9 @@ class NotebookApp {
         titleInput.addEventListener('input', (e) => {
             this.notebook.title = e.target.value;
             this.updateCurrentNotebookItemUI();
+            if (this.sync && typeof this.sync.recordUserActivity === 'function') {
+                this.sync.recordUserActivity();
+            }
             this._autoSave();
         });
 
@@ -1345,6 +1366,9 @@ class NotebookApp {
             editor.onDidChangeModelContent(() => {
                 const currentCell = this.notebook.cells.find(c => c.id === cell.id);
                 if (currentCell) currentCell.content = editor.getValue();
+                if (this.sync && typeof this.sync.recordUserActivity === 'function') {
+                    this.sync.recordUserActivity();
+                }
                 this._autoSave();
             });
 
@@ -2374,7 +2398,11 @@ class NotebookApp {
             if (this.notebook.id === 'starred' || this.notebook.id === 'trash') return;
 
             if (this.db) {
-                await this.db.putNote(this.notebook, { hasFullContent: true });
+                const savedRecord = await this.db.putNote(this.notebook, { hasFullContent: true });
+                if (savedRecord) {
+                    this.notebook._version = savedRecord._version;
+                    this.notebook.updatedAt = savedRecord.updatedAt;
+                }
                 if (this.sync) {
                     this.sync.notifyLocalChange(this.notebook.id, 'UPDATE');
                 }

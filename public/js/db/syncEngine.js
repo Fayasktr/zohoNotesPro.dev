@@ -1,14 +1,12 @@
 /**
- * Zoho Notes Pro - Smart Event-Driven Sync Engine
- * Synchronizes Local RxDB/IndexedDB with MongoDB Atlas
+ * Zoho Notes Pro - Smart Local-First Background Sync Engine
  * 
- * Features:
- * - Full Local Hydration: Prefetches ALL notes with full cell content for 100% offline availability
- * - Anti-Wipeout Protection: Prevents unhydrated or empty offline stubs from destroying cloud notes
- * - Monotonic Versioning: Bi-directional sync comparing latest monotonic versions & timestamps
- * - Event-Driven Debounced Sync: 10s debounce on typing, immediate on blur/switch/reconnect/logout
- * - Multi-Device Conflict Resolution: Automatic merging + local version history archival
- * - Real-Time Status Telemetry: Broadcasts sync states to UI badge
+ * Core Principles:
+ * 1. LOCAL-FIRST IS PRIORITY #1: All notes, cells, edits, and state are saved locally immediately (<5ms).
+ * 2. CLOUD IS STRICTLY BACKGROUND BACKUP: Sync pushes to MongoDB Atlas only when user takes a break / is idle.
+ * 3. ZERO INPUT DELAY: Syncing runs purely in the background and never delays or blocks typing or file switching.
+ * 4. ACTIVE EDITOR PROTECTION: Remote hydration never wipes, disposes, or resets active Monaco editors.
+ * 5. SEAMLESS RECONCILIATION: New edits made while sync is in-flight are preserved and queued for the next idle break.
  */
 
 (function (window) {
@@ -22,11 +20,18 @@
             this.unsyncedCount = 0;
             this.listeners = new Set();
             this.isSyncing = false;
-            this.syncDebounceTimer = null;
-            this.debounceDelayMs = 10000; // 10 seconds debounce for typing
-            this.pollIntervalMs = 60000; // 60s background health poll
+
+            // Idle & Break Sync Control
+            this.idleTimeoutMs = 15000; // 15s of user inactivity triggers cloud backup
+            this.idleDebounceTimer = null;
+            this.lastActivityTime = Date.now();
+            this.isUserActive = false;
+
+            // Background health check (only runs when idle)
+            this.pollIntervalMs = 60000; // 60s
             this.pollTimer = null;
 
+            this.setupActivityListeners();
             this.setupNetworkListeners();
             this.setupLifecycleListeners();
         }
@@ -41,11 +46,14 @@
             // Calculate current unsynced count
             await this.updateUnsyncedCount();
 
-            // Perform initial synchronization & full hydration
+            // Perform initial background sync & hydration if online
             if (navigator.onLine) {
-                this.syncNow({ isInitial: true }).catch(err => {
-                    console.warn('[SyncEngine] Initial sync deferred:', err);
-                });
+                // Run in background without blocking initial UI
+                setTimeout(() => {
+                    this.syncNow({ isInitial: true }).catch(err => {
+                        console.warn('[SyncEngine] Initial background sync deferred:', err);
+                    });
+                }, 500);
             } else {
                 this.setStatus('OFFLINE');
             }
@@ -54,35 +62,69 @@
             this.startBackgroundPoll();
         }
 
+        /**
+         * Global activity detection: Resets idle timer on any user typing or interactions.
+         */
+        setupActivityListeners() {
+            const onActivity = () => {
+                this.recordUserActivity();
+            };
+
+            window.addEventListener('keydown', onActivity, { passive: true });
+            window.addEventListener('input', onActivity, { passive: true });
+            window.addEventListener('pointerdown', onActivity, { passive: true });
+            window.addEventListener('wheel', onActivity, { passive: true });
+        }
+
+        recordUserActivity() {
+            this.lastActivityTime = Date.now();
+            this.isUserActive = true;
+
+            // Reset idle timer
+            if (this.idleDebounceTimer) {
+                clearTimeout(this.idleDebounceTimer);
+            }
+
+            // If there are unsynced changes, schedule backup when user becomes idle
+            this.idleDebounceTimer = setTimeout(() => {
+                this.onUserIdle();
+            }, this.idleTimeoutMs);
+        }
+
+        onUserIdle() {
+            this.isUserActive = false;
+            // When user takes a break / stops interacting and changes are pending, push to cloud in background
+            if (this.unsyncedCount > 0 && navigator.onLine && !this.isSyncing) {
+                console.log('[SyncEngine] User is idle. Starting background cloud backup...');
+                this.syncNow({ reason: 'user_idle_break' });
+            }
+        }
+
         setupNetworkListeners() {
             window.addEventListener('online', () => {
-                console.log('[SyncEngine] Internet reconnected, flushing sync queue & hydrating...');
-                this.setStatus('SYNCING');
-                this.syncNow({ immediate: true });
+                console.log('[SyncEngine] Network reconnected. Notes are safe locally; scheduling backup...');
+                if (this.unsyncedCount > 0) {
+                    this.setStatus('PENDING');
+                    this.recordUserActivity();
+                } else {
+                    this.setStatus('SYNCED');
+                }
             });
 
             window.addEventListener('offline', () => {
-                console.log('[SyncEngine] Network went offline, switching to 100% offline-first mode.');
+                console.log('[SyncEngine] Network offline. 100% local-first mode active.');
                 this.setStatus('OFFLINE');
             });
         }
 
         setupLifecycleListeners() {
-            // Immediate sync on tab switch or minimize
+            // When tab is hidden/closed, attempt a silent flush of pending changes
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'hidden' && this.unsyncedCount > 0 && navigator.onLine) {
                     this.flushPendingSyncs();
                 }
             });
 
-            // Immediate sync on window blur
-            window.addEventListener('blur', () => {
-                if (this.unsyncedCount > 0 && navigator.onLine) {
-                    this.flushPendingSyncs();
-                }
-            });
-
-            // Warn user before closing tab if unsynced changes exist
             window.addEventListener('beforeunload', () => {
                 if (this.unsyncedCount > 0 && navigator.onLine) {
                     this.flushPendingSyncs();
@@ -93,8 +135,15 @@
         startBackgroundPoll() {
             if (this.pollTimer) clearInterval(this.pollTimer);
             this.pollTimer = setInterval(() => {
-                if (navigator.onLine && !this.isSyncing) {
-                    this.hydrateAllNotes();
+                // Only poll when user is idle, online, and not already syncing
+                const now = Date.now();
+                const isIdle = (now - this.lastActivityTime) >= this.idleTimeoutMs;
+                if (navigator.onLine && !this.isSyncing && isIdle) {
+                    if (this.unsyncedCount > 0) {
+                        this.syncNow({ reason: 'periodic_idle_sync' });
+                    } else {
+                        this.hydrateAllNotes();
+                    }
                 }
             }, this.pollIntervalMs);
         }
@@ -164,7 +213,7 @@
 
         /**
          * Triggered when a note is edited locally.
-         * Enqueues the change into syncQueue and starts debounced timer.
+         * Enqueues the change into syncQueue and arms the idle detector.
          */
         async notifyLocalChange(noteId, action = 'UPDATE', payload = null) {
             if (!noteId || noteId === 'starred' || noteId === 'trash') return;
@@ -184,29 +233,24 @@
 
             await this.updateUnsyncedCount();
 
-            // Reset debounce timer for typing
-            if (this.syncDebounceTimer) clearTimeout(this.syncDebounceTimer);
-
-            if (navigator.onLine) {
-                this.syncDebounceTimer = setTimeout(() => {
-                    this.flushPendingSyncs();
-                }, this.debounceDelayMs);
-            }
+            // Refresh user activity and arm idle timer
+            this.recordUserActivity();
         }
 
         /**
-         * Immediately flushes all queued items to Atlas without waiting for debounce.
+         * Immediately flushes all queued items to Atlas without waiting for idle timer.
          */
         async flushPendingSyncs() {
-            if (this.syncDebounceTimer) {
-                clearTimeout(this.syncDebounceTimer);
-                this.syncDebounceTimer = null;
+            if (this.idleDebounceTimer) {
+                clearTimeout(this.idleDebounceTimer);
+                this.idleDebounceTimer = null;
             }
             return this.syncNow({ immediate: true });
         }
 
         /**
          * Full Synchronization Cycle (Push Queue -> Hydrate All Notes -> Update State)
+         * Runs 100% non-blocking in the background.
          */
         async syncNow(options = {}) {
             if (this.isSyncing) return;
@@ -222,7 +266,7 @@
                 // Step 1: Push all pending local modifications to Atlas
                 await this.pushPendingChanges();
 
-                // Step 2: Full hydration - download ALL user notes with complete cell data
+                // Step 2: Full hydration - download ALL user notes with complete cell data silently
                 await this.hydrateAllNotes();
 
                 this.lastSyncTime = new Date();
@@ -231,7 +275,7 @@
 
                 this.setStatus('SYNCED');
             } catch (err) {
-                console.error('[SyncEngine] Sync failed:', err);
+                console.error('[SyncEngine] Background cloud backup warning:', err);
                 if (!navigator.onLine) {
                     this.setStatus('OFFLINE');
                 } else {
@@ -303,7 +347,7 @@
                 if (window.ZohoOfflineManager && typeof window.ZohoOfflineManager.showAuthExpiredNotice === 'function') {
                     window.ZohoOfflineManager.showAuthExpiredNotice();
                 }
-                throw new Error('Authentication expired. Your changes are safely saved locally. Please log in to sync.');
+                throw new Error('Authentication expired. Your changes are safely saved locally. Please log in to backup to cloud.');
             }
 
             if (!response.ok) {
@@ -312,14 +356,14 @@
 
             const result = await response.json();
 
-            // Clear successfully processed queue items
+            // Clear ONLY successfully processed queue items (any new edits made while push was in-flight remain!)
             if (result.processedQueueIds && Array.isArray(result.processedQueueIds)) {
                 for (const qId of result.processedQueueIds) {
                     await this.db.removeFromSyncQueue(qId);
                 }
             }
 
-            // Handle server-side conflict resolutions if any (e.g. anti-wipeout or server is newer)
+            // Handle server-side conflict resolutions if any
             if (result.conflicts && Array.isArray(result.conflicts)) {
                 for (const conf of result.conflicts) {
                     await this.handleConflict(conf);
@@ -330,6 +374,8 @@
         /**
          * Full Local Hydration: Fetches ALL notes with full cells from MongoDB Atlas.
          * Guarantees 100% offline availability of all notebook contents.
+         * 
+         * 🛡️ Active Note Protection: NEVER wipes, disposes, or resets active Monaco editors!
          */
         async hydrateAllNotes() {
             try {
@@ -348,10 +394,12 @@
 
                 const pendingQueue = await this.db.getSyncQueue();
                 const pendingIds = new Set(pendingQueue.map(q => q.entityId));
+                const activeNotebookId = window.app && window.app.notebook ? window.app.notebook.id : null;
 
                 for (const remote of remoteNotes) {
                     const local = await this.db.getNote(remote.id);
                     const isPendingLocalEdit = pendingIds.has(remote.id);
+                    const isActiveNoteInUI = (activeNotebookId && activeNotebookId === remote.id);
 
                     if (!local) {
                         // Brand new note from cloud -> store full content locally
@@ -371,7 +419,7 @@
                             _hasFullContent: true
                         }, { isRemoteSync: true, hasFullContent: true });
                     } else if (!isPendingLocalEdit) {
-                        // Local has no unsaved changes -> apply cloud note if cloud version is >= local version
+                        // Local has no unsaved pending changes
                         const localVer = typeof local._version === 'number' ? local._version : 0;
                         const remoteVer = typeof remote._version === 'number' ? remote._version : 1;
                         const localUpdated = local.updatedAt || 0;
@@ -394,29 +442,26 @@
                                 _hasFullContent: true
                             }, { isRemoteSync: true, hasFullContent: true });
 
-                            // If this note is currently open in active UI, refresh UI
-                            if (window.app && window.app.notebook && window.app.notebook.id === remote.id) {
-                                if (window.app.notebook._version !== remoteVer) {
-                                    window.app.notebook.cells = remote.cells || [];
-                                    window.app.notebook.title = remote.title || window.app.notebook.title;
-                                    window.app.notebook._version = remoteVer;
-                                    if (typeof window.app.renderAllCells === 'function') {
-                                        window.app.renderAllCells();
-                                    }
+                            // 🛡️ Active Note Protection:
+                            // NEVER wipe Monaco editor DOM or dispose editors on an open note while user is active!
+                            // Only update metadata (version, title in header) if user is not actively typing.
+                            if (isActiveNoteInUI) {
+                                if (window.app.notebook) {
+                                    window.app.notebook._version = Math.max(window.app.notebook._version || 0, remoteVer);
                                 }
                             }
                         }
                     }
                 }
 
-                // Also update sidebar list in notebook UI if available
+                // Update sidebar list in notebook UI if available (non-destructive)
                 if (window.app && typeof window.app.refreshNotebookList === 'function') {
                     window.app.refreshNotebookList(false);
                 } else if (window.app && typeof window.app.loadSidebarNotes === 'function') {
                     window.app.loadSidebarNotes(false);
                 }
             } catch (err) {
-                console.warn('[SyncEngine] Hydration warning:', err.message);
+                console.warn('[SyncEngine] Background hydration warning:', err.message);
             }
         }
 
@@ -473,11 +518,11 @@
         }
 
         /**
-         * Handle conflict resolution when server detected anti-wipeout or newer cloud note
+         * Handle conflict resolution safely without wiping active Monaco editors.
          */
         async handleConflict(conflict) {
-            console.log('[SyncEngine] Resolving conflict for note:', conflict.noteId, 'Reason:', conflict.reason);
-            const { noteId, serverNote, clientVersion } = conflict;
+            console.log('[SyncEngine] Handling conflict for note:', conflict.noteId, 'Reason:', conflict.reason);
+            const { noteId, serverNote } = conflict;
             const local = await this.db.getNote(noteId);
 
             if (!local) return;
@@ -495,7 +540,7 @@
                 });
             }
 
-            // Apply safe server version locally
+            // Apply safe server version locally in Dexie
             const serverCells = serverNote.cells || serverNote.content?.cells || [];
             await this.db.putNote({
                 id: serverNote.id,
@@ -512,22 +557,10 @@
                 _hasFullContent: true
             }, { isRemoteSync: true, hasFullContent: true });
 
-            // Refresh UI if this note is currently displayed
+            // 🛡️ Do NOT destroy active editor session if user is currently working on this note.
+            // If the note is currently open, align the in-memory version number.
             if (window.app && window.app.notebook && window.app.notebook.id === noteId) {
-                window.app.notebook = {
-                    ...window.app.notebook,
-                    title: serverNote.title,
-                    cells: serverCells,
-                    _version: serverNote._version || 1
-                };
-                window.app.disposeEditors();
-                const cellsList = document.getElementById('cells-list');
-                if (cellsList) {
-                    cellsList.innerHTML = '';
-                    serverCells.forEach((cell, idx) => window.app.renderCell(cell, idx + 1));
-                }
-                const titleInput = document.getElementById('notebook-title');
-                if (titleInput) titleInput.value = serverNote.title;
+                window.app.notebook._version = serverNote._version || 1;
             }
         }
     }

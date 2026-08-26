@@ -190,6 +190,15 @@
             if (!noteData || !noteData.id) throw new Error('Note ID is required');
 
             const now = Date.now();
+            let currentVersion = typeof noteData._version === 'number' ? noteData._version : null;
+            if (currentVersion === null && !options.isRemoteSync) {
+                const existing = await this.getNote(noteData.id);
+                if (existing && typeof existing._version === 'number') {
+                    currentVersion = existing._version;
+                }
+            }
+            const finalVersion = (currentVersion !== null ? currentVersion : 0) + (options.isRemoteSync ? 0 : 1);
+
             const noteRecord = {
                 id: noteData.id,
                 title: noteData.title || 'Untitled Notebook',
@@ -201,7 +210,7 @@
                 tags: Array.isArray(noteData.tags) ? noteData.tags : [],
                 owner: noteData.owner || 'current_user',
                 updatedAt: noteData.updatedAt ? new Date(noteData.updatedAt).getTime() : now,
-                _version: (noteData._version || 0) + (options.isRemoteSync ? 0 : 1),
+                _version: finalVersion,
                 _syncStatus: options.isRemoteSync ? 'synced' : (options.syncStatus || 'pending'),
                 _hasFullContent: options.hasFullContent !== undefined ? options.hasFullContent : true
             };

@@ -174,21 +174,21 @@
             switch (info.status) {
                 case 'SYNCED':
                     dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
-                    text.innerText = 'Synced';
+                    text.innerText = 'Saved & Backed up';
                     text.className = 'text-emerald-300';
                     if (count) count.classList.add('hidden');
                     break;
 
                 case 'SYNCING':
                     dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-spin';
-                    text.innerText = 'Syncing...';
+                    text.innerText = 'Backing up...';
                     text.className = 'text-amber-300';
                     if (count) count.classList.add('hidden');
                     break;
 
                 case 'PENDING':
                     dot.className = 'w-2 h-2 rounded-full bg-amber-500 animate-pulse';
-                    text.innerText = 'Unsynced';
+                    text.innerText = 'Saved Locally';
                     text.className = 'text-amber-400';
                     if (count) {
                         count.innerText = `${info.unsyncedCount}`;
@@ -198,7 +198,7 @@
 
                 case 'AUTH_REQUIRED':
                     dot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-pulse';
-                    text.innerText = 'Log In';
+                    text.innerText = 'Saved (Log In)';
                     text.className = 'text-rose-400';
                     if (count) {
                         count.innerText = `${info.unsyncedCount}`;
@@ -208,7 +208,7 @@
 
                 case 'OFFLINE':
                     dot.className = 'w-2 h-2 rounded-full bg-rose-500';
-                    text.innerText = 'Offline';
+                    text.innerText = 'Offline (Local)';
                     text.className = 'text-rose-400';
                     if (count) {
                         count.innerText = `${info.unsyncedCount}`;
@@ -228,11 +228,11 @@
 
             if (statusBadge) {
                 const s = info.status || this.sync?.status || 'SYNCED';
-                if (s === 'SYNCED') statusBadge.innerHTML = '<span class="text-emerald-400 font-bold">🟢 Backed up to Atlas</span>';
-                else if (s === 'SYNCING') statusBadge.innerHTML = '<span class="text-amber-400 font-bold">🟡 Synchronizing...</span>';
-                else if (s === 'PENDING') statusBadge.innerHTML = '<span class="text-amber-400 font-bold">🟠 Pending Cloud Backup</span>';
-                else if (s === 'AUTH_REQUIRED') statusBadge.innerHTML = '<span class="text-rose-400 font-bold">🔒 Session Expired (Saved Locally)</span>';
-                else if (s === 'OFFLINE') statusBadge.innerHTML = '<span class="text-rose-400 font-bold">🔴 Offline (Saved in IndexedDB)</span>';
+                if (s === 'SYNCED') statusBadge.innerHTML = '<span class="text-emerald-400 font-bold">🟢 Saved Locally & Backed up to Cloud</span>';
+                else if (s === 'SYNCING') statusBadge.innerHTML = '<span class="text-amber-400 font-bold">🟡 Backing up to Cloud (Background)...</span>';
+                else if (s === 'PENDING') statusBadge.innerHTML = '<span class="text-amber-400 font-bold">🟠 Saved Locally (Backup pending on break)</span>';
+                else if (s === 'AUTH_REQUIRED') statusBadge.innerHTML = '<span class="text-rose-400 font-bold">🔒 Saved Locally (Please log in to backup)</span>';
+                else if (s === 'OFFLINE') statusBadge.innerHTML = '<span class="text-rose-400 font-bold">🔴 Offline Mode (Saved locally in IndexedDB)</span>';
             }
 
             if (unsyncedEl) {
