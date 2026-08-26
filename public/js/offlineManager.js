@@ -1,9 +1,10 @@
 /**
- * Zoho Notes Pro - Offline Manager & Sync Status Badge
+ * Zoho Notes Pro - Offline Manager & Cloud Backup Status Badge
  * 
  * Provides:
- * - Live Sync Badge UI (Synced / Syncing / Unsynced Changes / Offline / Auth Required)
- * - Interactive Telemetry Modal showing Local Storage Usage & Last Atlas Backup
+ * - Live Cloud Backup Badge UI (Saved & Backed up / Backing up... / Saved Locally / Offline / Auth Required)
+ * - Interactive Telemetry Modal showing Local Storage Usage & Last Atlas Cloud Backup
+ * - Manual "Backup to Cloud Now" and "Restore Notes from Cloud" options
  * - Pre-warm Offline Runtimes (Pyodide WASM + TypeScript)
  * - Auth Expiration Notice on Reconnection
  * - Toast Notifications on Network Transitions
@@ -15,7 +16,7 @@
     class OfflineManager {
         constructor() {
             this.db = window.ZohoLocalDB;
-            this.sync = window.ZohoSyncEngine;
+            this.sync = window.ZohoBackupEngine || window.ZohoSyncEngine;
             this.badgeElement = null;
             this.modalElement = null;
             this.init();
@@ -39,9 +40,9 @@
             badgeContainer.id = 'zoho-sync-badge-container';
             badgeContainer.className = 'flex items-center gap-2 cursor-pointer select-none';
             badgeContainer.innerHTML = `
-                <button id="zoho-sync-badge-btn" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#ffffff0a] border border-[#ffffff1a] hover:bg-[#ffffff15] text-xs font-semibold transition-all shadow-sm" title="Click for Cloud Sync & Storage Details">
-                    <span id="zoho-sync-dot" class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                    <span id="zoho-sync-text" class="text-zinc-300">Synced</span>
+                <button id="zoho-sync-badge-btn" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#ffffff0a] border border-[#ffffff1a] hover:bg-[#ffffff15] text-xs font-semibold transition-all shadow-sm" title="Click for Cloud Backup & Local Storage Details">
+                    <span id="zoho-sync-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span id="zoho-sync-text" class="text-zinc-300">Saved & Backed Up</span>
                     <span id="zoho-sync-count" class="hidden px-1.5 py-0.2 bg-amber-500/20 text-amber-300 text-[10px] rounded-full font-bold">0</span>
                 </button>
             `;
@@ -80,29 +81,29 @@
 
                     <div class="space-y-4 text-sm">
                         <div class="flex justify-between items-center bg-[#ffffff05] p-3 rounded-xl border border-[#ffffff0a]">
-                            <span class="text-zinc-400">Sync Status:</span>
-                            <span id="modal-sync-status-badge" class="font-bold text-green-400">🟢 Backed up to Atlas</span>
+                            <span class="text-zinc-400">Backup Status:</span>
+                            <span id="modal-sync-status-badge" class="font-bold text-emerald-400">🟢 Backed up to Cloud</span>
                         </div>
 
                         <div class="flex justify-between items-center bg-[#ffffff05] p-3 rounded-xl border border-[#ffffff0a]">
-                            <span class="text-zinc-400">Unsynced Changes:</span>
+                            <span class="text-zinc-400">Unsynced Local Changes:</span>
                             <span id="modal-unsynced-count" class="font-bold text-zinc-200">0 notes</span>
                         </div>
 
                         <div class="flex justify-between items-center bg-[#ffffff05] p-3 rounded-xl border border-[#ffffff0a]">
-                            <span class="text-zinc-400">Last Atlas Sync:</span>
+                            <span class="text-zinc-400">Last Cloud Backup:</span>
                             <span id="modal-last-sync-time" class="font-bold text-zinc-200">Never</span>
                         </div>
 
                         <div class="bg-[#ffffff05] p-3 rounded-xl border border-[#ffffff0a] space-y-2">
                             <div class="flex justify-between text-xs text-zinc-400">
-                                <span>IndexedDB Storage</span>
+                                <span>Browser Local Storage</span>
                                 <span id="modal-storage-text">Calculating...</span>
                             </div>
                             <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
                                 <div id="modal-storage-bar" class="bg-indigo-500 h-2 rounded-full transition-all duration-500" style="width: 2%"></div>
                             </div>
-                            <p class="text-[11px] text-zinc-500">Atomic transactions ensure zero data loss even on sudden laptop shutdown.</p>
+                            <p class="text-[11px] text-zinc-500">All edits save locally first with zero input lag. Backups keep your notes safe in the cloud.</p>
                         </div>
 
                         <div class="bg-indigo-950/30 border border-indigo-500/20 p-3 rounded-xl flex items-center justify-between">
@@ -116,11 +117,16 @@
                         </div>
                     </div>
 
-                    <div class="mt-6 flex gap-3">
-                        <button id="btn-manual-sync" class="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/30">
-                            <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync with Cloud Now
-                        </button>
-                        <button id="zoho-sync-modal-close-btn" class="py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold rounded-xl text-xs transition-all">
+                    <div class="mt-6 flex flex-col gap-2">
+                        <div class="flex gap-2">
+                            <button id="btn-manual-sync" class="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/30">
+                                <i data-lucide="cloud-upload" class="w-4 h-4"></i> Backup to Cloud Now
+                            </button>
+                            <button id="btn-restore-cloud" class="py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition-all" title="Restore notes from cloud backup">
+                                <i data-lucide="download-cloud" class="w-4 h-4"></i> Restore Notes
+                            </button>
+                        </div>
+                        <button id="zoho-sync-modal-close-btn" class="w-full py-2 px-4 bg-transparent hover:bg-zinc-800/60 text-zinc-400 hover:text-zinc-200 font-medium rounded-xl text-xs transition-all text-center">
                             Close
                         </button>
                     </div>
@@ -132,14 +138,37 @@
 
             document.getElementById('zoho-sync-modal-close')?.addEventListener('click', () => this.toggleSyncModal(false));
             document.getElementById('zoho-sync-modal-close-btn')?.addEventListener('click', () => this.toggleSyncModal(false));
+            
             document.getElementById('btn-manual-sync')?.addEventListener('click', () => {
                 const btn = document.getElementById('btn-manual-sync');
-                if (btn) btn.innerHTML = '<span class="animate-spin inline-block mr-2">⟳</span> Syncing...';
-                this.sync.syncNow({ immediate: true }).finally(() => {
-                    if (btn) btn.innerHTML = '<i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync with Cloud Now';
-                    if (window.lucide) window.lucide.createIcons();
-                    this.updateModalInfo();
-                });
+                if (btn) btn.innerHTML = '<span class="animate-spin inline-block mr-2">⟳</span> Backing up...';
+                const engine = window.ZohoBackupEngine || window.ZohoSyncEngine;
+                if (engine && typeof engine.backupNow === 'function') {
+                    engine.backupNow({ immediate: true }).finally(() => {
+                        if (btn) btn.innerHTML = '<i data-lucide="cloud-upload" class="w-4 h-4"></i> Backup to Cloud Now';
+                        if (window.lucide) window.lucide.createIcons();
+                        this.updateModalInfo();
+                    });
+                }
+            });
+
+            document.getElementById('btn-restore-cloud')?.addEventListener('click', () => {
+                const btn = document.getElementById('btn-restore-cloud');
+                const engine = window.ZohoBackupEngine || window.ZohoSyncEngine;
+                if (!engine || typeof engine.restoreFromCloud !== 'function') return;
+
+                if (confirm('Restore missing notes from your cloud backup? Existing local notes will not be overwritten.')) {
+                    if (btn) btn.innerHTML = '<span class="animate-spin inline-block mr-2">⟳</span> Restoring...';
+                    engine.restoreFromCloud({ isInitial: false }).then(res => {
+                        this.showToast(`✅ Restored ${res.count || 0} note(s) from cloud backup.`, 'success');
+                    }).catch(err => {
+                        this.showToast('Restore failed: ' + (err.message || err), 'error');
+                    }).finally(() => {
+                        if (btn) btn.innerHTML = '<i data-lucide="download-cloud" class="w-4 h-4"></i> Restore Notes';
+                        if (window.lucide) window.lucide.createIcons();
+                        this.updateModalInfo();
+                    });
+                }
             });
 
             document.getElementById('btn-prewarm-runtimes')?.addEventListener('click', () => {
@@ -156,9 +185,10 @@
         }
 
         setupSyncSubscription() {
-            if (!this.sync) return;
+            const engine = window.ZohoBackupEngine || window.ZohoSyncEngine;
+            if (!engine || typeof engine.onStatusChange !== 'function') return;
 
-            this.sync.onStatusChange((info) => {
+            engine.onStatusChange((info) => {
                 this.updateBadgeUI(info);
                 this.updateModalInfo(info);
             });
@@ -174,7 +204,7 @@
             switch (info.status) {
                 case 'SYNCED':
                     dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
-                    text.innerText = 'Saved & Backed up';
+                    text.innerText = 'Saved & Backed Up';
                     text.className = 'text-emerald-300';
                     if (count) count.classList.add('hidden');
                     break;
@@ -220,6 +250,7 @@
         }
 
         async updateModalInfo(info = {}) {
+            const engine = window.ZohoBackupEngine || window.ZohoSyncEngine;
             const statusBadge = document.getElementById('modal-sync-status-badge');
             const unsyncedEl = document.getElementById('modal-unsynced-count');
             const lastSyncEl = document.getElementById('modal-last-sync-time');
@@ -227,7 +258,7 @@
             const storageBar = document.getElementById('modal-storage-bar');
 
             if (statusBadge) {
-                const s = info.status || this.sync?.status || 'SYNCED';
+                const s = info.status || engine?.status || 'SYNCED';
                 if (s === 'SYNCED') statusBadge.innerHTML = '<span class="text-emerald-400 font-bold">🟢 Saved Locally & Backed up to Cloud</span>';
                 else if (s === 'SYNCING') statusBadge.innerHTML = '<span class="text-amber-400 font-bold">🟡 Backing up to Cloud (Background)...</span>';
                 else if (s === 'PENDING') statusBadge.innerHTML = '<span class="text-amber-400 font-bold">🟠 Saved Locally (Backup pending on break)</span>';
@@ -236,16 +267,16 @@
             }
 
             if (unsyncedEl) {
-                const count = info.unsyncedCount !== undefined ? info.unsyncedCount : (this.sync?.unsyncedCount || 0);
+                const count = info.unsyncedCount !== undefined ? info.unsyncedCount : (engine?.unsyncedCount || 0);
                 unsyncedEl.innerText = `${count} note${count === 1 ? '' : 's'}`;
             }
 
             if (lastSyncEl) {
-                const lastTime = info.lastSyncTime || this.sync?.lastSyncTime;
+                const lastTime = info.lastSyncTime || engine?.lastSyncTime;
                 lastSyncEl.innerText = lastTime ? new Date(lastTime).toLocaleTimeString() : 'In Progress';
             }
 
-            if (storageText && storageBar) {
+            if (storageText && storageBar && this.db && typeof this.db.getStorageEstimate === 'function') {
                 const estimate = await this.db.getStorageEstimate();
                 if (estimate.supported) {
                     storageText.innerText = `${estimate.usedMB} MB used (${estimate.percentUsed}% of ${estimate.quotaMB} MB)`;
@@ -279,7 +310,7 @@
 
         setupNetworkToasts() {
             window.addEventListener('online', () => {
-                this.showToast('🌐 Internet connection restored. Synchronizing notes...', 'success');
+                this.showToast('🌐 Internet connection restored. Cloud backup is ready.', 'success');
             });
 
             window.addEventListener('offline', () => {

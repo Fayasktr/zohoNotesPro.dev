@@ -29,7 +29,7 @@ class NotebookApp {
         this._autoSave = debounce(() => this.saveToBackend(), 1500);
 
         this.db = window.ZohoLocalDB;
-        this.sync = window.ZohoSyncEngine;
+        this.sync = window.ZohoBackupEngine || window.ZohoSyncEngine;
         this.engine = window.ZohoBrowserEngine;
 
         this.expandedFolders = new Set(JSON.parse(localStorage.getItem('zoho-expanded-folders') || '[]'));
@@ -126,6 +126,12 @@ class NotebookApp {
     async init() {
         if (this.db) await this.db.init();
         if (this.sync) await this.sync.init();
+        // CRITICAL: wait for account verification + cloud hydration to finish
+        // BEFORE deciding what to render/create. Prevents the historical race
+        // that created phantom "Getting Started" notes during sync.
+        if (this.sync && typeof this.sync.waitForStartup === 'function') {
+            await this.sync.waitForStartup();
+        }
 
         // Listen for reactive updates from background sync
         if (this.db && this.db.notes$) {
@@ -189,8 +195,13 @@ class NotebookApp {
             }
 
             // Only create if genuinely completely empty across local & remote
-            if (localCount === 0) {
+            // AND we are not stuck on an expired session (creating a phantom
+            // note here would push it into whichever account logs in next).
+            const authBlocked = this.sync && typeof this.sync.isAuthRequired === 'function' && this.sync.isAuthRequired();
+            if (localCount === 0 && !authBlocked) {
                 await this.createNewNotebookInternal('root', 'Getting Started');
+            } else if (localCount === 0 && authBlocked) {
+                console.warn('[NotebookApp] Local DB empty but session expired. Waiting for login before creating a default note.');
             }
         }
 
@@ -2380,7 +2391,14 @@ class NotebookApp {
         this.confirmAction('Empty Trash?', 'Are you sure you want to empty the trash? This action cannot be undone.', async () => {
             try {
                 if (this.db) {
-                    await this.db.clearAllTrash();
+                    const purgedIds = await this.db.clearAllTrash();
+                    // Queue DELETE tombstones so purged notes are removed from
+                    // the cloud too and can never resurrect on restore.
+                    if (this.sync && Array.isArray(purgedIds)) {
+                        for (const id of purgedIds) {
+                            await this.sync.notifyLocalChange(id, 'DELETE');
+                        }
+                    }
                     if (this.sync) this.sync.syncNow({ immediate: true });
                 } else {
                     await this.safeFetch('/api/trash-all', { method: 'DELETE' });

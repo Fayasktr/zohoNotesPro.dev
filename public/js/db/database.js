@@ -402,11 +402,21 @@
                 });
             } else {
                 await new Promise((resolve, reject) => {
-                    const tx = this.db.transaction(['notes'], 'readwrite');
-                    const store = tx.objectStore('notes');
-                    const req = store.delete(id);
-                    req.onsuccess = () => resolve();
-                    req.onerror = () => reject(req.error);
+                    const tx = this.db.transaction(['notes', 'noteVersions'], 'readwrite');
+                    tx.objectStore('notes').delete(id);
+                    if (tx.objectStoreNames.contains('noteVersions')) {
+                        const vStore = tx.objectStore('noteVersions');
+                        const idx = vStore.index('noteId');
+                        const req = idx.openKeyCursor(IDBKeyRange.only(id));
+                        req.onsuccess = () => {
+                            if (req.result) {
+                                vStore.delete(req.result.primaryKey);
+                                req.result.continue();
+                            }
+                        };
+                    }
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
                 });
             }
 
@@ -492,12 +502,18 @@
             return true;
         }
 
+        /**
+         * Permanently purge every trashed note + trashed cell.
+         * Returns the list of purged note ids so callers can queue cloud tombstones.
+         */
         async clearAllTrash() {
             await this.init();
+            const purgedNoteIds = [];
             if (this.isDexie) {
                 await this.db.transaction('rw', [this.db.notes, this.db.trashedCells], async () => {
                     const trashedNotes = await this.db.notes.filter(n => !!n.isTrashed).toArray();
                     for (const n of trashedNotes) {
+                        purgedNoteIds.push(n.id);
                         await this.db.notes.delete(n.id);
                     }
                     await this.db.trashedCells.clear();
@@ -505,6 +521,7 @@
             } else {
                 const trash = await this.getTrash();
                 for (const n of trash.notebooks) {
+                    purgedNoteIds.push(n.id);
                     await this.permanentlyDeleteNote(n.id);
                 }
                 await new Promise((resolve, reject) => {
@@ -514,7 +531,40 @@
                     req.onerror = () => reject(req.error);
                 });
             }
-            this.channels.trash.next({ action: 'CLEAR_ALL' });
+            this.channels.trash.next({ action: 'CLEAR_ALL', purgedNoteIds });
+            return purgedNoteIds;
+        }
+
+        /**
+         * Nuclear reset used when a different account signs in on this browser.
+         * Clears all user-scoped local stores so notes never leak across accounts.
+         */
+        async wipeAllData() {
+            await this.init();
+            if (this.isDexie) {
+                await this.db.transaction('rw', [this.db.notes, this.db.trashedCells, this.db.settings, this.db.syncQueue, this.db.conflictHistory, this.db.noteVersions], async () => {
+                    await Promise.all([
+                        this.db.notes.clear(),
+                        this.db.trashedCells.clear(),
+                        this.db.settings.clear(),
+                        this.db.syncQueue.clear(),
+                        this.db.conflictHistory.clear(),
+                        this.db.noteVersions.clear()
+                    ]);
+                });
+            } else {
+                await new Promise((resolve, reject) => {
+                    const stores = ['notes', 'trashedCells', 'settings', 'syncQueue', 'conflictHistory', 'noteVersions']
+                        .filter(name => this.db.objectStoreNames.contains(name));
+                    const tx = this.db.transaction(stores, 'readwrite');
+                    stores.forEach(name => tx.objectStore(name).clear());
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                });
+            }
+
+            Object.values(this.channels).forEach(ch => ch.next({ action: 'WIPE_ALL' }));
+            console.warn('[ZohoLocalDB] All local data wiped (account switch protection)');
             return true;
         }
 

@@ -382,6 +382,7 @@ const isAuthenticated = (req, res, next) => {
 app.use('/admin', adminRoutes);
 app.use('/', gameRoutes);
 app.use('/api/sync', isAuthenticated, syncRoutes);
+app.use('/api/backup', isAuthenticated, syncRoutes);
 
 // SEO: Dynamic XML Sitemap Route
 app.get('/sitemap.xml', (req, res) => {
