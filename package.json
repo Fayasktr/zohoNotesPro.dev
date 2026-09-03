@@ -7,7 +7,7 @@
     "start": "node app.js",
     "dev": "node app.js",
     "check": "node -c app.js",
-    "test": "node scripts/test_sync_hardening.js && node scripts/test_sync_safety.js"
+    "test": "node scripts/test_sync_hardening.js && node scripts/test_sync_safety.js && node scripts/test_backup_reliability.js"
   },
   "engines": {
     "node": ">=18.0.0"

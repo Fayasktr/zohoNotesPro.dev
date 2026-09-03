@@ -355,7 +355,7 @@ async function runSuite(runNumber) {
         assert(routes.includes('sanitizeTimestamp'), 'timestamp sanitization wired');
 
         const sw = fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8');
-        assert(sw.includes('zoho-notes-v14-sync-hardening'), 'service worker cache bumped so clients receive fixes');
+        assert(sw.includes('zoho-notes-v15-sync-hardening'), 'service worker cache bumped so clients receive fixes');
 
         const se = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'db', 'syncEngine.js'), 'utf8');
         assert(se.includes("navigator.locks.request('zoho_backup_lock'"), 'cross-tab lock wired');

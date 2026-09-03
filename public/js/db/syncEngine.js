@@ -34,13 +34,17 @@
             this.accountVerified = false;
 
             // Idle & Inactivity Backup Controls
-            this.idleTimeoutMs = 15000; // 15s of inactivity triggers a background cloud backup
+            this.idleTimeoutMs = 2500; // 2.5s of typing pause triggers automatic background cloud backup
+            this.maxWaitMs = 10000; // 10s maximum ceiling for unsynced changes during continuous non-stop editing
             this.idleDebounceTimer = null;
+            this.maxWaitTimer = null;
+            this.lockRetryTimer = null;
             this.lastActivityTime = Date.now();
+            this.firstPendingChangeTime = null;
             this.isUserActive = false;
 
-            // Periodic backup check for unsynced changes (Runs only when user is idle)
-            this.pollIntervalMs = 60000; // 60s
+            // Periodic backup check for unsynced changes (Runs on idle or when max wait exceeded)
+            this.pollIntervalMs = 30000; // 30s
             this.pollTimer = null;
 
             this.setupActivityListeners();
@@ -164,6 +168,13 @@
             this.idleDebounceTimer = setTimeout(() => {
                 this.onUserIdle();
             }, this.idleTimeoutMs);
+
+            // Arm maxWait ceiling so continuous typing doesn't starve cloud backup
+            if (this.unsyncedCount > 0 && !this.maxWaitTimer) {
+                this.maxWaitTimer = setTimeout(() => {
+                    this.onMaxWaitReached();
+                }, this.maxWaitMs);
+            }
         }
 
         onUserIdle() {
@@ -172,6 +183,17 @@
             if (this.unsyncedCount > 0 && navigator.onLine && !this.isSyncing) {
                 console.log('[BackupEngine] User is idle. Starting background cloud backup...');
                 this.backupNow({ reason: 'user_idle_break' });
+            }
+        }
+
+        onMaxWaitReached() {
+            if (this.maxWaitTimer) {
+                clearTimeout(this.maxWaitTimer);
+                this.maxWaitTimer = null;
+            }
+            if (this.unsyncedCount > 0 && navigator.onLine && !this.isSyncing) {
+                console.log('[BackupEngine] Continuous editing detected: forcing background cloud backup...');
+                this.backupNow({ reason: 'max_wait_forced_backup' });
             }
         }
 
@@ -210,11 +232,13 @@
         startBackgroundPoll() {
             if (this.pollTimer) clearInterval(this.pollTimer);
             this.pollTimer = setInterval(() => {
-                // Only push backups when user is idle, online, and not already syncing
+                // Push backups when user is idle OR when pending changes have exceeded maxWaitMs
                 const now = Date.now();
                 const isIdle = (now - this.lastActivityTime) >= this.idleTimeoutMs;
-                if (navigator.onLine && !this.isSyncing && isIdle && this.unsyncedCount > 0) {
-                    this.backupNow({ reason: 'periodic_idle_backup' });
+                const hasExceededMaxWait = this.firstPendingChangeTime && (now - this.firstPendingChangeTime) >= this.maxWaitMs;
+
+                if (navigator.onLine && !this.isSyncing && this.unsyncedCount > 0 && (isIdle || hasExceededMaxWait)) {
+                    this.backupNow({ reason: isIdle ? 'periodic_idle_backup' : 'periodic_max_wait_backup' });
                 }
             }, this.pollIntervalMs);
         }
@@ -304,9 +328,13 @@
                 });
             }
 
+            if (!this.firstPendingChangeTime) {
+                this.firstPendingChangeTime = Date.now();
+            }
+
             await this.updateUnsyncedCount();
 
-            // Refresh user activity and arm idle timer
+            // Refresh user activity and arm idle timer + maxWait ceiling
             this.recordUserActivity();
         }
 
@@ -318,7 +346,11 @@
                 clearTimeout(this.idleDebounceTimer);
                 this.idleDebounceTimer = null;
             }
-            return this.backupNow({ immediate: true });
+            if (this.maxWaitTimer) {
+                clearTimeout(this.maxWaitTimer);
+                this.maxWaitTimer = null;
+            }
+            return this.backupNow({ immediate: true, keepalive: true, reason: 'flush_lifecycle' });
         }
 
         /**
@@ -357,7 +389,7 @@
             try {
                 const didRun = await this.runExclusive(async () => {
                     // Step 1: Push all pending local modifications to MongoDB Atlas
-                    await this.pushPendingChanges();
+                    await this.pushPendingChanges(options);
 
                     this.lastSyncTime = new Date();
                     if (this.db) {
@@ -365,14 +397,29 @@
                     }
                     await this.updateUnsyncedCount();
 
+                    if (this.unsyncedCount === 0) {
+                        this.firstPendingChangeTime = null;
+                        if (this.maxWaitTimer) {
+                            clearTimeout(this.maxWaitTimer);
+                            this.maxWaitTimer = null;
+                        }
+                        if (this.lockRetryTimer) {
+                            clearTimeout(this.lockRetryTimer);
+                            this.lockRetryTimer = null;
+                        }
+                    }
+
                     this.setStatus('SYNCED');
                 });
 
                 if (didRun === false) {
                     // Another tab owns the backup cycle right now; our changes
-                    // remain queued locally and will ride along with its push.
+                    // remain queued locally. Check count and schedule retry.
                     await this.updateUnsyncedCount();
                     if (this.status === 'SYNCING') this.setStatus(this.unsyncedCount > 0 ? 'PENDING' : 'SYNCED');
+                    if (this.unsyncedCount > 0) {
+                        this.scheduleLockRetry();
+                    }
                 }
             } catch (err) {
                 console.warn('[BackupEngine] Cloud backup note:', err.message || err);
@@ -389,6 +436,17 @@
             }
         }
 
+        scheduleLockRetry() {
+            if (this.lockRetryTimer) clearTimeout(this.lockRetryTimer);
+            this.lockRetryTimer = setTimeout(() => {
+                this.lockRetryTimer = null;
+                if (this.unsyncedCount > 0 && navigator.onLine && !this.isSyncing) {
+                    console.log('[BackupEngine] Retrying backup after cross-tab lock release...');
+                    this.backupNow({ reason: 'lock_contention_retry' });
+                }
+            }, 2500);
+        }
+
         // Backwards compatibility alias
         async syncNow(options = {}) {
             return this.backupNow(options);
@@ -403,7 +461,7 @@
          *    the newer cloud copy is written into the local DB, healing any
          *    truncated or stale local state instead of diverging silently.
          */
-        async pushPendingChanges() {
+        async pushPendingChanges(options = {}) {
             if (!this.db) return;
             const queue = await this.db.getSyncQueue();
             if (queue.length === 0) return;
@@ -461,7 +519,8 @@
 
             const response = await this.safeFetch('/api/sync/push', {
                 method: 'POST',
-                body: JSON.stringify({ batch: pushBatch })
+                body: JSON.stringify({ batch: pushBatch }),
+                ...(options.keepalive ? { keepalive: true } : {})
             });
 
             if (response.status === 401 || response.status === 403) {

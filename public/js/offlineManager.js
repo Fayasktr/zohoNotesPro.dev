@@ -291,7 +291,7 @@
         }
 
         showAuthExpiredNotice() {
-            this.showToast('🔒 Session Expired: Your changes are safely saved in local storage. Please log in to backup to cloud.', 'error');
+            this.showToast('🔒 Session Expired: Your changes are safely saved in local storage. Please <a href="/login" target="_blank" class="underline font-bold text-amber-300 ml-1">log in here</a> to resume cloud backup.', 'error', 8000);
         }
 
         toggleSyncModal(show = null) {
@@ -318,7 +318,7 @@
             });
         }
 
-        showToast(message, type = 'info') {
+        showToast(message, type = 'info', duration = 4500) {
             const toast = document.getElementById('toast');
             if (!toast) return;
             const titleEl = document.getElementById('toast-title');
@@ -326,15 +326,16 @@
             const iconEl = document.getElementById('toast-icon');
 
             if (titleEl) titleEl.innerText = type === 'error' ? 'Notice' : (type === 'success' ? 'Online' : 'Network');
-            if (msgEl) msgEl.innerText = message;
+            if (msgEl) msgEl.innerHTML = message;
             if (iconEl) {
                 iconEl.className = `w-10 h-10 rounded-full flex items-center justify-center ${type === 'error' ? 'bg-red-500/20 text-red-400' : (type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400')}`;
             }
 
             toast.classList.remove('translate-y-24', 'opacity-0');
-            setTimeout(() => {
+            if (this._toastTimer) clearTimeout(this._toastTimer);
+            this._toastTimer = setTimeout(() => {
                 toast.classList.add('translate-y-24', 'opacity-0');
-            }, 4500);
+            }, duration);
         }
     }
 

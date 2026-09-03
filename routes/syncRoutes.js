@@ -31,7 +31,7 @@ function sanitizeTimestamp(value) {
  */
 function resolvePushItem(existing, incoming, options = {}) {
     const { action, note, noteId } = incoming;
-    const SKEW_MS = options.skewMs || 5000;
+    const SKEW_MS = options.skewMs !== undefined ? options.skewMs : 30000;
 
     if (action === 'DELETE') {
         return { outcome: 'delete', targetId: noteId || (note && note.id) };
