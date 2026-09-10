@@ -132,10 +132,15 @@
             if (!info || !info.userId) return;
 
             const storedOwner = await this.db.getSetting('ownerId');
-            if (storedOwner && storedOwner !== String(info.userId)) {
+            const localNotes = (await this.db.getAllNotes()) || [];
+            if ((storedOwner && storedOwner !== String(info.userId)) || (!storedOwner && localNotes.length > 0)) {
                 console.warn('[BackupEngine] Different account detected. Wiping stale local cache before hydration.');
                 await this.db.wipeAllData();
                 this.unsyncedCount = 0;
+                try {
+                    localStorage.removeItem('zoho-notebook-current-id');
+                    localStorage.removeItem('zoho-notebook-trash-cache');
+                } catch (_) {}
             }
             await this.db.setSetting('ownerId', String(info.userId));
             this.accountVerified = true;
@@ -560,6 +565,16 @@
             if (result.processedQueueIds && Array.isArray(result.processedQueueIds)) {
                 for (const qId of result.processedQueueIds) {
                     await this.db.removeFromSyncQueue(qId);
+                }
+                // Mark successfully pushed notes as synced locally
+                for (const item of pushBatch) {
+                    if (item.note && item.note.id && item.action !== 'DELETE') {
+                        const localNote = await this.db.getNote(item.note.id);
+                        if (localNote && localNote._syncStatus === 'pending') {
+                            localNote._syncStatus = 'synced';
+                            await this.db.putNote(localNote, { isRemoteSync: true, hasFullContent: true });
+                        }
+                    }
                 }
             }
 

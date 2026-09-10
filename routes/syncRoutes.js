@@ -297,9 +297,20 @@ router.post('/push', async (req, res) => {
                 continue;
             }
 
+            // If existing note not found for this user, check if note.id belongs to someone else to prevent E11000 duplicate key crash
+            let targetNoteId = note.id;
+            if (!existing && note && note.id) {
+                const foreignNote = await Note.findOne({ id: note.id }).lean();
+                if (foreignNote) {
+                    targetNoteId = `ntbk-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+                    resolution.updateDoc.id = targetNoteId;
+                    if (resolution.updateDoc.content) resolution.updateDoc.content.id = targetNoteId;
+                }
+            }
+
             await Note.findOneAndUpdate(
                 {
-                    id: note.id,
+                    id: targetNoteId,
                     $or: [
                         { owner: userId },
                         { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }

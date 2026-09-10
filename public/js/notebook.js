@@ -96,6 +96,17 @@ class NotebookApp {
         console.log = (...args) => {
             this.originalLog(...args);
             if (this.currentRunningCellId) {
+                // Filter out system and backup engine logs so they never pollute code output
+                const firstArg = typeof args[0] === 'string' ? args[0] : '';
+                if (firstArg.startsWith('[BackupEngine]') ||
+                    firstArg.startsWith('[SyncEngine]') ||
+                    firstArg.startsWith('[OfflineManager]') ||
+                    firstArg.startsWith('[NotebookApp]') ||
+                    firstArg.startsWith('[SW]') ||
+                    firstArg.startsWith('[ZohoLocalDB]')) {
+                    return;
+                }
+
                 const outputDiv = document.getElementById(`output-${this.currentRunningCellId}`);
                 if (outputDiv) {
                     outputDiv.classList.remove('hidden');
@@ -731,15 +742,34 @@ class NotebookApp {
     async createNewNotebookInternal(folderName = 'root', title = 'New File') {
         this.disposeEditors();
         const id = `ntbk-${Date.now()}`;
+        const cellId = 'cell-' + Math.random().toString(36).substr(2, 9);
+        const lang = this.userSettings.defaultLanguage || 'javascript';
+        const templates = {
+            'c': '#include <stdio.h>\n\nint main() {\n    printf("Hello, World!\\n");\n    return 0;\n}',
+            'cpp': '#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!" << std::endl;\n    return 0;\n}',
+            'java': 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}',
+            'typescript': 'let message: string = "Hello, TypeScript!";\nconsole.log(message);'
+        };
+
+        const initialCell = {
+            id: cellId,
+            type: 'code',
+            lang: lang,
+            title: '',
+            isStarred: false,
+            content: templates[lang] || '',
+            output: null
+        };
+
         this.notebook = {
             id: id,
             title: title || 'Untitled File',
             isStarred: false,
             folder: folderName,
-            cells: [],
+            cells: [initialCell],
             tags: []
         };
-        this.addCell('code');
+
         await this.saveToBackend();
         await this.refreshNotebookList();
         await this.loadNotebook(this.notebook.id);
@@ -1159,6 +1189,11 @@ class NotebookApp {
     }
 
     renderCell(cell, index = 1) {
+        if (this.editors[cell.id]) {
+            try { this.editors[cell.id].dispose(); } catch (_) {}
+            delete this.editors[cell.id];
+        }
+
         const container = document.getElementById('cells-list');
         const cellElem = document.createElement('div');
         cellElem.className = 'cell';
@@ -1282,16 +1317,28 @@ class NotebookApp {
 
             const lang = isMark ? 'markdown' : (cell.lang === 'cpp' ? 'cpp' : (cell.lang === 'c' ? 'c' : (cell.lang === 'python' ? 'python' : (cell.lang === 'java' ? 'java' : (cell.lang === 'typescript' ? 'typescript' : 'javascript')))));
             const ext = lang === 'javascript' ? 'js' : (lang === 'typescript' ? 'ts' : lang);
-            const modelUri = monaco.Uri.parse(`file:///${cell.id}.${ext}`);
-
-            let model = monaco.editor.getModel(modelUri);
-            if (!model) {
-                model = monaco.editor.createModel(cell.content, lang, modelUri);
-            } else {
-                model.setValue(cell.content);
+            const editorContainer = document.getElementById(`editor-${cell.id}`);
+            if (!editorContainer || !document.body.contains(editorContainer)) {
+                return; // Container was detached or removed from DOM
             }
 
-            const editor = monaco.editor.create(document.getElementById(`editor-${cell.id}`), {
+            // If an editor or elements are already mounted in this container, cleanly clear them
+            if (editorContainer.children.length > 0) {
+                if (this.editors[cell.id]) {
+                    try { this.editors[cell.id].dispose(); } catch (_) {}
+                    delete this.editors[cell.id];
+                }
+                editorContainer.innerHTML = '';
+            }
+
+            let model = monaco.editor.getModel(modelUri);
+            if (!model || model.isDisposed()) {
+                model = monaco.editor.createModel(cell.content || '', lang, modelUri);
+            } else {
+                model.setValue(cell.content || '');
+            }
+
+            const editor = monaco.editor.create(editorContainer, {
                 model: model,
                 theme: 'vs-dark-plus',
                 automaticLayout: true,
@@ -1373,6 +1420,7 @@ class NotebookApp {
             });
 
             updateHeight();
+            setTimeout(updateHeight, 50);
 
             editor.onDidChangeModelContent(() => {
                 const currentCell = this.notebook.cells.find(c => c.id === cell.id);
@@ -1550,9 +1598,10 @@ class NotebookApp {
                 runBtn.innerText = 'Run';
                 runBtn.disabled = false;
             }
-            setTimeout(() => {
-                if (this.currentRunningCellId === cellId) this.currentRunningCellId = null;
-            }, 1000);
+            // Clear running cell ID immediately so background logs never leak into cell output
+            if (this.currentRunningCellId === cellId) {
+                this.currentRunningCellId = null;
+            }
         }
     }
 
@@ -1656,9 +1705,7 @@ class NotebookApp {
                     runBtn.innerText = 'Run';
                     runBtn.disabled = false;
                 }
-                setTimeout(() => {
-                    if (this.currentRunningCellId === cellId) this.currentRunningCellId = null;
-                }, 500);
+                if (this.currentRunningCellId === cellId) this.currentRunningCellId = null;
             },
 
             onError: (errMsg) => {
@@ -1686,9 +1733,7 @@ class NotebookApp {
                     runBtn.innerText = 'Run';
                     runBtn.disabled = false;
                 }
-                setTimeout(() => {
-                    if (this.currentRunningCellId === cellId) this.currentRunningCellId = null;
-                }, 500);
+                if (this.currentRunningCellId === cellId) this.currentRunningCellId = null;
             }
         });
 

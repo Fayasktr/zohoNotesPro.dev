@@ -563,6 +563,11 @@
                 });
             }
 
+            try {
+                localStorage.removeItem('zoho-notebook-current-id');
+                localStorage.removeItem('zoho-notebook-trash-cache');
+            } catch (_) {}
+
             Object.values(this.channels).forEach(ch => ch.next({ action: 'WIPE_ALL' }));
             console.warn('[ZohoLocalDB] All local data wiped (account switch protection)');
             return true;
