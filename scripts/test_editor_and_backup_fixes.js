@@ -51,6 +51,7 @@ test('2. renderCell includes single-instance and detached DOM guards', () => {
     assert(code.includes('if (this.editors[cell.id])'), 'Must dispose existing editor instance for cell');
     assert(code.includes('document.body.contains(editorContainer)'), 'Must verify container is attached to DOM');
     assert(code.includes('if (editorContainer.children.length > 0)'), 'Must clear existing children in container before create');
+    assert(code.includes('const modelUri = monaco.Uri.parse'), 'Must define modelUri for Monaco model binding');
 });
 
 // 3. Check console.log filter

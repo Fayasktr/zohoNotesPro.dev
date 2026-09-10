@@ -1331,11 +1331,17 @@ class NotebookApp {
                 editorContainer.innerHTML = '';
             }
 
+            const modelUri = monaco.Uri.parse(`file:///${cell.id}.${ext}`);
             let model = monaco.editor.getModel(modelUri);
             if (!model || model.isDisposed()) {
                 model = monaco.editor.createModel(cell.content || '', lang, modelUri);
             } else {
-                model.setValue(cell.content || '');
+                if (typeof model.getLanguageId === 'function' && model.getLanguageId() !== lang) {
+                    monaco.editor.setModelLanguage(model, lang);
+                }
+                if (model.getValue() !== (cell.content || '')) {
+                    model.setValue(cell.content || '');
+                }
             }
 
             const editor = monaco.editor.create(editorContainer, {
