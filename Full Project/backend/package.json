@@ -1,0 +1,39 @@
+{
+  "name": "zoho-notes-pro-backend",
+  "version": "2.0.0",
+  "description": "Zoho Notes Pro - Modern MVCS Backend with Local-First Browser Execution & MongoDB Atlas Cloud Backup",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node tests/run_all.js",
+    "check": "node -c server.js && node -c app.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "zoho-notes",
+    "mvcs",
+    "local-first",
+    "atlas-backup",
+    "code-runner",
+    "monaco-editor",
+    "websockets"
+  ],
+  "author": "Fayas KP",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.0",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^7.0.12",
+    "ws": "^8.21.3"
+  }
+}

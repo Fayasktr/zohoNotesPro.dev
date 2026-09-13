@@ -1,5 +1,8 @@
 # Dependency directories
 node_modules/
+**/node_modules/
+dist/
+**/dist/
 jspm_packages/
 
 # Environment files
@@ -9,6 +12,8 @@ jspm_packages/
 .env.test.local
 .env.production.local
 *.env
+**/.env
+**/.env.*
 
 # Agent & System Metadata
 .agent/
@@ -37,6 +42,7 @@ logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.tsbuildinfo
 
 # OS metadata files
 .DS_Store
@@ -47,8 +53,3 @@ implementation_plan_for_cluodeToWasm*
 implementation_plan*
 scratch/
 scripts/
-
-# Project Backups & Archives
-Full Project/
-full project/
-Full Project*
