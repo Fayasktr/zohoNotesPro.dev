@@ -1,0 +1,30 @@
+{
+  "_id": "695fe5bb79fd89587d4303c9",
+  "owner": "695fe57ef2c9b0849d034a1b",
+  "id": "ntbk-1767892411037",
+  "__v": 0,
+  "content": {
+    "id": "ntbk-1767892411037",
+    "title": "array of objects",
+    "folder": "notebook of js",
+    "isStarred": false,
+    "cells": [
+      {
+        "id": "cell-pqoo3qcnu",
+        "type": "code",
+        "title": "",
+        "isStarred": false,
+        "content": "",
+        "output": null
+      }
+    ],
+    "tags": []
+  },
+  "folder": "notebook of js",
+  "isStarred": false,
+  "isTrashed": false,
+  "title": "array of objects",
+  "updatedAt": "2026-01-08T17:13:32.574Z",
+  "_version": 1,
+  "trashedAt": null
+}

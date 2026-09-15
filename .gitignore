@@ -26,6 +26,7 @@ jspm_packages/
 
 # Database dumps & Scratch JSON files
 *_dump.json
+!local_storage_backup/**
 *_diagnostic.json
 all_suspect_notes.json
 ownerless_notes_with_times.json
@@ -52,4 +53,3 @@ desktop.ini
 implementation_plan_for_cluodeToWasm*
 implementation_plan*
 scratch/
-scripts/

@@ -1,0 +1,28 @@
+{
+  "_id": "695dd7fe79fd89587d4303c4",
+  "id": "ntbk-1767757822646",
+  "__v": 0,
+  "content": {
+    "id": "ntbk-1767757822646",
+    "title": "string",
+    "folder": "java script",
+    "isStarred": false,
+    "cells": [
+      {
+        "id": "cell-u9x758atb",
+        "type": "code",
+        "title": "",
+        "content": "",
+        "output": null
+      }
+    ],
+    "tags": []
+  },
+  "folder": "java script",
+  "isStarred": false,
+  "title": "string",
+  "updatedAt": "2026-01-07T03:50:24.181Z",
+  "isTrashed": true,
+  "_version": 1,
+  "trashedAt": null
+}

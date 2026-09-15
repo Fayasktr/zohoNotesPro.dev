@@ -34,8 +34,14 @@
             this.accountVerified = false;
 
             // Idle & Inactivity Backup Controls
-            this.idleTimeoutMs = 2500; // 2.5s of typing pause triggers automatic background cloud backup
-            this.maxWaitMs = 10000; // 10s maximum ceiling for unsynced changes during continuous non-stop editing
+            this.idleTimeoutMs = 60000; // 60s (1 min) typing pause triggers automatic background cloud backup
+            this.maxWaitMs = 120000; // 120s (2 min) maximum ceiling for unsynced changes during continuous non-stop editing
+            try {
+                const customDelay = localStorage.getItem('zoho-backup-idle-delay');
+                if (customDelay !== null && !isNaN(parseInt(customDelay))) {
+                    this.idleTimeoutMs = parseInt(customDelay);
+                }
+            } catch (_) {}
             this.idleDebounceTimer = null;
             this.maxWaitTimer = null;
             this.lockRetryTimer = null;
@@ -167,18 +173,38 @@
             // Reset idle timer
             if (this.idleDebounceTimer) {
                 clearTimeout(this.idleDebounceTimer);
+                this.idleDebounceTimer = null;
             }
 
-            // If there are unsynced changes, schedule backup when user becomes idle
-            this.idleDebounceTimer = setTimeout(() => {
-                this.onUserIdle();
-            }, this.idleTimeoutMs);
+            // If there are unsynced changes and idle backup is enabled (> 0), schedule backup when user becomes idle
+            if (this.idleTimeoutMs > 0) {
+                this.idleDebounceTimer = setTimeout(() => {
+                    this.onUserIdle();
+                }, this.idleTimeoutMs);
+            }
 
             // Arm maxWait ceiling so continuous typing doesn't starve cloud backup
             if (this.unsyncedCount > 0 && !this.maxWaitTimer) {
                 this.maxWaitTimer = setTimeout(() => {
                     this.onMaxWaitReached();
                 }, this.maxWaitMs);
+            }
+        }
+
+        setIdleTimeoutMs(ms) {
+            this.idleTimeoutMs = Math.max(0, parseInt(ms) || 0);
+            try {
+                localStorage.setItem('zoho-backup-idle-delay', this.idleTimeoutMs);
+            } catch (_) {}
+            console.log(`[BackupEngine] Auto-backup idle delay set to ${this.idleTimeoutMs}ms (${this.idleTimeoutMs / 1000}s)`);
+            if (this.idleDebounceTimer) {
+                clearTimeout(this.idleDebounceTimer);
+                this.idleDebounceTimer = null;
+            }
+            if (this.unsyncedCount > 0 && this.idleTimeoutMs > 0) {
+                this.idleDebounceTimer = setTimeout(() => {
+                    this.onUserIdle();
+                }, this.idleTimeoutMs);
             }
         }
 
@@ -239,7 +265,7 @@
             this.pollTimer = setInterval(() => {
                 // Push backups when user is idle OR when pending changes have exceeded maxWaitMs
                 const now = Date.now();
-                const isIdle = (now - this.lastActivityTime) >= this.idleTimeoutMs;
+                const isIdle = this.idleTimeoutMs > 0 && (now - this.lastActivityTime) >= this.idleTimeoutMs;
                 const hasExceededMaxWait = this.firstPendingChangeTime && (now - this.firstPendingChangeTime) >= this.maxWaitMs;
 
                 if (navigator.onLine && !this.isSyncing && this.unsyncedCount > 0 && (isIdle || hasExceededMaxWait)) {
@@ -292,7 +318,7 @@
 
         // --- Helper: Safe Authenticated Fetch ---
         async safeFetch(url, options = {}) {
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            let csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
@@ -303,11 +329,34 @@
                 headers['X-CSRF-Token'] = csrfToken;
             }
 
-            const response = await window.fetch(url, {
+            let response = await window.fetch(url, {
                 ...options,
                 headers,
                 credentials: 'same-origin'
             });
+
+            // Auto-recovery for CSRF token expiration on mutating endpoints
+            if (response.status === 403 && options.method && options.method.toUpperCase() !== 'GET' && !options._csrfRetried) {
+                try {
+                    const csrfRes = await window.fetch('/api/sync/csrf', { credentials: 'same-origin' });
+                    if (csrfRes.ok) {
+                        const data = await csrfRes.json();
+                        if (data && data.csrfToken) {
+                            const metaTag = document.querySelector('meta[name="csrf-token"]');
+                            if (metaTag) metaTag.setAttribute('content', data.csrfToken);
+                            headers['X-CSRF-Token'] = data.csrfToken;
+                            response = await window.fetch(url, {
+                                ...options,
+                                _csrfRetried: true,
+                                headers,
+                                credentials: 'same-origin'
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[BackupEngine] CSRF token recovery failed:', e);
+                }
+            }
 
             return response;
         }

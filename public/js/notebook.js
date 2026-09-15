@@ -33,6 +33,7 @@ class NotebookApp {
         this.engine = window.ZohoBrowserEngine;
 
         this.expandedFolders = new Set(JSON.parse(localStorage.getItem('zoho-expanded-folders') || '[]'));
+        this.persistedFolders = this.getPersistedFolders();
         this.currentPendingFolder = 'root';
         this.modalHistoryPushed = false;
         this.setupTheme();
@@ -716,15 +717,48 @@ class NotebookApp {
         this.openModal('modal-input');
     }
 
+    getPersistedFolders() {
+        try {
+            return new Set(JSON.parse(localStorage.getItem('zoho-persisted-folders') || '[]'));
+        } catch (e) {
+            return new Set();
+        }
+    }
+
+    savePersistedFolders() {
+        try {
+            localStorage.setItem('zoho-persisted-folders', JSON.stringify([...this.persistedFolders]));
+        } catch (e) {
+            console.error('Failed to save persisted folders', e);
+        }
+    }
+
+    addPersistedFolder(folderPath) {
+        if (!folderPath || folderPath === 'root') return;
+        if (!this.persistedFolders) this.persistedFolders = new Set();
+        const parts = folderPath.split('/');
+        let current = '';
+        parts.forEach(part => {
+            current = current ? `${current}/${part}` : part;
+            this.persistedFolders.add(current);
+        });
+        this.savePersistedFolders();
+    }
+
     async createFolder() {
         this.openModal('modal-folder');
     }
 
     async handleFolderCreate() {
-        const folderName = document.getElementById('input-folder-name').value;
+        const folderName = document.getElementById('input-folder-name').value.trim();
         if (!folderName) return;
         this.closeAllModals();
-        this.createNewNotebookInternal(folderName);
+        this.addPersistedFolder(folderName);
+        if (this.expandedFolders) {
+            this.expandedFolders.add(folderName);
+            localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
+        }
+        await this.createNewNotebookInternal(folderName);
     }
 
     async createNewNotebook(folderName = 'root') {
@@ -888,10 +922,37 @@ class NotebookApp {
         // 1. Build Tree Structure from Paths
         const tree = { name: 'root', type: 'folder', children: {}, files: [] };
 
+        // Ensure all persisted folders are included in tree even if empty
+        if (this.persistedFolders) {
+            this.persistedFolders.forEach(folderPath => {
+                if (!folderPath || folderPath === 'root') return;
+                const pathParts = folderPath.split('/');
+                let currentLevel = tree;
+                let currentPath = '';
+                pathParts.forEach(part => {
+                    currentPath = currentPath ? `${currentPath}/${part}` : part;
+                    if (!currentLevel.children[part]) {
+                        currentLevel.children[part] = {
+                            name: part,
+                            fullPath: currentPath,
+                            type: 'folder',
+                            children: {},
+                            files: []
+                        };
+                    }
+                    currentLevel = currentLevel.children[part];
+                });
+            });
+        }
+
         notebooks.forEach(nb => {
             let path = nb.folder && nb.folder !== 'root' ? nb.folder.split('/') : [];
             let currentLevel = tree;
             let currentPath = '';
+
+            if (nb.folder && nb.folder !== 'root') {
+                this.addPersistedFolder(nb.folder);
+            }
 
             // Navigate/Build path
             path.forEach(part => {
@@ -946,6 +1007,13 @@ class NotebookApp {
                 // Recursively render children
                 const childrenContainer = item.querySelector('.tree-children');
                 renderTreeLevel(child, childrenContainer, level + 1);
+
+                if (child.files.length === 0 && Object.keys(child.children).length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.className = 'tree-item text-[11px] text-zinc-500 italic pl-6 py-1 select-none pointer-events-none';
+                    emptyMsg.textContent = '(Empty folder)';
+                    childrenContainer.appendChild(emptyMsg);
+                }
             });
 
             // Render Files (Alphabetical)
@@ -1772,13 +1840,43 @@ class NotebookApp {
         if (index === -1) return;
         const newIndex = index + direction;
         if (newIndex < 0 || newIndex >= this.notebook.cells.length) return;
+
+        const currentElem = document.getElementById(`container-${cellId}`);
+        if (currentElem) {
+            if (direction === -1) {
+                const prevElem = currentElem.previousElementSibling;
+                if (prevElem) {
+                    prevElem.before(currentElem);
+                }
+            } else if (direction === 1) {
+                const nextElem = currentElem.nextElementSibling;
+                if (nextElem) {
+                    nextElem.after(currentElem);
+                }
+            }
+        }
+
         const temp = this.notebook.cells[index];
         this.notebook.cells[index] = this.notebook.cells[newIndex];
         this.notebook.cells[newIndex] = temp;
-        this.disposeEditors();
-        document.getElementById('cells-list').innerHTML = '';
-        this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
+
+        this.updateCellIndices();
+
+        if (currentElem) {
+            currentElem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
         this._autoSave();
+    }
+
+    updateCellIndices() {
+        const cellElems = document.querySelectorAll('#cells-list .cell');
+        cellElems.forEach((cellElem, idx) => {
+            const indexElem = cellElem.querySelector('.cell-index');
+            if (indexElem) {
+                indexElem.textContent = idx + 1;
+            }
+        });
     }
 
     async runAll() {
@@ -2058,12 +2156,24 @@ class NotebookApp {
         const targetIndex = this.notebook.cells.findIndex(c => c.id === targetCellId);
 
         if (sourceIndex !== -1 && targetIndex !== -1) {
+            const sourceElem = document.getElementById(`container-${this.draggedCellId}`);
+            if (sourceElem && targetCell) {
+                if (sourceIndex < targetIndex) {
+                    targetCell.after(sourceElem);
+                } else {
+                    targetCell.before(sourceElem);
+                }
+            }
+
             const [movedCell] = this.notebook.cells.splice(sourceIndex, 1);
             this.notebook.cells.splice(targetIndex, 0, movedCell);
 
-            this.disposeEditors();
-            document.getElementById('cells-list').innerHTML = '';
-            this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
+            this.updateCellIndices();
+
+            if (sourceElem) {
+                sourceElem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
             this._autoSave();
         }
     }
@@ -2162,7 +2272,7 @@ class NotebookApp {
                     this.notebook.folder = newPath + this.notebook.folder.slice(oldPath.length);
                 }
 
-                // Update expandedFolders cache
+                // Update expandedFolders and persistedFolders cache
                 const updatedExpanded = new Set();
                 for (const path of this.expandedFolders) {
                     if (path === oldPath) {
@@ -2175,6 +2285,21 @@ class NotebookApp {
                 }
                 this.expandedFolders = updatedExpanded;
                 localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
+
+                if (this.persistedFolders) {
+                    const updatedPersisted = new Set();
+                    for (const path of this.persistedFolders) {
+                        if (path === oldPath) {
+                            updatedPersisted.add(newPath);
+                        } else if (path.startsWith(oldPath + '/')) {
+                            updatedPersisted.add(newPath + path.slice(oldPath.length));
+                        } else {
+                            updatedPersisted.add(path);
+                        }
+                    }
+                    this.persistedFolders = updatedPersisted;
+                    this.savePersistedFolders();
+                }
 
                 await this.refreshNotebookList();
             } catch (e) {
@@ -2205,6 +2330,16 @@ class NotebookApp {
                     }
                 }
                 localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
+
+                // Remove from persistedFolders cache
+                if (this.persistedFolders) {
+                    for (const path of [...this.persistedFolders]) {
+                        if (path === folderName || path.startsWith(folderName + '/')) {
+                            this.persistedFolders.delete(path);
+                        }
+                    }
+                    this.savePersistedFolders();
+                }
 
                 if (this.notebook.folder === folderName || (this.notebook.folder && this.notebook.folder.startsWith(folderName + '/'))) {
                     localStorage.removeItem('zoho-notebook-current-id');

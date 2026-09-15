@@ -1,0 +1,39 @@
+{
+  "_id": "6aa57370f613b8d2b9744801",
+  "id": "ntbk-1789227886783-4evg3",
+  "__v": 0,
+  "_version": 33,
+  "collaborators": [],
+  "content": {
+    "id": "ntbk-1789227886783-4evg3",
+    "title": "Untitled Notebook",
+    "folder": "root",
+    "isStarred": false,
+    "cells": [
+      {
+        "id": "cell-1789227913283-v1vf",
+        "type": "code",
+        "language": "javascript",
+        "content": "console.log(\"\")",
+        "output": null,
+        "title": "hello"
+      },
+      {
+        "id": "cell-1789227886783",
+        "type": "code",
+        "language": "javascript",
+        "content": "// Start coding here\nconsole.log(\"Hello from Zoho Notes Pro!\");",
+        "output": null
+      }
+    ],
+    "tags": []
+  },
+  "createdAt": "2026-09-12T15:44:48.486Z",
+  "folder": "root",
+  "isStarred": false,
+  "isTrashed": false,
+  "owner": "695e9d0a43977d48384b8f65",
+  "title": "Untitled Notebook",
+  "trashedAt": null,
+  "updatedAt": "2026-09-13T08:46:09.051Z"
+}

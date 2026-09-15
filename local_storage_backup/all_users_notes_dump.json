@@ -1,0 +1,644 @@
+{
+  "exportedAt": "2026-09-15T10:54:16.073Z",
+  "totalUsers": 7,
+  "totalNotes": 10,
+  "users": [
+    {
+      "id": "695e9ca643977d48384b8f5b",
+      "username": "testuser",
+      "email": "test@example.com",
+      "role": "user"
+    },
+    {
+      "id": "695e9d0a43977d48384b8f65",
+      "username": "fayas kp",
+      "email": "fayaskpktr@gmail.com",
+      "role": "user"
+    },
+    {
+      "id": "695fe57ef2c9b0849d034a1b",
+      "username": "zayn",
+      "email": "zayn@gamil.com"
+    },
+    {
+      "id": "6960a82873de6bb63eb605f0",
+      "username": "fayas kk",
+      "email": "fayaskaykay@gmail.com",
+      "role": "user"
+    },
+    {
+      "id": "6961ea03293ce0d52414f4aa",
+      "username": "anawra",
+      "email": "anaswarasuresh333@gmail.com"
+    },
+    {
+      "id": "6961f69df978ad41db232d1a",
+      "username": "Administrator",
+      "email": "admin@gmail.com",
+      "role": "admin"
+    },
+    {
+      "id": "696210af598a1c15244d1315",
+      "username": "demo",
+      "email": "demo@gamil.com",
+      "role": "user"
+    }
+  ],
+  "notes": [
+    {
+      "id": "ntbk-1767724615654",
+      "title": "array of object",
+      "folder": "java script",
+      "isStarred": false,
+      "isTrashed": false,
+      "trashedAt": null,
+      "cells": [
+        {
+          "id": "cell-1eggtw26j",
+          "type": "code",
+          "title": "active === true  && age >= 18",
+          "content": "const users = [\r\n  { id: 1, name: \"Ameen\", age: 21, active: true },\r\n  { id: 2, name: \"Rafi\", age: 17, active: false },\r\n  { id: 3, name: \"Fayas\", age: 23, active: true },\r\n  { id: 4, name: \"Niyas\", age: 16, active: true },\r\n  { id: 5, name: \"Salman\", age: 30, active: false }\r\n];\r\n\r\nlet arr=[];\r\nfor(let val of users){\r\n    if(val.active ==true && val.age > 18){\r\n        arr.push(val.name)\r\n    }\r\n}\r\n\r\nconsole.log(arr)",
+          "output": {
+            "id": "84e70858-e2c1-4be0-aa0b-aab55c5002a2",
+            "success": true,
+            "result": "1",
+            "logs": [
+              "[\n  \"Ameen\",\n  \"Fayas\"\n]"
+            ]
+          },
+          "isStarred": true
+        },
+        {
+          "id": "cell-r5bgzcjcv",
+          "type": "code",
+          "title": "department and it's total salary",
+          "content": "const employees = [\r\n  { id: 1, name: \"Asha\", dept: \"IT\", salary: 50000 },\r\n  { id: 2, name: \"Rahul\", dept: \"HR\", salary: 40000 },\r\n  { id: 3, name: \"Anu\", dept: \"IT\", salary: 60000 },\r\n  { id: 4, name: \"Vishnu\", dept: \"HR\", salary: 45000 },\r\n  { id: 5, name: \"Kiran\", dept: \"IT\", salary: 55000 }\r\n];\r\n\r\nlet obj={}\r\n\r\nfor(let val of employees){\r\n    let dept=val.dept;\r\n    if(!obj[dept]){\r\n        obj[dept]=0;\r\n    }\r\n    let total=val.salary\r\n    total=Number(total)\r\n    obj[dept]=obj[dept]+total\r\n}\r\nconsole.log(obj)\r\n\r\n",
+          "output": {
+            "id": "81f08006-4079-401f-bdfa-74f81658cf24",
+            "success": true,
+            "result": "1",
+            "logs": [
+              "{\n  \"IT\": 165000,\n  \"HR\": 85000\n}"
+            ]
+          }
+        },
+        {
+          "id": "cell-b0ozc6h5u",
+          "type": "code",
+          "title": "",
+          "content": "console.log('fayas')",
+          "output": {
+            "id": "f727a965-d762-488a-9dca-f0ba50d454e6",
+            "success": true,
+            "result": "1",
+            "logs": [
+              "fayas"
+            ]
+          }
+        },
+        {
+          "id": "cell-h62yfizrr",
+          "type": "code",
+          "title": "",
+          "isStarred": false,
+          "content": "",
+          "output": null
+        }
+      ],
+      "tags": [],
+      "updatedAt": "2026-01-07T17:18:20.829Z",
+      "_version": 1,
+      "owner": null
+    },
+    {
+      "id": "ntbk-1767757822646",
+      "title": "string",
+      "folder": "java script",
+      "isStarred": false,
+      "isTrashed": true,
+      "trashedAt": null,
+      "cells": [
+        {
+          "id": "cell-u9x758atb",
+          "type": "code",
+          "title": "",
+          "content": "",
+          "output": null
+        }
+      ],
+      "tags": [],
+      "updatedAt": "2026-01-07T03:50:24.181Z",
+      "_version": 1,
+      "owner": null
+    },
+    {
+      "id": "ntbk-1767762316684",
+      "title": "Untitled Notebook",
+      "folder": "root",
+      "isStarred": false,
+      "isTrashed": false,
+      "trashedAt": null,
+      "cells": [
+        {
+          "id": "cell-ov8w85gvu",
+          "type": "code",
+          "title": "",
+          "isStarred": false,
+          "content": "",
+          "output": null
+        }
+      ],
+      "tags": [],
+      "updatedAt": "2026-01-07T05:05:18.226Z",
+      "_version": 1,
+      "owner": null
+    },
+    {
+      "id": "ntbk-1767808166691",
+      "title": "My Private Notebook",
+      "folder": "root",
+      "isStarred": false,
+      "isTrashed": false,
+      "trashedAt": null,
+      "cells": [
+        {
+          "id": "cell-f9bq90fsp",
+          "type": "code",
+          "title": "",
+          "isStarred": false,
+          "content": "let a = 1; console.log(a);",
+          "output": null
+        },
+        {
+          "id": "cell-jujeixl7i",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "let a = 10; console.log(a);",
+          "output": null
+        }
+      ],
+      "tags": [],
+      "updatedAt": "2026-01-14T06:34:20.376Z",
+      "_version": 1,
+      "owner": "695e9ca643977d48384b8f5b"
+    },
+    {
+      "id": "ntbk-1767892411037",
+      "title": "array of objects",
+      "folder": "notebook of js",
+      "isStarred": false,
+      "isTrashed": false,
+      "trashedAt": null,
+      "cells": [
+        {
+          "id": "cell-pqoo3qcnu",
+          "type": "code",
+          "title": "",
+          "isStarred": false,
+          "content": "",
+          "output": null
+        }
+      ],
+      "tags": [],
+      "updatedAt": "2026-01-08T17:13:32.574Z",
+      "_version": 1,
+      "owner": "695fe57ef2c9b0849d034a1b"
+    },
+    {
+      "id": "ntbk-1768056227554",
+      "title": "New File",
+      "folder": "java scrip",
+      "isStarred": false,
+      "isTrashed": false,
+      "trashedAt": null,
+      "cells": [
+        {
+          "id": "cell-jqm0n9np4",
+          "type": "code",
+          "title": "hello fayas this is nothing...",
+          "isStarred": false,
+          "content": "// Online Java Compiler\r\n// Use this editor to write, compile and run your Java code online\r\n\r\nclass Main {\r\n    public static void main(String[] args) {\r\n        System.out.println(\"Try programiz.pro\");\r\n    }\r\n}",
+          "output": null,
+          "lang": "javascript",
+          "language": "java"
+        },
+        {
+          "id": "cell-36cmy7r0e",
+          "type": "code",
+          "title": "",
+          "isStarred": false,
+          "content": "#include <stdio.h>\r\n\r\nint main() {\r\n    printf(\"Try programiz.pro\\n\");\r\n    printf(\"fayas\");\r\n    return 0;\r\n}",
+          "output": null,
+          "lang": "c",
+          "language": "c"
+        },
+        {
+          "id": "cell-4elgeljf7",
+          "type": "code",
+          "title": "",
+          "isStarred": false,
+          "content": "try{\r\n    throw new Error('this is a error');\r\n}catch (e) {\r\n    console.log(e)\r\n}",
+          "output": null
+        },
+        {
+          "id": "cell-voewybwkw",
+          "type": "code",
+          "lang": "java",
+          "title": "",
+          "isStarred": false,
+          "content": "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n    }\n}",
+          "output": null
+        },
+        {
+          "id": "cell-55r0l3ot8",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "let arr = [1, 2, 3];\narr.filter(item => item % 2 != 0)\n\nlet a = [1, 2, 3, 4, 5,3,2,1,3];\nlet uniq = [...new Set(a)]\nuniq",
+          "output": null
+        },
+        {
+          "id": "cell-sth8tm863",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "console.log('fayas')\r\nfunction calc(a, b, cb) {\r\n    let sum = a + b;\r\n    setTimeout(() => {\r\n        cb(sum)\r\n    }, 1000);\r\n};\r\ncalc(2, 3, function (val) {\r\n    console.log(val)\r\n})\r\nconsole.log('fdlk')",
+          "output": null
+        },
+        {
+          "id": "cell-orqj72sxh",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "function a() {\r\n    for (var i = 1; i <= 5; i++) {\r\n        setTimeout(function () {\r\n            console.log(i)\r\n        }, 1000)\r\n    }\r\n}\r\na()",
+          "output": null
+        },
+        {
+          "id": "cell-652wfd7ez",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "let i = 1;\r\nlet val = setInterval(() => {\r\n    console.log(i++);\r\n    if(i==5)clearInterval(val)\r\n},1000)\r\nconsole.log('hello')",
+          "output": null
+        },
+        {
+          "id": "cell-117mtxsbc",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "let obj = {\r\n    key:'value'\r\n}\r\n\r\nlet o=Object.getOwnPropertyDescriptor(obj, \"key\");\r\no",
+          "output": null
+        },
+        {
+          "id": "cell-91kqwckno",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "// sparse array means = array with empty space\r\nlet arr = []\r\narr[10] = 10\r\narr.length = 50;\r\narr.length = 3\r\narr",
+          "output": null
+        },
+        {
+          "id": "cell-qouvgox84",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "var a = 10\r\n{\r\n     var a=20\r\n}\r\nconsole.log(a)",
+          "output": null
+        },
+        {
+          "id": "cell-3lb0sxnx7",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "function a() {\r\n    return function b() {\r\n       return function c() {\r\n            \r\n        }\r\n    }\r\n}\r\na()",
+          "output": null
+        },
+        {
+          "id": "cell-8tujhbyoc",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "let arr=[{n:3},{n:4},{n:6}];",
+          "output": null
+        },
+        {
+          "id": "cell-1789262400535-ueej",
+          "type": "code",
+          "language": "javascript",
+          "content": "// New code cell\nconsole.log(\"Hello from cell!\");",
+          "output": null
+        }
+      ],
+      "tags": [],
+      "updatedAt": "2026-09-13T05:29:19.956Z",
+      "_version": 40,
+      "owner": "695e9d0a43977d48384b8f65"
+    },
+    {
+      "id": "ntbk-1768117219330",
+      "title": "demo",
+      "folder": "java scrip",
+      "isStarred": false,
+      "isTrashed": false,
+      "trashedAt": null,
+      "cells": [
+        {
+          "id": "cell-1789227778544-cy0g",
+          "type": "markdown",
+          "content": "### Documentation\nHello",
+          "output": null
+        },
+        {
+          "id": "cell-1789227777078-hmg5",
+          "type": "code",
+          "language": "javascript",
+          "content": "// New code cell\nconsole.log(\"Hello from cell!\");",
+          "output": null
+        },
+        {
+          "id": "cell-1789227774858-c8vy",
+          "type": "code",
+          "language": "javascript",
+          "content": "// New code cell\nconsole.log(\"Hello from cell!\");",
+          "output": null
+        },
+        {
+          "id": "cell-s51ulq2d0",
+          "type": "code",
+          "title": "",
+          "isStarred": true,
+          "content": "console.log('hello')",
+          "output": {
+            "id": "08dd2f0b-32b9-434b-af79-66bb1f423618",
+            "success": true,
+            "result": "undefined",
+            "logs": [
+              "hello"
+            ]
+          }
+        },
+        {
+          "id": "cell-exnxjceu3",
+          "type": "code",
+          "lang": "javascript",
+          "title": "find",
+          "isStarred": false,
+          "content": "class Node{\r\n    \r\n}",
+          "output": null
+        },
+        {
+          "id": "cell-7f30yokii",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "let fayasInTheMeet = \"fayas\";\r\n\r\nconsole.log(fayasInTheMeet)",
+          "output": {
+            "id": "68397aac-d541-4539-a1a1-8ba956e3e380",
+            "success": true,
+            "result": "undefined",
+            "logs": [
+              "fayas"
+            ]
+          }
+        },
+        {
+          "id": "cell-t27yacqcz",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "let arr = [];\r\narr.reduce()",
+          "output": null
+        },
+        {
+          "id": "cell-xplmu1ir5",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "",
+          "output": null
+        },
+        {
+          "id": "cell-dmsfy95f5",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "",
+          "output": null
+        },
+        {
+          "id": "cell-t60ger4v3",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "",
+          "output": null
+        },
+        {
+          "id": "cell-n8xi0smb6",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "",
+          "output": null
+        },
+        {
+          "id": "cell-e7ir0asyt",
+          "type": "code",
+          "lang": "javascript",
+          "title": "hi",
+          "isStarred": false,
+          "content": "function hi(hello,f,k) {\r\n    console.log(hello);\r\n}\r\n\r\nhi(10)",
+          "output": {
+            "id": "408b9f34-b8ae-45e4-9c71-b5991625ed62",
+            "success": true,
+            "result": "undefined",
+            "logs": [
+              "10"
+            ]
+          }
+        },
+        {
+          "id": "cell-i1ggmzlo2",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "function hi(hello,f,k) {\r\n    console.log(hello);\r\n}\r\n\r\nhi(10)",
+          "output": null
+        },
+        {
+          "id": "cell-qnuvcmmdp",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "function hello(one, two) {\r\n    console.log(one)\r\n}\r\nhello(10)",
+          "output": {
+            "id": "886b4237-c705-4e87-8efd-660e17b2e4c0",
+            "success": true,
+            "result": "undefined",
+            "logs": [
+              "10"
+            ]
+          }
+        }
+      ],
+      "tags": [],
+      "updatedAt": "2026-09-13T05:29:18.793Z",
+      "_version": 27,
+      "owner": "695e9d0a43977d48384b8f65"
+    },
+    {
+      "id": "ntbk-1768229706900",
+      "title": "New Note",
+      "folder": "new folder",
+      "isStarred": false,
+      "isTrashed": false,
+      "trashedAt": null,
+      "cells": [
+        {
+          "id": "cell-8uaalty4z",
+          "type": "code",
+          "lang": "javascript",
+          "title": "",
+          "isStarred": false,
+          "content": "",
+          "output": null
+        },
+        {
+          "id": "cell-gr2vq7aqv",
+          "type": "code",
+          "lang": "python",
+          "title": "",
+          "isStarred": false,
+          "content": "print(\"Hello, World!\")",
+          "output": null
+        },
+        {
+          "id": "cell-r298ur4dt",
+          "type": "code",
+          "lang": "java",
+          "title": "",
+          "isStarred": false,
+          "content": "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n    }\n}",
+          "output": null
+        },
+        {
+          "id": "cell-nte01d9jn",
+          "type": "code",
+          "lang": "c",
+          "title": "",
+          "isStarred": false,
+          "content": "#include <stdio.h>\n\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}",
+          "output": null
+        },
+        {
+          "id": "cell-csjv39eu4",
+          "type": "code",
+          "lang": "cpp",
+          "title": "",
+          "isStarred": false,
+          "content": "#include <iostream>\n\nint main() {\n    std::cout << \"Hello, World!\" << std::endl;\n    return 0;\n}",
+          "output": null
+        }
+      ],
+      "tags": [],
+      "updatedAt": "2026-01-12T15:01:34.227Z",
+      "_version": 1,
+      "owner": "6961f69df978ad41db232d1a"
+    },
+    {
+      "id": "ntbk-1789227828782-khb27",
+      "title": "Untitled Notebook",
+      "folder": "root",
+      "isStarred": false,
+      "isTrashed": false,
+      "trashedAt": null,
+      "cells": [
+        {
+          "id": "cell-1789227847130-9sb8",
+          "type": "markdown",
+          "content": "### Documentation\nEnter markdown content here...",
+          "output": null
+        },
+        {
+          "id": "cell-1789227828782",
+          "type": "code",
+          "language": "javascript",
+          "content": "// Start coding here\nconsole.log(\"Hello from Zoho Notes Pro!\");",
+          "output": null
+        },
+        {
+          "id": "cell-1789227842031-7w2d",
+          "type": "code",
+          "language": "javascript",
+          "content": "// New code cell\nconsole.log(\"Hello from cell!\");",
+          "output": null
+        },
+        {
+          "id": "cell-1789227854879-z4hu",
+          "type": "code",
+          "language": "javascript",
+          "content": "// New code cell\nconsole.log(\"Ready\");",
+          "output": null
+        },
+        {
+          "id": "cell-1789227858532-7zqy",
+          "type": "markdown",
+          "content": "### Documentation\nEnter markdown content here...",
+          "output": null
+        }
+      ],
+      "tags": [],
+      "updatedAt": "2026-09-13T05:29:18.803Z",
+      "_version": 7,
+      "owner": "695e9d0a43977d48384b8f65"
+    },
+    {
+      "id": "ntbk-1789227886783-4evg3",
+      "title": "Untitled Notebook",
+      "folder": "root",
+      "isStarred": false,
+      "isTrashed": false,
+      "trashedAt": null,
+      "cells": [
+        {
+          "id": "cell-1789227913283-v1vf",
+          "type": "code",
+          "language": "javascript",
+          "content": "console.log(\"\")",
+          "output": null,
+          "title": "hello"
+        },
+        {
+          "id": "cell-1789227886783",
+          "type": "code",
+          "language": "javascript",
+          "content": "// Start coding here\nconsole.log(\"Hello from Zoho Notes Pro!\");",
+          "output": null
+        }
+      ],
+      "tags": [],
+      "updatedAt": "2026-09-13T08:46:09.051Z",
+      "_version": 33,
+      "owner": "695e9d0a43977d48384b8f65"
+    }
+  ]
+}

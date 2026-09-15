@@ -1,0 +1,67 @@
+{
+  "_id": "69650b4a79fd89587d4303d0",
+  "owner": "6961f69df978ad41db232d1a",
+  "id": "ntbk-1768229706900",
+  "__v": 0,
+  "content": {
+    "id": "ntbk-1768229706900",
+    "title": "New Note",
+    "folder": "new folder",
+    "isStarred": false,
+    "cells": [
+      {
+        "id": "cell-8uaalty4z",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "",
+        "output": null
+      },
+      {
+        "id": "cell-gr2vq7aqv",
+        "type": "code",
+        "lang": "python",
+        "title": "",
+        "isStarred": false,
+        "content": "print(\"Hello, World!\")",
+        "output": null
+      },
+      {
+        "id": "cell-r298ur4dt",
+        "type": "code",
+        "lang": "java",
+        "title": "",
+        "isStarred": false,
+        "content": "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n    }\n}",
+        "output": null
+      },
+      {
+        "id": "cell-nte01d9jn",
+        "type": "code",
+        "lang": "c",
+        "title": "",
+        "isStarred": false,
+        "content": "#include <stdio.h>\n\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}",
+        "output": null
+      },
+      {
+        "id": "cell-csjv39eu4",
+        "type": "code",
+        "lang": "cpp",
+        "title": "",
+        "isStarred": false,
+        "content": "#include <iostream>\n\nint main() {\n    std::cout << \"Hello, World!\" << std::endl;\n    return 0;\n}",
+        "output": null
+      }
+    ],
+    "tags": []
+  },
+  "folder": "new folder",
+  "isStarred": false,
+  "isTrashed": false,
+  "title": "New Note",
+  "updatedAt": "2026-01-12T15:01:34.227Z",
+  "_version": 1,
+  "trashedAt": null
+}

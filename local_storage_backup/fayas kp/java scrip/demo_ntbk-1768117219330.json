@@ -1,0 +1,168 @@
+{
+  "_id": "696353e379fd89587d4303cf",
+  "id": "ntbk-1768117219330",
+  "owner": "695e9d0a43977d48384b8f65",
+  "__v": 0,
+  "content": {
+    "id": "ntbk-1768117219330",
+    "title": "demo",
+    "folder": "java scrip",
+    "isStarred": false,
+    "cells": [
+      {
+        "id": "cell-1789227778544-cy0g",
+        "type": "markdown",
+        "content": "### Documentation\nHello",
+        "output": null
+      },
+      {
+        "id": "cell-1789227777078-hmg5",
+        "type": "code",
+        "language": "javascript",
+        "content": "// New code cell\nconsole.log(\"Hello from cell!\");",
+        "output": null
+      },
+      {
+        "id": "cell-1789227774858-c8vy",
+        "type": "code",
+        "language": "javascript",
+        "content": "// New code cell\nconsole.log(\"Hello from cell!\");",
+        "output": null
+      },
+      {
+        "id": "cell-s51ulq2d0",
+        "type": "code",
+        "title": "",
+        "isStarred": true,
+        "content": "console.log('hello')",
+        "output": {
+          "id": "08dd2f0b-32b9-434b-af79-66bb1f423618",
+          "success": true,
+          "result": "undefined",
+          "logs": [
+            "hello"
+          ]
+        }
+      },
+      {
+        "id": "cell-exnxjceu3",
+        "type": "code",
+        "lang": "javascript",
+        "title": "find",
+        "isStarred": false,
+        "content": "class Node{\r\n    \r\n}",
+        "output": null
+      },
+      {
+        "id": "cell-7f30yokii",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "let fayasInTheMeet = \"fayas\";\r\n\r\nconsole.log(fayasInTheMeet)",
+        "output": {
+          "id": "68397aac-d541-4539-a1a1-8ba956e3e380",
+          "success": true,
+          "result": "undefined",
+          "logs": [
+            "fayas"
+          ]
+        }
+      },
+      {
+        "id": "cell-t27yacqcz",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "let arr = [];\r\narr.reduce()",
+        "output": null
+      },
+      {
+        "id": "cell-xplmu1ir5",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "",
+        "output": null
+      },
+      {
+        "id": "cell-dmsfy95f5",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "",
+        "output": null
+      },
+      {
+        "id": "cell-t60ger4v3",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "",
+        "output": null
+      },
+      {
+        "id": "cell-n8xi0smb6",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "",
+        "output": null
+      },
+      {
+        "id": "cell-e7ir0asyt",
+        "type": "code",
+        "lang": "javascript",
+        "title": "hi",
+        "isStarred": false,
+        "content": "function hi(hello,f,k) {\r\n    console.log(hello);\r\n}\r\n\r\nhi(10)",
+        "output": {
+          "id": "408b9f34-b8ae-45e4-9c71-b5991625ed62",
+          "success": true,
+          "result": "undefined",
+          "logs": [
+            "10"
+          ]
+        }
+      },
+      {
+        "id": "cell-i1ggmzlo2",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "function hi(hello,f,k) {\r\n    console.log(hello);\r\n}\r\n\r\nhi(10)",
+        "output": null
+      },
+      {
+        "id": "cell-qnuvcmmdp",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "function hello(one, two) {\r\n    console.log(one)\r\n}\r\nhello(10)",
+        "output": {
+          "id": "886b4237-c705-4e87-8efd-660e17b2e4c0",
+          "success": true,
+          "result": "undefined",
+          "logs": [
+            "10"
+          ]
+        }
+      }
+    ],
+    "tags": []
+  },
+  "folder": "java scrip",
+  "isStarred": false,
+  "isTrashed": false,
+  "title": "demo",
+  "updatedAt": "2026-09-13T05:29:18.793Z",
+  "_version": 27,
+  "trashedAt": null
+}

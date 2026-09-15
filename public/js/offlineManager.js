@@ -95,6 +95,20 @@
                             <span id="modal-last-sync-time" class="font-bold text-zinc-200">Never</span>
                         </div>
 
+                        <div class="flex justify-between items-center bg-[#ffffff05] p-3 rounded-xl border border-[#ffffff0a]">
+                            <div>
+                                <span class="text-zinc-300 font-semibold text-xs block">Auto-Backup Pause:</span>
+                                <span class="text-[11px] text-zinc-500">Wait after typing stops</span>
+                            </div>
+                            <select id="modal-idle-delay-select" class="bg-[#1f1f24] border border-[#ffffff1a] text-zinc-200 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-500 cursor-pointer">
+                                <option value="30000">30 Seconds</option>
+                                <option value="60000">1 Minute (Default)</option>
+                                <option value="120000">2 Minutes</option>
+                                <option value="300000">5 Minutes</option>
+                                <option value="0">Manual Only</option>
+                            </select>
+                        </div>
+
                         <div class="bg-[#ffffff05] p-3 rounded-xl border border-[#ffffff0a] space-y-2">
                             <div class="flex justify-between text-xs text-zinc-400">
                                 <span>Browser Local Storage</span>
@@ -138,6 +152,23 @@
 
             document.getElementById('zoho-sync-modal-close')?.addEventListener('click', () => this.toggleSyncModal(false));
             document.getElementById('zoho-sync-modal-close-btn')?.addEventListener('click', () => this.toggleSyncModal(false));
+
+            const delaySelect = document.getElementById('modal-idle-delay-select');
+            if (delaySelect) {
+                const engine = window.ZohoBackupEngine || window.ZohoSyncEngine;
+                if (engine && engine.idleTimeoutMs !== undefined) {
+                    delaySelect.value = String(engine.idleTimeoutMs);
+                }
+                delaySelect.addEventListener('change', (e) => {
+                    const newDelay = parseInt(e.target.value);
+                    const eng = window.ZohoBackupEngine || window.ZohoSyncEngine;
+                    if (eng && typeof eng.setIdleTimeoutMs === 'function') {
+                        eng.setIdleTimeoutMs(newDelay);
+                        const label = e.target.options[e.target.selectedIndex].text;
+                        this.showToast(`⏱️ Auto-backup pause set to: ${label}`, 'info');
+                    }
+                });
+            }
             
             document.getElementById('btn-manual-sync')?.addEventListener('click', () => {
                 const btn = document.getElementById('btn-manual-sync');
@@ -269,6 +300,11 @@
             if (unsyncedEl) {
                 const count = info.unsyncedCount !== undefined ? info.unsyncedCount : (engine?.unsyncedCount || 0);
                 unsyncedEl.innerText = `${count} note${count === 1 ? '' : 's'}`;
+            }
+
+            const delaySelect = document.getElementById('modal-idle-delay-select');
+            if (delaySelect && engine && engine.idleTimeoutMs !== undefined && document.activeElement !== delaySelect) {
+                delaySelect.value = String(engine.idleTimeoutMs);
             }
 
             if (lastSyncEl) {

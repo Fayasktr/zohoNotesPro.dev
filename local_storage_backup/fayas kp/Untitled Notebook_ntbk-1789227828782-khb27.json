@@ -1,0 +1,57 @@
+{
+  "_id": "6aa57343f613b8d2b9744800",
+  "id": "ntbk-1789227828782-khb27",
+  "__v": 0,
+  "_version": 7,
+  "collaborators": [],
+  "content": {
+    "id": "ntbk-1789227828782-khb27",
+    "title": "Untitled Notebook",
+    "folder": "root",
+    "isStarred": false,
+    "cells": [
+      {
+        "id": "cell-1789227847130-9sb8",
+        "type": "markdown",
+        "content": "### Documentation\nEnter markdown content here...",
+        "output": null
+      },
+      {
+        "id": "cell-1789227828782",
+        "type": "code",
+        "language": "javascript",
+        "content": "// Start coding here\nconsole.log(\"Hello from Zoho Notes Pro!\");",
+        "output": null
+      },
+      {
+        "id": "cell-1789227842031-7w2d",
+        "type": "code",
+        "language": "javascript",
+        "content": "// New code cell\nconsole.log(\"Hello from cell!\");",
+        "output": null
+      },
+      {
+        "id": "cell-1789227854879-z4hu",
+        "type": "code",
+        "language": "javascript",
+        "content": "// New code cell\nconsole.log(\"Ready\");",
+        "output": null
+      },
+      {
+        "id": "cell-1789227858532-7zqy",
+        "type": "markdown",
+        "content": "### Documentation\nEnter markdown content here...",
+        "output": null
+      }
+    ],
+    "tags": []
+  },
+  "createdAt": "2026-09-12T15:44:03.520Z",
+  "folder": "root",
+  "isStarred": false,
+  "isTrashed": false,
+  "owner": "695e9d0a43977d48384b8f65",
+  "title": "Untitled Notebook",
+  "trashedAt": null,
+  "updatedAt": "2026-09-13T05:29:18.803Z"
+}

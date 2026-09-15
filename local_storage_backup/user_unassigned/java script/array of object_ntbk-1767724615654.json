@@ -1,0 +1,72 @@
+{
+  "_id": "695d564779fd89587d4303c3",
+  "id": "ntbk-1767724615654",
+  "__v": 0,
+  "content": {
+    "id": "ntbk-1767724615654",
+    "title": "array of object",
+    "folder": "java script",
+    "isStarred": false,
+    "cells": [
+      {
+        "id": "cell-1eggtw26j",
+        "type": "code",
+        "title": "active === true  && age >= 18",
+        "content": "const users = [\r\n  { id: 1, name: \"Ameen\", age: 21, active: true },\r\n  { id: 2, name: \"Rafi\", age: 17, active: false },\r\n  { id: 3, name: \"Fayas\", age: 23, active: true },\r\n  { id: 4, name: \"Niyas\", age: 16, active: true },\r\n  { id: 5, name: \"Salman\", age: 30, active: false }\r\n];\r\n\r\nlet arr=[];\r\nfor(let val of users){\r\n    if(val.active ==true && val.age > 18){\r\n        arr.push(val.name)\r\n    }\r\n}\r\n\r\nconsole.log(arr)",
+        "output": {
+          "id": "84e70858-e2c1-4be0-aa0b-aab55c5002a2",
+          "success": true,
+          "result": "1",
+          "logs": [
+            "[\n  \"Ameen\",\n  \"Fayas\"\n]"
+          ]
+        },
+        "isStarred": true
+      },
+      {
+        "id": "cell-r5bgzcjcv",
+        "type": "code",
+        "title": "department and it's total salary",
+        "content": "const employees = [\r\n  { id: 1, name: \"Asha\", dept: \"IT\", salary: 50000 },\r\n  { id: 2, name: \"Rahul\", dept: \"HR\", salary: 40000 },\r\n  { id: 3, name: \"Anu\", dept: \"IT\", salary: 60000 },\r\n  { id: 4, name: \"Vishnu\", dept: \"HR\", salary: 45000 },\r\n  { id: 5, name: \"Kiran\", dept: \"IT\", salary: 55000 }\r\n];\r\n\r\nlet obj={}\r\n\r\nfor(let val of employees){\r\n    let dept=val.dept;\r\n    if(!obj[dept]){\r\n        obj[dept]=0;\r\n    }\r\n    let total=val.salary\r\n    total=Number(total)\r\n    obj[dept]=obj[dept]+total\r\n}\r\nconsole.log(obj)\r\n\r\n",
+        "output": {
+          "id": "81f08006-4079-401f-bdfa-74f81658cf24",
+          "success": true,
+          "result": "1",
+          "logs": [
+            "{\n  \"IT\": 165000,\n  \"HR\": 85000\n}"
+          ]
+        }
+      },
+      {
+        "id": "cell-b0ozc6h5u",
+        "type": "code",
+        "title": "",
+        "content": "console.log('fayas')",
+        "output": {
+          "id": "f727a965-d762-488a-9dca-f0ba50d454e6",
+          "success": true,
+          "result": "1",
+          "logs": [
+            "fayas"
+          ]
+        }
+      },
+      {
+        "id": "cell-h62yfizrr",
+        "type": "code",
+        "title": "",
+        "isStarred": false,
+        "content": "",
+        "output": null
+      }
+    ],
+    "tags": []
+  },
+  "folder": "java script",
+  "title": "array of object",
+  "updatedAt": "2026-01-07T17:18:20.829Z",
+  "isStarred": false,
+  "_version": 1,
+  "isTrashed": false,
+  "trashedAt": null
+}

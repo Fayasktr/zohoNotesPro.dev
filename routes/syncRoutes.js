@@ -359,6 +359,19 @@ router.get('/status', async (req, res) => {
     }
 });
 
+/**
+ * GET /api/sync/csrf
+ * Telemetry and session renewal endpoint: provides fresh CSRF token
+ */
+router.get('/csrf', (req, res) => {
+    try {
+        const token = req.csrfToken ? req.csrfToken() : null;
+        res.json({ csrfToken: token });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to retrieve CSRF token' });
+    }
+});
+
 module.exports = router;
 module.exports.resolvePushItem = resolvePushItem;
 module.exports.sanitizeTimestamp = sanitizeTimestamp;

@@ -1,0 +1,29 @@
+{
+  "_id": "695de98e79fd89587d4303c7",
+  "id": "ntbk-1767762316684",
+  "__v": 0,
+  "content": {
+    "id": "ntbk-1767762316684",
+    "title": "Untitled Notebook",
+    "folder": "root",
+    "isStarred": false,
+    "cells": [
+      {
+        "id": "cell-ov8w85gvu",
+        "type": "code",
+        "title": "",
+        "isStarred": false,
+        "content": "",
+        "output": null
+      }
+    ],
+    "tags": []
+  },
+  "folder": "root",
+  "isStarred": false,
+  "isTrashed": false,
+  "title": "Untitled Notebook",
+  "updatedAt": "2026-01-07T05:05:18.226Z",
+  "_version": 1,
+  "trashedAt": null
+}

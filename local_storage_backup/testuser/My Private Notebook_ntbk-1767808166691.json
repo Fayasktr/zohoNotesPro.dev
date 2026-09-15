@@ -1,0 +1,39 @@
+{
+  "_id": "695e9caf79fd89587d4303c8",
+  "owner": "695e9ca643977d48384b8f5b",
+  "id": "ntbk-1767808166691",
+  "__v": 0,
+  "content": {
+    "id": "ntbk-1767808166691",
+    "title": "My Private Notebook",
+    "folder": "root",
+    "isStarred": false,
+    "cells": [
+      {
+        "id": "cell-f9bq90fsp",
+        "type": "code",
+        "title": "",
+        "isStarred": false,
+        "content": "let a = 1; console.log(a);",
+        "output": null
+      },
+      {
+        "id": "cell-jujeixl7i",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "let a = 10; console.log(a);",
+        "output": null
+      }
+    ],
+    "tags": []
+  },
+  "folder": "root",
+  "isStarred": false,
+  "isTrashed": false,
+  "title": "My Private Notebook",
+  "updatedAt": "2026-01-14T06:34:20.376Z",
+  "_version": 1,
+  "trashedAt": null
+}

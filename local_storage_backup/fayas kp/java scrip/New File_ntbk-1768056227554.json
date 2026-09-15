@@ -1,0 +1,147 @@
+{
+  "_id": "696265a379fd89587d4303cd",
+  "owner": "695e9d0a43977d48384b8f65",
+  "id": "ntbk-1768056227554",
+  "__v": 0,
+  "content": {
+    "id": "ntbk-1768056227554",
+    "title": "New File",
+    "folder": "java scrip",
+    "isStarred": false,
+    "cells": [
+      {
+        "id": "cell-jqm0n9np4",
+        "type": "code",
+        "title": "hello fayas this is nothing...",
+        "isStarred": false,
+        "content": "// Online Java Compiler\r\n// Use this editor to write, compile and run your Java code online\r\n\r\nclass Main {\r\n    public static void main(String[] args) {\r\n        System.out.println(\"Try programiz.pro\");\r\n    }\r\n}",
+        "output": null,
+        "lang": "javascript",
+        "language": "java"
+      },
+      {
+        "id": "cell-36cmy7r0e",
+        "type": "code",
+        "title": "",
+        "isStarred": false,
+        "content": "#include <stdio.h>\r\n\r\nint main() {\r\n    printf(\"Try programiz.pro\\n\");\r\n    printf(\"fayas\");\r\n    return 0;\r\n}",
+        "output": null,
+        "lang": "c",
+        "language": "c"
+      },
+      {
+        "id": "cell-4elgeljf7",
+        "type": "code",
+        "title": "",
+        "isStarred": false,
+        "content": "try{\r\n    throw new Error('this is a error');\r\n}catch (e) {\r\n    console.log(e)\r\n}",
+        "output": null
+      },
+      {
+        "id": "cell-voewybwkw",
+        "type": "code",
+        "lang": "java",
+        "title": "",
+        "isStarred": false,
+        "content": "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n    }\n}",
+        "output": null
+      },
+      {
+        "id": "cell-55r0l3ot8",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "let arr = [1, 2, 3];\narr.filter(item => item % 2 != 0)\n\nlet a = [1, 2, 3, 4, 5,3,2,1,3];\nlet uniq = [...new Set(a)]\nuniq",
+        "output": null
+      },
+      {
+        "id": "cell-sth8tm863",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "console.log('fayas')\r\nfunction calc(a, b, cb) {\r\n    let sum = a + b;\r\n    setTimeout(() => {\r\n        cb(sum)\r\n    }, 1000);\r\n};\r\ncalc(2, 3, function (val) {\r\n    console.log(val)\r\n})\r\nconsole.log('fdlk')",
+        "output": null
+      },
+      {
+        "id": "cell-orqj72sxh",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "function a() {\r\n    for (var i = 1; i <= 5; i++) {\r\n        setTimeout(function () {\r\n            console.log(i)\r\n        }, 1000)\r\n    }\r\n}\r\na()",
+        "output": null
+      },
+      {
+        "id": "cell-652wfd7ez",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "let i = 1;\r\nlet val = setInterval(() => {\r\n    console.log(i++);\r\n    if(i==5)clearInterval(val)\r\n},1000)\r\nconsole.log('hello')",
+        "output": null
+      },
+      {
+        "id": "cell-117mtxsbc",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "let obj = {\r\n    key:'value'\r\n}\r\n\r\nlet o=Object.getOwnPropertyDescriptor(obj, \"key\");\r\no",
+        "output": null
+      },
+      {
+        "id": "cell-91kqwckno",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "// sparse array means = array with empty space\r\nlet arr = []\r\narr[10] = 10\r\narr.length = 50;\r\narr.length = 3\r\narr",
+        "output": null
+      },
+      {
+        "id": "cell-qouvgox84",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "var a = 10\r\n{\r\n     var a=20\r\n}\r\nconsole.log(a)",
+        "output": null
+      },
+      {
+        "id": "cell-3lb0sxnx7",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "function a() {\r\n    return function b() {\r\n       return function c() {\r\n            \r\n        }\r\n    }\r\n}\r\na()",
+        "output": null
+      },
+      {
+        "id": "cell-8tujhbyoc",
+        "type": "code",
+        "lang": "javascript",
+        "title": "",
+        "isStarred": false,
+        "content": "let arr=[{n:3},{n:4},{n:6}];",
+        "output": null
+      },
+      {
+        "id": "cell-1789262400535-ueej",
+        "type": "code",
+        "language": "javascript",
+        "content": "// New code cell\nconsole.log(\"Hello from cell!\");",
+        "output": null
+      }
+    ],
+    "tags": []
+  },
+  "folder": "java scrip",
+  "isStarred": false,
+  "isTrashed": false,
+  "title": "New File",
+  "updatedAt": "2026-09-13T05:29:19.956Z",
+  "_version": 40,
+  "trashedAt": null
+}
