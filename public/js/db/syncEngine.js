@@ -92,11 +92,9 @@
                             console.log('[BackupEngine] Empty local database detected. Restoring notes from cloud backup...');
                             await this.restoreFromCloud({ isInitial: true });
                         } else if (this.unsyncedCount > 0) {
-                            // Pending local changes from an offline session: back up,
-                            // but never block startup on it.
-                            this.backupNow({ reason: 'initial_reconnect_backup' }).catch(err => {
-                                console.warn('[BackupEngine] Initial cloud backup deferred:', err);
-                            });
+                            // Pending local changes from previous session: respect the 1-minute idle pause
+                            this.setStatus('PENDING');
+                            this.recordUserActivity();
                         }
                     } catch (err) {
                         console.warn('[BackupEngine] Initial setup check deferred:', err);

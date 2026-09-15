@@ -1,24 +1,36 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { syncService } from '../services/syncService';
 import { useAuthStore } from '../store/useAuthStore';
 import { useUIStore } from '../store/useUIStore';
 
-export function useBackgroundSync(intervalMs = 15000) {
+export function useBackgroundSync(idleDelayMs = 60000) {
   const { isAuthenticated } = useAuthStore();
   const { setSyncStatus } = useUIStore();
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // 1. Periodic background timer
-    const interval = setInterval(() => {
-      syncService.performSync();
-    }, intervalMs);
+    // Reset idle debounce timer on user interaction
+    const resetIdleTimer = () => {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+      }
+      idleTimerRef.current = setTimeout(() => {
+        syncService.performSync();
+      }, idleDelayMs);
+    };
 
-    // 2. Window events triggers: on reconnection & when user switches tabs
+    window.addEventListener('keydown', resetIdleTimer, { passive: true });
+    window.addEventListener('input', resetIdleTimer, { passive: true });
+    window.addEventListener('pointerdown', resetIdleTimer, { passive: true });
+
+    // Initial check after mount: schedule idle sync
+    resetIdleTimer();
+
+    // Window events triggers: on reconnection & when user switches tabs
     const handleOnline = () => {
-      setSyncStatus('saving');
-      syncService.performSync();
+      resetIdleTimer();
     };
 
     const handleOffline = () => {
@@ -36,12 +48,16 @@ export function useBackgroundSync(intervalMs = 15000) {
     window.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      clearInterval(interval);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      window.removeEventListener('keydown', resetIdleTimer);
+      window.removeEventListener('input', resetIdleTimer);
+      window.removeEventListener('pointerdown', resetIdleTimer);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isAuthenticated, intervalMs, setSyncStatus]);
+  }, [isAuthenticated, idleDelayMs, setSyncStatus]);
 
   return { triggerSyncNow: (forceAll = false) => syncService.performSync(forceAll) };
 }
+

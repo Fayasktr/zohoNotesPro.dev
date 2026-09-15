@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Folder, 
   FolderPlus, 
+  FolderInput,
   ChevronRight, 
   ChevronDown, 
   PlusSquare, 
@@ -96,6 +97,23 @@ export const Sidebar: React.FC = () => {
       return new Set<string>();
     }
   });
+
+  // Persisted empty/custom folders in localStorage so they never disappear
+  const [persistedFolders, setPersistedFolders] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('zoho-persisted-folders');
+      return new Set(saved ? JSON.parse(saved) : []);
+    } catch {
+      return new Set<string>();
+    }
+  });
+
+  const savePersistedFolders = (newFolders: Set<string>) => {
+    setPersistedFolders(newFolders);
+    try {
+      localStorage.setItem('zoho-persisted-folders', JSON.stringify([...newFolders]));
+    } catch (_) {}
+  };
 
   // Modal states
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -192,7 +210,7 @@ export const Sidebar: React.FC = () => {
     }
   };
 
-  // Build recursive folder tree from matching notes
+  // Build recursive folder tree from matching notes AND persisted folders
   const folderTree = useMemo(() => {
     const root: FolderNode = {
       name: 'root',
@@ -200,6 +218,26 @@ export const Sidebar: React.FC = () => {
       subfolders: {},
       notes: []
     };
+
+    // Pre-populate folders from persistedFolders so empty folders remain visible
+    persistedFolders.forEach(folderPath => {
+      if (!folderPath || folderPath === 'root') return;
+      const parts = folderPath.split('/').filter(Boolean);
+      let current = root;
+      let pathAccum = '';
+      parts.forEach(part => {
+        pathAccum = pathAccum ? `${pathAccum}/${part}` : part;
+        if (!current.subfolders[part]) {
+          current.subfolders[part] = {
+            name: part,
+            fullPath: pathAccum,
+            subfolders: {},
+            notes: []
+          };
+        }
+        current = current.subfolders[part];
+      });
+    });
 
     matchingNotes.forEach(note => {
       const folderPath = note.folder && note.folder !== 'root' ? note.folder : '';
@@ -229,7 +267,7 @@ export const Sidebar: React.FC = () => {
     });
 
     return root;
-  }, [matchingNotes]);
+  }, [matchingNotes, persistedFolders]);
 
   // Create new note in folder
   const handleCreateNoteInFolder = async (folderPath: string = 'root') => {
@@ -260,13 +298,24 @@ export const Sidebar: React.FC = () => {
   };
 
   const handleConfirmCreateFolder = async (folderName: string) => {
-    if (!user) return;
     const fullPath = targetParentFolder === 'root' || !targetParentFolder 
       ? folderName 
       : `${targetParentFolder}/${folderName}`;
 
-    // Create default note inside this folder so it exists immediately
-    await handleCreateNoteInFolder(fullPath);
+    // Add to persisted folders so it stays rendered even without notes
+    const nextFolders = new Set(persistedFolders);
+    nextFolders.add(fullPath);
+    savePersistedFolders(nextFolders);
+
+    // Auto-expand folder
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      next.add(fullPath);
+      localStorage.setItem('zoho-expanded-folders', JSON.stringify([...next]));
+      return next;
+    });
+
+    setIsFolderModalOpen(false);
   };
 
   // Rename Folder
@@ -295,6 +344,15 @@ export const Sidebar: React.FC = () => {
           localStorage.setItem('zoho-expanded-folders', JSON.stringify([...next]));
           return next;
         });
+
+        // Update persisted folders
+        const nextPersisted = new Set<string>();
+        for (const p of persistedFolders) {
+          if (p === folderPath) nextPersisted.add(newPath);
+          else if (p.startsWith(folderPath + '/')) nextPersisted.add(newPath + p.slice(folderPath.length));
+          else nextPersisted.add(p);
+        }
+        savePersistedFolders(nextPersisted);
       }
     });
   };
@@ -309,6 +367,44 @@ export const Sidebar: React.FC = () => {
       isDanger: true,
       onConfirm: async () => {
         await noteRepo.deleteFolder(folderPath);
+
+        // Remove from persisted folders
+        const nextPersisted = new Set<string>();
+        for (const p of persistedFolders) {
+          if (p !== folderPath && !p.startsWith(folderPath + '/')) {
+            nextPersisted.add(p);
+          }
+        }
+        savePersistedFolders(nextPersisted);
+      }
+    });
+  };
+
+  // Move Note to Folder
+  const handleOpenMoveNote = (note: Note) => {
+    setRenameState({
+      isOpen: true,
+      title: 'Move to Folder',
+      description: 'Enter target folder name (or "root"):',
+      initialValue: note.folder || 'root',
+      onConfirm: async (targetFolder: string) => {
+        const cleanTarget = targetFolder ? targetFolder.trim() : 'root';
+        const folderVal = (!cleanTarget || cleanTarget === 'root') ? 'root' : cleanTarget;
+        if (folderVal === (note.folder || 'root')) return;
+
+        if (folderVal !== 'root') {
+          const nextFolders = new Set(persistedFolders);
+          nextFolders.add(folderVal);
+          savePersistedFolders(nextFolders);
+          setExpandedFolders(prev => {
+            const next = new Set(prev);
+            next.add(folderVal);
+            localStorage.setItem('zoho-expanded-folders', JSON.stringify([...next]));
+            return next;
+          });
+        }
+
+        await noteRepo.updateNote(note.id, { folder: folderVal });
       }
     });
   };
@@ -485,6 +581,16 @@ export const Sidebar: React.FC = () => {
             className="p-1 rounded text-slate-400 hover:text-amber-400 hover:bg-dark-700"
           >
             <Star className={`w-3 h-3 ${note.isStarred ? 'text-amber-400 fill-amber-400' : ''}`} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenMoveNote(note);
+            }}
+            title="Move to folder"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-dark-700"
+          >
+            <FolderInput className="w-3 h-3" />
           </button>
           <button
             onClick={(e) => {

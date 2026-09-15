@@ -303,13 +303,19 @@ class NotebookApp {
             if (renameNoteBtn) {
                 e.stopPropagation();
                 const item = renameNoteBtn.closest('.notebook-item');
-                // For file rename, we might want a modal or prompt. 
-                // Existing logic used renameNotebook(id, title) which might need checking.
-                // Assuming it works or prompts? 
-                // Looking at old code, it called renameNotebook(id, title).
                 if (item) {
                     const title = item.querySelector('.tree-label').innerText;
                     this.renameNotebook(item.getAttribute('data-id'), title);
+                }
+                return;
+            }
+
+            const moveNoteBtn = e.target.closest('.move-notebook-btn');
+            if (moveNoteBtn) {
+                e.stopPropagation();
+                const item = moveNoteBtn.closest('.notebook-item');
+                if (item) {
+                    this.moveNotebookToFolderPrompt(item.getAttribute('data-id'));
                 }
                 return;
             }
@@ -758,7 +764,7 @@ class NotebookApp {
             this.expandedFolders.add(folderName);
             localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
         }
-        await this.createNewNotebookInternal(folderName);
+        await this.refreshNotebookList();
     }
 
     async createNewNotebook(folderName = 'root') {
@@ -1028,8 +1034,9 @@ class NotebookApp {
                     <span class="tree-label" title="${file.title}">${file.title}</span>
                     ${!file.isShared ? `
                     <div class="tree-actions">
-                        <button class="tree-action-btn rename-notebook-btn"><i data-lucide="edit-2" style="width:12px;"></i></button>
-                        <button class="tree-action-btn danger delete-notebook-btn"><i data-lucide="trash-2" style="width:12px;"></i></button>
+                        <button class="tree-action-btn move-notebook-btn" title="Move to Folder"><i data-lucide="folder-input" style="width:12px;"></i></button>
+                        <button class="tree-action-btn rename-notebook-btn" title="Rename Title"><i data-lucide="edit-2" style="width:12px;"></i></button>
+                        <button class="tree-action-btn danger delete-notebook-btn" title="Move to Trash"><i data-lucide="trash-2" style="width:12px;"></i></button>
                     </div>
                     ` : ''}
                 `;
@@ -2115,6 +2122,61 @@ class NotebookApp {
         });
     }
 
+    async moveNotebookToFolderPrompt(noteId) {
+        let note = null;
+        if (this.db) {
+            note = await this.db.getNote(noteId);
+        }
+        if (!note && this.notebook && this.notebook.id === noteId) {
+            note = this.notebook;
+        }
+        const currentFolder = note ? (note.folder || 'root') : 'root';
+
+        this.inputAction('Move to Folder', 'Enter target folder name (or "root"):', currentFolder, async (targetFolder) => {
+            const cleanTarget = targetFolder ? targetFolder.trim() : 'root';
+            const folderVal = (!cleanTarget || cleanTarget === 'root') ? 'root' : cleanTarget;
+            if (folderVal === currentFolder) return;
+
+            try {
+                if (folderVal !== 'root') {
+                    this.addPersistedFolder(folderVal);
+                    if (this.expandedFolders) {
+                        this.expandedFolders.add(folderVal);
+                        localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
+                    }
+                }
+
+                if (this.db) {
+                    const targetNote = await this.db.getNote(noteId);
+                    if (targetNote) {
+                        targetNote.folder = folderVal;
+                        await this.db.putNote(targetNote);
+                        if (this.sync) this.sync.notifyLocalChange(noteId, 'UPDATE');
+                    }
+                }
+
+                if (this.notebook && this.notebook.id === noteId) {
+                    this.notebook.folder = folderVal;
+                }
+
+                // Always update remote server as well
+                try {
+                    await this.safeFetch('/api/notebooks', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: noteId, folder: folderVal })
+                    });
+                } catch (remoteErr) {
+                    console.warn('[NotebookApp] Remote folder move deferred:', remoteErr);
+                }
+
+                await this.refreshNotebookList();
+            } catch (err) {
+                console.error('Failed to move notebook', err);
+            }
+        });
+    }
+
     // --- Drag and Drop Handlers ---
 
     handleCellDragStart(e) {
@@ -2258,12 +2320,15 @@ class NotebookApp {
                             if (this.sync) this.sync.notifyLocalChange(n.id, 'UPDATE');
                         }
                     }
-                } else {
+                }
+                try {
                     await this.safeFetch('/api/folders/rename', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ oldName: oldPath, newName: newPath })
                     });
+                } catch (remoteErr) {
+                    console.warn('[NotebookApp] Remote folder rename deferred:', remoteErr);
                 }
 
                 if (this.notebook.folder === oldPath) {
@@ -2319,8 +2384,11 @@ class NotebookApp {
                             if (this.sync) this.sync.notifyLocalChange(n.id, 'TRASH');
                         }
                     }
-                } else {
-                    await this.safeFetch(`/api/folders/${folderName}`, { method: 'DELETE' });
+                }
+                try {
+                    await this.safeFetch(`/api/folders/${encodeURIComponent(folderName)}`, { method: 'DELETE' });
+                } catch (remoteErr) {
+                    console.warn('[NotebookApp] Remote folder delete deferred:', remoteErr);
                 }
 
                 // Remove from expandedFolders cache

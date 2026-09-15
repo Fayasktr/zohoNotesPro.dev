@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zoho-notes-v15-sync-hardening';
+const CACHE_NAME = 'zoho-notes-v16-backup-and-folders';
 const OFFLINE_URL = '/offline.html';
 
 // Static Shell & Local-First Engine Assets to Pre-cache
