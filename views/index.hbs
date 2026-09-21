@@ -224,6 +224,11 @@
                             id="copy-all-cells" title="Copy All Notes">
                             <i data-lucide="copy" class="w-4 h-4"></i>
                         </button>
+                        <button
+                            class="w-9 h-9 flex items-center justify-center bg-[#6d5dfc1a] border border-[#6d5dfc33] text-[#6d5dfc] rounded-lg hover:bg-[#6d5dfc] hover:text-white transition-all flex-shrink-0"
+                            id="btn-open-live-modal" title="Broadcast Screen (Live View Link)">
+                            <i data-lucide="radio" class="w-4 h-4"></i>
+                        </button>
                     </div>
 
                     <!-- Note Label Search -->
@@ -452,10 +457,63 @@
             </div>
         </div>
 
+        <!-- Live Broadcast Modal -->
+        <div id="modal-live-broadcast" class="modal-content hidden" style="max-width: 480px; width: 100%;">
+            <button class="modal-btn-x modal-close">&times;</button>
+            <div class="modal-icon text-[#6d5dfc] bg-[#6d5dfc1a] w-16 h-16 rounded-3xl mx-auto mb-4 flex items-center justify-center shadow-lg shadow-[#6d5dfc33]">
+                <i data-lucide="radio" class="w-8 h-8"></i>
+            </div>
+            <h2>Live Spectator Broadcast</h2>
+            <p style="margin-bottom: 20px;">Share a link so anyone can watch you type and run code in real time.</p>
+
+            <!-- Status Banner -->
+            <div id="broadcast-status-card" style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 18px; text-align: left;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; font-weight: 600;">Broadcast Status</div>
+                        <div id="broadcast-status-label" style="font-size: 13px; font-weight: 700; color: #a0a0b0; display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                            <span style="width: 8px; height: 8px; border-radius: 50%; background: #6b7280; display: inline-block;"></span> Inactive
+                        </div>
+                    </div>
+                    <div id="broadcast-viewers-tag" class="hidden" style="font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; background: rgba(109, 93, 252, 0.15); color: #6d5dfc; border: 1px solid rgba(109, 93, 252, 0.3);">
+                        <span id="broadcast-viewers-count">0</span> Watching
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inactive State Controls -->
+            <div id="broadcast-inactive-controls">
+                <button class="btn-primary" id="btn-start-broadcast" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-weight: 700;">
+                    <i data-lucide="play" style="width: 16px;"></i> Start Live Broadcast
+                </button>
+            </div>
+
+            <!-- Active State Controls -->
+            <div id="broadcast-active-controls" class="hidden" style="text-align: left;">
+                <label style="display: block; font-size: 11px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px;">Spectator View Link</label>
+                <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+                    <input type="text" id="live-share-link-input" readonly style="flex: 1; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: var(--text-main); padding: 10px; border-radius: 8px; font-family: monospace; font-size: 11px; outline: none;" onclick="this.select();">
+                    <button class="btn-primary" id="btn-copy-broadcast-link" style="padding: 10px 16px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+                        <i data-lucide="copy" style="width: 14px;"></i> Copy
+                    </button>
+                </div>
+
+                <div style="background: rgba(48, 255, 106, 0.08); border: 1px solid rgba(48, 255, 106, 0.2); border-radius: 8px; padding: 10px; font-size: 11px; color: #30ff6a; display: flex; align-items: center; gap: 8px; margin-bottom: 15px;">
+                    <i data-lucide="cpu" style="width: 16px; flex-shrink: 0;"></i>
+                    <span>Code executes locally on <strong>your machine</strong>. Viewers only see real-time output.</span>
+                </div>
+
+                <button id="btn-stop-broadcast" class="btn-danger-outline" style="width: 100%; padding: 10px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <i data-lucide="square" style="width: 14px;"></i> Stop Broadcast
+                </button>
+            </div>
+        </div>
+
         <script>
             window.USER_SETTINGS = {
                 defaultLanguage: '{{defaultLanguage}}'
             };
+            window.FIREBASE_CONFIG = {{{json firebaseConfig}}};
         </script>
         <!-- Dexie IndexedDB Engine -->
         <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
@@ -466,8 +524,26 @@
         <script src="/js/engine/browserEngine.js?v=16"></script>
         <!-- Offline Manager & Sync Badge -->
         <script src="/js/offlineManager.js?v=16"></script>
+        <!-- Temporarily stash Monaco AMD define to force Firebase to register on window.firebase -->
+        <script>
+            if (typeof define === 'function' && define.amd) {
+                window._monacoAmdDefine = window.define;
+                window.define = undefined;
+            }
+        </script>
+        <!-- Firebase SDK (Locally Hosted to bypass adblockers & ensure 100% reliability) -->
+        <script src="/vendor/firebase/firebase-app-compat.js"></script>
+        <script src="/vendor/firebase/firebase-database-compat.js"></script>
+        <!-- Restore Monaco AMD define -->
+        <script>
+            if (window._monacoAmdDefine) {
+                window.define = window._monacoAmdDefine;
+                delete window._monacoAmdDefine;
+            }
+        </script>
+        <script src="/js/broadcast_engine.js?v=5"></script>
         <!-- Core Notebook UI Application -->
-        <script src="/js/notebook.js?v=16"></script>
+        <script src="/js/notebook.js?v=20"></script>
         <!-- Progressive Web App Handler -->
         <script src="/js/pwa.js?v=16"></script>
         <script>

@@ -33,6 +33,8 @@ ownerless_notes_with_times.json
 pattern_search_results.json
 stolen_notes_found.json
 user_notes_search.json
+*serviceAccount*.json
+serviceAccountKey.json
 
 # Notebook test outputs
 notebooks/test/

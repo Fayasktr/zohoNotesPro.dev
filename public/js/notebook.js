@@ -31,6 +31,7 @@ class NotebookApp {
         this.db = window.ZohoLocalDB;
         this.sync = window.ZohoBackupEngine || window.ZohoSyncEngine;
         this.engine = window.ZohoBrowserEngine;
+        this.broadcaster = window.ZohoBroadcastEngine;
 
         this.expandedFolders = new Set(JSON.parse(localStorage.getItem('zoho-expanded-folders') || '[]'));
         this.persistedFolders = this.getPersistedFolders();
@@ -39,6 +40,7 @@ class NotebookApp {
         this.setupTheme();
         this.setupSmartOutput();
         this.setupEventListeners();
+        this.setupBroadcastEngine();
         this.setupMobileSidebar();
         this.initSplitJS();
         this.setupConsoleInterception();
@@ -253,6 +255,9 @@ class NotebookApp {
             if (this.sync && typeof this.sync.recordUserActivity === 'function') {
                 this.sync.recordUserActivity();
             }
+            if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                this.broadcaster.syncNotebookTitle(e.target.value);
+            }
             this._autoSave();
         });
 
@@ -410,6 +415,10 @@ class NotebookApp {
         document.getElementById('btn-confirm-file').addEventListener('click', () => this.handleFileCreate());
 
         document.getElementById('nav-settings').addEventListener('click', () => this.openModal('modal-settings'));
+        document.getElementById('btn-open-live-modal')?.addEventListener('click', () => {
+            this.openModal('modal-live-broadcast');
+            this.updateBroadcastModalUI();
+        });
 
         document.getElementById('theme-switch').addEventListener('change', (e) => {
             this.toggleTheme(e.target.checked);
@@ -493,6 +502,146 @@ class NotebookApp {
         if (noteSearchBtn) {
             noteSearchBtn.addEventListener('click', () => {
                 this.filterCells(document.getElementById('note-label-search').value);
+            });
+        }
+    }
+
+    setupBroadcastEngine() {
+        if (!this.broadcaster) return;
+
+        // Viewer count change callback
+        this.broadcaster.viewerCountCallback = (count) => {
+            const countEl = document.getElementById('broadcast-viewers-count');
+            const tagEl = document.getElementById('broadcast-viewers-tag');
+            if (countEl) countEl.innerText = count;
+            if (tagEl) {
+                if (count > 0) tagEl.classList.remove('hidden');
+                else tagEl.classList.add('hidden');
+            }
+        };
+
+        // Wire modal controls
+        document.getElementById('btn-start-broadcast')?.addEventListener('click', () => this.startLiveBroadcast());
+        document.getElementById('btn-stop-broadcast')?.addEventListener('click', () => this.stopLiveBroadcast());
+
+        document.getElementById('btn-copy-broadcast-link')?.addEventListener('click', () => {
+            const input = document.getElementById('live-share-link-input');
+            if (input && input.value) {
+                navigator.clipboard.writeText(input.value);
+                const btn = document.getElementById('btn-copy-broadcast-link');
+                const orig = btn.innerHTML;
+                btn.innerHTML = `<i data-lucide="check" style="width: 14px;"></i> Copied!`;
+                if (window.lucide) lucide.createIcons();
+                setTimeout(() => {
+                    btn.innerHTML = orig;
+                    if (window.lucide) lucide.createIcons();
+                }, 2000);
+            }
+        });
+
+        document.getElementById('btn-toggle-firebase-setup')?.addEventListener('click', () => {
+            const drawer = document.getElementById('firebase-setup-drawer');
+            if (drawer) drawer.classList.toggle('hidden');
+        });
+
+        document.getElementById('btn-save-firebase-cfg')?.addEventListener('click', () => {
+            const val = document.getElementById('live-firebase-cfg-input')?.value.trim();
+            if (!val) return;
+            try {
+                const parsed = JSON.parse(val);
+                this.broadcaster.saveConfig(parsed);
+                const msg = document.getElementById('firebase-cfg-saved-msg');
+                if (msg) {
+                    msg.style.display = 'inline-flex';
+                    setTimeout(() => { msg.style.display = 'none'; }, 2500);
+                }
+            } catch (err) {
+                alert('Invalid JSON: ' + err.message);
+            }
+        });
+    }
+
+    async startLiveBroadcast() {
+        if (!this.broadcaster) return;
+        const btn = document.getElementById('btn-start-broadcast');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="animate-spin" style="width: 16px;"></i> Connecting...`;
+            if (window.lucide) lucide.createIcons();
+        }
+
+        try {
+            const hostName = window.USER_SETTINGS?.username || 'Host';
+            const result = await this.broadcaster.startBroadcast(this.notebook, hostName);
+            const input = document.getElementById('live-share-link-input');
+            if (input) input.value = result.shareUrl;
+
+            // Update modal UI
+            this.updateBroadcastModalUI();
+
+            // Highlight live broadcast button in nav header
+            const liveNavBtn = document.getElementById('btn-open-live-modal');
+            if (liveNavBtn) {
+                liveNavBtn.classList.add('bg-rose-500/20', 'text-rose-400', 'border-rose-500/40');
+                liveNavBtn.innerHTML = `<i data-lucide="radio" class="w-4 h-4 text-rose-400"></i>`;
+                if (window.lucide) lucide.createIcons();
+            }
+        } catch (err) {
+            if (err.message === 'MISSING_CONFIG') {
+                const drawer = document.getElementById('firebase-setup-drawer');
+                if (drawer) drawer.classList.remove('hidden');
+                alert('Firebase configuration not found. Please paste your Firebase web config JSON in the configuration drawer below, or set FIREBASE_* environment variables in .env');
+            } else {
+                alert('Could not start live broadcast: ' + err.message);
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i data-lucide="play" style="width: 16px;"></i> Start Live Broadcast`;
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+    }
+
+    async stopLiveBroadcast() {
+        if (!this.broadcaster) return;
+        await this.broadcaster.stopBroadcast();
+        this.updateBroadcastModalUI();
+
+        const liveNavBtn = document.getElementById('btn-open-live-modal');
+        if (liveNavBtn) {
+            liveNavBtn.classList.remove('bg-rose-500/20', 'text-rose-400', 'border-rose-500/40');
+            liveNavBtn.innerHTML = `<i data-lucide="radio" class="w-4 h-4"></i>`;
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+
+    updateBroadcastModalUI() {
+        const isLive = this.broadcaster && this.broadcaster.isBroadcasting;
+        const activeControls = document.getElementById('broadcast-active-controls');
+        const inactiveControls = document.getElementById('broadcast-inactive-controls');
+        const statusLabel = document.getElementById('broadcast-status-label');
+
+        if (isLive) {
+            if (activeControls) activeControls.classList.remove('hidden');
+            if (inactiveControls) inactiveControls.classList.add('hidden');
+            if (statusLabel) {
+                statusLabel.innerHTML = `<span style="width: 8px; height: 8px; border-radius: 50%; background: #30ff6a; display: inline-block; box-shadow: 0 0 8px #30ff6a;"></span> <span style="color: #30ff6a;">Broadcasting Live</span>`;
+            }
+        } else {
+            if (activeControls) activeControls.classList.add('hidden');
+            if (inactiveControls) inactiveControls.classList.remove('hidden');
+            if (statusLabel) {
+                statusLabel.innerHTML = `<span style="width: 8px; height: 8px; border-radius: 50%; background: #6b7280; display: inline-block;"></span> <span>Inactive</span>`;
+            }
+        }
+
+        const cfgInput = document.getElementById('live-firebase-cfg-input');
+        if (cfgInput && !cfgInput.value && this.broadcaster) {
+            this.broadcaster.getConfig().then(cfg => {
+                if (cfg && cfgInput && !cfgInput.value) {
+                    cfgInput.value = JSON.stringify(cfg, null, 2);
+                }
             });
         }
     }
@@ -1256,6 +1405,11 @@ class NotebookApp {
         this.renderCell(cell, this.notebook.cells.length);
         this._autoSave();
 
+        if (this.broadcaster && this.broadcaster.isBroadcasting) {
+            this.broadcaster.syncNotebookStructure(this.notebook.cells);
+            this.broadcaster.syncActiveCell(cell.id);
+        }
+
         // Auto-scroll to the new cell
         setTimeout(() => {
             const el = document.getElementById(`container-${cell.id}`);
@@ -1509,7 +1663,16 @@ class NotebookApp {
                 if (this.sync && typeof this.sync.recordUserActivity === 'function') {
                     this.sync.recordUserActivity();
                 }
+                if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                    this.broadcaster.syncCellContent(cell.id, editor.getValue(), cell.lang, cell.type);
+                }
                 this._autoSave();
+            });
+
+            editor.onDidFocusEditorWidget(() => {
+                if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                    this.broadcaster.syncActiveCell(cell.id);
+                }
             });
 
             if (isMark) {
@@ -1636,6 +1799,11 @@ class NotebookApp {
 
         this.currentRunningCellId = cellId;
 
+        if (this.broadcaster && this.broadcaster.isBroadcasting) {
+            this.broadcaster.syncActiveCell(cellId);
+            this.broadcaster.syncCellStatus(cellId, 'running');
+        }
+
         const activeEngine = this.engine || window.ZohoBrowserEngine;
 
         // ── Interactive Terminal Mode ──
@@ -1667,6 +1835,9 @@ class NotebookApp {
 
             cell.output = data;
             this.displayOutput(cellId, data);
+            if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                this.broadcaster.syncCellOutput(cellId, data, data && data.success ? 'idle' : 'error');
+            }
             this._autoSave();
         } catch (err) {
             let userMsg = err.message;
@@ -1674,6 +1845,9 @@ class NotebookApp {
             if (err.message === 'CSRF_ERROR') userMsg = 'Security validation failed. Please refresh the page.';
 
             this.displayOutput(cellId, { success: false, error: userMsg });
+            if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                this.broadcaster.syncCellOutput(cellId, { success: false, error: userMsg }, 'error');
+            }
         } finally {
             if (runBtn) {
                 runBtn.innerText = 'Run';
@@ -1724,6 +1898,12 @@ class NotebookApp {
         let isFinished = false;
         const collectedLogs = [];
 
+        if (this.broadcaster && this.broadcaster.isBroadcasting) {
+            this.broadcaster.syncActiveCell(cellId);
+            this.broadcaster.syncCellStatus(cellId, 'running');
+            this.broadcaster.clearTerminalStream(cellId);
+        }
+
         // Helper: append text to terminal output
         const appendOutput = (text, className = 'terminal-stdout') => {
             const span = document.createElement('span');
@@ -1742,12 +1922,18 @@ class NotebookApp {
             onStdout: (data) => {
                 appendOutput(data, 'terminal-stdout');
                 collectedLogs.push(data);
+                if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                    this.broadcaster.streamTerminalChunk(cellId, data);
+                }
                 if (termInput && !isFinished) termInput.focus();
             },
 
             onStderr: (data) => {
                 appendOutput(data, 'terminal-stderr');
                 collectedLogs.push(`STDERR: ${data}`);
+                if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                    this.broadcaster.streamTerminalChunk(cellId, `[STDERR] ${data}`);
+                }
             },
 
             onExit: (exitCode) => {
@@ -1779,6 +1965,14 @@ class NotebookApp {
                         interactive: true
                     };
                     this._autoSave();
+                }
+
+                if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                    this.broadcaster.syncCellOutput(cellId, {
+                        success: exitCode === 0,
+                        stdout: collectedLogs.join(''),
+                        stderr: exitCode !== 0 ? `Process exited with code ${exitCode}` : ''
+                    }, exitCode === 0 ? 'idle' : 'error');
                 }
 
                 // Reset run button
@@ -1874,6 +2068,9 @@ class NotebookApp {
         }
 
         this._autoSave();
+        if (this.broadcaster && this.broadcaster.isBroadcasting) {
+            this.broadcaster.syncNotebookStructure(this.notebook.cells);
+        }
     }
 
     updateCellIndices() {
@@ -2061,6 +2258,9 @@ class NotebookApp {
                 document.getElementById('cells-list').innerHTML = '';
                 this.notebook.cells.forEach((c, idx) => this.renderCell(c, idx + 1));
                 this._autoSave();
+                if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                    this.broadcaster.syncNotebookStructure(this.notebook.cells);
+                }
             } catch (err) {
                 console.error('Delete cell failed', err);
                 this.notebook.cells.splice(cellIndex, 0, cell);
