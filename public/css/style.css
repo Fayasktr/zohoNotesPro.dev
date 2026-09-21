@@ -285,6 +285,40 @@ body.light-theme .nav-item.active {
     border-bottom-color: var(--accent);
 }
 
+/* Per-Box / Monaco Editor Live Coding Indicator */
+.cell-coding-indicator {
+    background: rgba(48, 255, 106, 0.08);
+    border: 1px solid rgba(48, 255, 106, 0.25);
+    border-radius: 6px;
+    padding: 2px 7px;
+    display: none;
+    align-items: center;
+    gap: 5px;
+    margin: 0 4px;
+    flex-shrink: 0;
+    transition: all 0.2s ease-in-out;
+    user-select: none;
+    pointer-events: none;
+}
+
+.cell-coding-indicator.active {
+    display: inline-flex !important;
+}
+
+.cell-coding-text {
+    color: #30ff6a;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+.cell.peer-coding {
+    border-color: rgba(48, 255, 106, 0.4) !important;
+    box-shadow: 0 0 14px rgba(48, 255, 106, 0.08) !important;
+}
+
 .cell-actions {
     display: flex;
     align-items: center;

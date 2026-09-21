@@ -677,17 +677,19 @@ class NotebookApp {
                 });
             }
 
-            if (this.activeTypers && this.activeTypers.size > 0) {
+            if (this.cellTypers && this.cellTypers.size > 0) {
                 const activePeerIds = new Set(users.map(u => u.peerId));
-                let changed = false;
-                for (const [peerId, t] of this.activeTypers.entries()) {
-                    if (!activePeerIds.has(peerId)) {
-                        clearTimeout(t.timer);
-                        this.activeTypers.delete(peerId);
-                        changed = true;
+                this.cellTypers.forEach((typersMap, cellId) => {
+                    let changed = false;
+                    for (const [peerId, t] of typersMap.entries()) {
+                        if (!activePeerIds.has(peerId)) {
+                            clearTimeout(t.timer);
+                            typersMap.delete(peerId);
+                            changed = true;
+                        }
                     }
-                }
-                if (changed) this.updateTypingIndicatorUI();
+                    if (changed) this.updateCellTypingUI(cellId);
+                });
             }
             this.updateCollabTopBar();
         };
@@ -742,17 +744,17 @@ class NotebookApp {
             }
         };
 
-        // 1.8 Remote typing indicator: "fayas coding..."
+        // 1.8 Remote typing indicator per cell: "fayas coding..."
         this.collab.onRemoteTyping = (data) => {
-            if (data && data.peerId) {
-                this.handlePeerTyping(data.peerId, data.username);
+            if (data && data.peerId && data.cellId) {
+                this.handlePeerTyping(data.peerId, data.username, data.cellId);
             }
         };
 
         // 2. Remote edits: apply non-conflicting operational changes to Monaco
         this.collab.onRemoteEdit = (cellId, changes, senderId) => {
             const peer = this.collab?.usersList?.find(u => u.peerId === senderId);
-            this.handlePeerTyping(senderId, peer?.username);
+            this.handlePeerTyping(senderId, peer?.username, cellId);
             const editor = this.editors[cellId];
             if (!editor || !changes || !changes.length) return;
 
@@ -866,6 +868,11 @@ class NotebookApp {
                 if (this.editors[cellId]) {
                     this.editors[cellId].dispose();
                     delete this.editors[cellId];
+                }
+                if (this.cellTypers && this.cellTypers.has(cellId)) {
+                    const map = this.cellTypers.get(cellId);
+                    map.forEach(t => clearTimeout(t.timer));
+                    this.cellTypers.delete(cellId);
                 }
                 this.updateCellIndices();
                 this._autoSave();
@@ -1148,42 +1155,70 @@ class NotebookApp {
         });
     }
 
-    handlePeerTyping(peerId, username) {
-        if (!this.activeTypers) this.activeTypers = new Map();
+    handlePeerTyping(peerId, username, cellId) {
+        if (!cellId) return;
+        if (!this.cellTypers) this.cellTypers = new Map(); // Map<cellId, Map<peerId, { username, timer }>>
 
         // Do not show typing indicator for yourself
         if (this.collab && peerId === this.collab.peerId) return;
 
         const cleanName = (username && username !== 'Anonymous') ? username : 'Collaborator';
 
-        if (this.activeTypers.has(peerId)) {
-            clearTimeout(this.activeTypers.get(peerId).timer);
+        // Clear this peer from any other cell they were typing in previously
+        this.cellTypers.forEach((typersMap, cId) => {
+            if (cId !== cellId && typersMap.has(peerId)) {
+                clearTimeout(typersMap.get(peerId).timer);
+                typersMap.delete(peerId);
+                if (typersMap.size === 0) {
+                    this.cellTypers.delete(cId);
+                }
+                this.updateCellTypingUI(cId);
+            }
+        });
+
+        if (!this.cellTypers.has(cellId)) {
+            this.cellTypers.set(cellId, new Map());
+        }
+        const cellMap = this.cellTypers.get(cellId);
+
+        if (cellMap.has(peerId)) {
+            clearTimeout(cellMap.get(peerId).timer);
         }
 
         const timer = setTimeout(() => {
-            if (this.activeTypers) {
-                this.activeTypers.delete(peerId);
-                this.updateTypingIndicatorUI();
+            if (this.cellTypers && this.cellTypers.has(cellId)) {
+                const map = this.cellTypers.get(cellId);
+                map.delete(peerId);
+                if (map.size === 0) {
+                    this.cellTypers.delete(cellId);
+                }
+                this.updateCellTypingUI(cellId);
             }
         }, 2500);
 
-        this.activeTypers.set(peerId, { username: cleanName, timer });
-        this.updateTypingIndicatorUI();
+        cellMap.set(peerId, { username: cleanName, timer });
+        this.updateCellTypingUI(cellId);
     }
 
-    updateTypingIndicatorUI() {
-        const indicatorEl = document.getElementById('note-typing-indicator');
-        const textEl = document.getElementById('note-typing-text');
-        if (!indicatorEl || !textEl) return;
+    updateCellTypingUI(cellId) {
+        if (!cellId) return;
+        const indicatorEl = document.getElementById(`cell-coding-${cellId}`);
+        const cellElem = document.getElementById(`container-${cellId}`);
+        if (!indicatorEl) return;
 
-        if (!this.activeTypers || this.activeTypers.size === 0) {
-            indicatorEl.classList.add('hidden');
+        const textEl = indicatorEl.querySelector('.cell-coding-text');
+        const typersMap = this.cellTypers ? this.cellTypers.get(cellId) : null;
+
+        if (!typersMap || typersMap.size === 0) {
+            indicatorEl.classList.remove('active');
             indicatorEl.classList.remove('flex');
-            textEl.innerText = '';
+            indicatorEl.classList.add('hidden');
+            if (textEl) textEl.innerText = '';
+            if (cellElem) cellElem.classList.remove('peer-coding');
             return;
         }
 
-        const names = Array.from(this.activeTypers.values()).map(t => t.username);
+        const names = Array.from(typersMap.values()).map(t => t.username);
         let displayText = '';
 
         if (names.length === 1) {
@@ -1194,9 +1229,19 @@ class NotebookApp {
             displayText = `${names[0]} & ${names.length - 1} others coding...`;
         }
 
-        textEl.innerText = displayText;
+        if (textEl) textEl.innerText = displayText;
         indicatorEl.classList.remove('hidden');
         indicatorEl.classList.add('flex');
+        indicatorEl.classList.add('active');
+        if (cellElem) cellElem.classList.add('peer-coding');
+    }
+
+    updateTypingIndicatorUI() {
+        const indicatorEl = document.getElementById('note-typing-indicator');
+        if (indicatorEl) {
+            indicatorEl.classList.add('hidden');
+            indicatorEl.classList.remove('flex');
+        }
     }
 
     async getLiveShareUrl(noteObj = null) {
@@ -2423,6 +2468,12 @@ class NotebookApp {
                 this.notebook.isLive = isLiveNote;
             }
 
+            if (this.cellTypers) {
+                this.cellTypers.forEach(cellMap => {
+                    cellMap.forEach(t => clearTimeout(t.timer));
+                });
+                this.cellTypers.clear();
+            }
             if (this.activeTypers) {
                 this.activeTypers.forEach(t => clearTimeout(t.timer));
                 this.activeTypers.clear();
@@ -2667,6 +2718,13 @@ class NotebookApp {
                     <button class="btn-reorder move-down" title="Move Down"><i data-lucide="chevron-down" style="width:12px;"></i></button>
                 </div>
                 <input type="text" class="cell-title-input" placeholder="Set note label..." value="${cell.title || ''}">
+                <div class="cell-coding-indicator hidden" id="cell-coding-${cell.id}">
+                    <span class="relative flex h-2 w-2 flex-shrink-0">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#30ff6a] opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-[#30ff6a]"></span>
+                    </span>
+                    <span class="cell-coding-text"></span>
+                </div>
                 ${!isMark ? `
                 <select class="cell-lang-select">
                     <option value="javascript" ${cell.lang === 'javascript' ? 'selected' : ''}>JS</option>
@@ -2706,6 +2764,10 @@ class NotebookApp {
 
         container.appendChild(cellElem);
         lucide.createIcons();
+
+        if (this.cellTypers && this.cellTypers.has(cell.id)) {
+            this.updateCellTypingUI(cell.id);
+        }
 
         if (cell.output) this.displayOutput(cell.id, cell.output, cell.lastRunBy);
 
@@ -3575,6 +3637,11 @@ class NotebookApp {
                 if (this.editors[cellId]) {
                     this.editors[cellId].dispose();
                     delete this.editors[cellId];
+                }
+                if (this.cellTypers && this.cellTypers.has(cellId)) {
+                    const map = this.cellTypers.get(cellId);
+                    map.forEach(t => clearTimeout(t.timer));
+                    this.cellTypers.delete(cellId);
                 }
 
                 // If notebook is now empty, create a fresh cell

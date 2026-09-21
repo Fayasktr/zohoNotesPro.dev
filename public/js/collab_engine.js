@@ -583,17 +583,19 @@
         }
 
         /**
-         * Broadcast real-time typing / coding indicator (throttled to 1s)
+         * Broadcast real-time typing / coding indicator (throttled to 1s per cell)
          */
         broadcastTyping(cellId) {
             if (!this.isConnected || !cellId) return;
             if (!this.isHost && !this.hostOnline) return;
 
+            if (!this._lastTypingBroadcastMap) this._lastTypingBroadcastMap = new Map();
             const now = Date.now();
-            if (this._lastTypingBroadcast && (now - this._lastTypingBroadcast < 1000)) {
+            const lastTime = this._lastTypingBroadcastMap.get(cellId) || 0;
+            if (now - lastTime < 1000) {
                 return;
             }
-            this._lastTypingBroadcast = now;
+            this._lastTypingBroadcastMap.set(cellId, now);
 
             this.sendWsMessage({
                 type: 'typing',
