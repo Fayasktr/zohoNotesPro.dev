@@ -721,17 +721,20 @@ app.get('/note/join/:shareCode', async (req, res) => {
             return res.redirect(`/login?notice=${encodeURIComponent('Please log in or create an account to collaborate on this live note.')}`);
         }
 
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(currentUserId) ? new mongoose.Types.ObjectId(currentUserId) : currentUserId;
+
         // If the user is the owner, go straight to the note
-        if (note.owner && note.owner.equals(currentUserId)) {
+        if (note.owner && String(note.owner) === String(currentUserId)) {
             return res.redirect(`/?noteId=${note.id}`);
         }
 
         // If user is a collaborator, ensure accepted status; otherwise add them
-        const existingCollab = note.collaborators.find(c => c.user && c.user.equals(currentUserId));
+        const existingCollab = note.collaborators.find(c => c.user && String(c.user) === String(currentUserId));
         if (!existingCollab) {
             const userDoc = await User.findById(currentUserId);
             note.collaborators.push({
-                user: currentUserId,
+                user: userObjId,
                 email: userDoc ? userDoc.email : '',
                 status: 'accepted',
                 joinedAt: new Date()
@@ -755,12 +758,16 @@ app.get('/api/notes/live', isAuthenticated, async (req, res) => {
         const userId = req.session.userId || (req.user ? req.user._id : null);
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
         const liveNotes = await Note.find({
             isLive: true,
             isTrashed: { $ne: true },
             $or: [
-                { owner: userId },
-                { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }
+                { owner: userObjId },
+                { owner: String(userId) },
+                { 'collaborators.user': userObjId, 'collaborators.status': 'accepted' }
             ]
         }).populate('owner', 'username email').sort({ updatedAt: -1 }).lean();
 
@@ -861,8 +868,12 @@ app.get('/api/notes/shared', isAuthenticated, async (req, res) => {
         const currentUserId = req.session.userId || (req.user ? req.user._id : null);
         if (!currentUserId) return res.status(401).json({ error: 'Unauthorized' });
 
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(currentUserId) ? new mongoose.Types.ObjectId(currentUserId) : currentUserId;
+
         const sharedNotes = await Note.find({
-            'collaborators': { $elemMatch: { user: currentUserId, status: 'accepted' } }
+            'collaborators.user': { $in: [currentUserId, userObjId] },
+            'collaborators.status': 'accepted'
         }).populate('owner', 'username email').sort({ updatedAt: -1 }).lean();
 
         const formatted = sharedNotes.map(n => ({
@@ -889,11 +900,14 @@ app.post('/api/notes/:noteId/share-code', isAuthenticated, async (req, res) => {
         const currentUserId = req.session.userId || (req.user ? req.user._id : null);
         const { noteId } = req.params;
 
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(currentUserId) ? new mongoose.Types.ObjectId(currentUserId) : currentUserId;
+
         let note = await Note.findOne({
             id: noteId,
             $or: [
-                { owner: currentUserId },
-                { 'collaborators': { $elemMatch: { user: currentUserId, status: 'accepted' } } }
+                { owner: { $in: [currentUserId, userObjId] } },
+                { 'collaborators.user': { $in: [currentUserId, userObjId] }, 'collaborators.status': 'accepted' }
             ]
         }).populate('owner', 'username email');
 
@@ -1019,17 +1033,19 @@ app.post('/api/execute', isAuthenticated, async (req, res) => {
 app.get('/api/notebooks', isAuthenticated, async (req, res) => {
     try {
         const userId = req.session.userId || (req.user ? req.user._id : null);
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
 
         // Find notebooks owned by the user (only normal notes)
         const ownedNotes = await Note.find({
-            owner: userId,
+            owner: { $in: [userId, userObjId] },
             isLive: { $ne: true },
             isTrashed: { $ne: true }
         }, 'id title folder isStarred updatedAt isLive').sort({ updatedAt: -1 }).lean();
 
         // Find notebooks shared with the user (only normal notes)
         const sharedNotes = await Note.find({
-            'collaborators.user': userId,
+            'collaborators.user': { $in: [userId, userObjId] },
             'collaborators.status': 'accepted',
             isLive: { $ne: true },
             isTrashed: { $ne: true }
@@ -1055,6 +1071,9 @@ app.get(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
     const notebookId = req.params[0];
     const userId = req.session.userId || (req.user ? req.user._id : null);
     try {
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
         let query;
         if (req.session.role === 'admin') {
             query = { id: notebookId };
@@ -1062,15 +1081,38 @@ app.get(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
             query = {
                 id: notebookId,
                 $or: [
-                    { owner: userId },
-                    { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }
+                    { owner: { $in: [userId, userObjId] } },
+                    { 'collaborators.user': { $in: [userId, userObjId] }, 'collaborators.status': 'accepted' }
                 ]
             };
         }
-        const note = await Note.findOne(query).lean();
+        const note = await Note.findOne(query).populate('owner', 'username email').lean();
         if (!note) return res.status(404).json({ error: 'Notebook not found or access denied' });
-        res.json(note.content || note);
+
+        const isOwner = String(note.owner?._id || note.owner) === String(userId);
+        const contentObj = (typeof note.content === 'object' && note.content !== null) ? note.content : {};
+        const cells = Array.isArray(contentObj.cells) ? contentObj.cells : (Array.isArray(note.cells) ? note.cells : []);
+        const tags = Array.isArray(contentObj.tags) ? contentObj.tags : (Array.isArray(note.tags) ? note.tags : []);
+
+        res.json({
+            ...contentObj,
+            id: note.id,
+            title: note.title || contentObj.title || 'Untitled',
+            folder: note.folder || contentObj.folder || 'root',
+            isStarred: !!(note.isStarred || contentObj.isStarred),
+            isLive: !!(note.isLive || contentObj.isLive),
+            shareCode: note.shareCode || contentObj.shareCode || '',
+            authorName: note.owner?.username || note.authorName || contentObj.authorName || 'Author',
+            cells: cells,
+            tags: tags,
+            updatedAt: note.updatedAt ? new Date(note.updatedAt).getTime() : Date.now(),
+            _version: typeof note._version === 'number' ? note._version : (contentObj._version || 1),
+            owner: String(note.owner?._id || note.owner),
+            isOwner: isOwner,
+            isShared: !isOwner
+        });
     } catch (err) {
+        console.error('Failed to read notebook:', err);
         res.status(500).json({ error: 'Failed to read notebook' });
     }
 });
@@ -1081,6 +1123,9 @@ app.post('/api/notebooks', isAuthenticated, async (req, res) => {
 
     try {
         const userId = req.session.userId || (req.user ? req.user._id : null);
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
         const updateData = {
             id: notebookData.id,
             title: notebookData.title || 'Untitled',
@@ -1089,12 +1134,14 @@ app.post('/api/notebooks', isAuthenticated, async (req, res) => {
             folder: notebookData.folder || 'root',
             updatedAt: new Date()
         };
+        if (notebookData.isLive !== undefined) updateData.isLive = !!notebookData.isLive;
+        if (notebookData.shareCode !== undefined) updateData.shareCode = notebookData.shareCode;
 
         const query = {
             id: notebookData.id,
             $or: [
-                { owner: userId },
-                { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }
+                { owner: { $in: [userId, userObjId] } },
+                { 'collaborators.user': { $in: [userId, userObjId] }, 'collaborators.status': 'accepted' }
             ]
         };
 
@@ -1102,7 +1149,7 @@ app.post('/api/notebooks', isAuthenticated, async (req, res) => {
             query,
             {
                 $set: updateData,
-                $setOnInsert: { owner: userId }
+                $setOnInsert: { owner: userObjId }
             },
             { upsert: true, new: true, runValidators: true }
         );

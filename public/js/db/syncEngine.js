@@ -700,6 +700,9 @@
                                 tags: remote.tags || [],
                                 updatedAt: remote.updatedAt || Date.now(),
                                 owner: remote.owner,
+                                isLive: !!(remote.isLive || remote.content?.isLive),
+                                shareCode: remote.shareCode || '',
+                                authorName: remote.authorName || '',
                                 _version: remote._version || 1,
                                 _syncStatus: 'synced',
                                 _hasFullContent: true
@@ -781,6 +784,9 @@
                         tags: remoteNote.content?.tags || remoteNote.tags || [],
                         updatedAt: new Date(remoteNote.updatedAt).getTime(),
                         owner: remoteNote.owner,
+                        isLive: !!(remoteNote.isLive || remoteNote.content?.isLive),
+                        shareCode: remoteNote.shareCode || '',
+                        authorName: remoteNote.authorName || '',
                         _version: remoteNote._version || 1,
                         _syncStatus: 'synced',
                         _hasFullContent: true

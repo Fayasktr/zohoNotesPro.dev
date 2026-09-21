@@ -65,6 +65,7 @@ async function runTests() {
             authorName: creator.username,
             title: 'Live Pair Programming Demo',
             folder: 'root',
+            isLive: true,
             cells: [{ id: 'cell-1', type: 'code', lang: 'javascript', content: 'console.log("hello collab");' }]
         });
 

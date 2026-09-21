@@ -227,11 +227,15 @@ router.post('/pull', async (req, res) => {
             return res.status(400).json({ error: 'Missing noteIds array' });
         }
 
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
         const notes = await Note.find({
             id: { $in: noteIds },
             $or: [
-                { owner: userId },
-                { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }
+                { owner: userObjId },
+                { owner: String(userId) },
+                { 'collaborators.user': userObjId, 'collaborators.status': 'accepted' }
             ]
         }).lean();
 
@@ -247,7 +251,10 @@ router.post('/pull', async (req, res) => {
             tags: Array.isArray(n.content?.tags) ? n.content.tags : (Array.isArray(n.tags) ? n.tags : []),
             updatedAt: n.updatedAt ? new Date(n.updatedAt).getTime() : Date.now(),
             _version: typeof n._version === 'number' ? n._version : 1,
-            owner: String(n.owner)
+            owner: String(n.owner),
+            shareCode: n.shareCode || '',
+            authorName: n.authorName || '',
+            isLive: !!(n.isLive || n.content?.isLive)
         }));
 
         res.json({ notes: formatted });

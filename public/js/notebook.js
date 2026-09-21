@@ -163,8 +163,10 @@ class NotebookApp {
         // Fetch local notes first with zero network delay
         let notebooks = await this.refreshNotebookList(false);
 
-        if (window.INITIAL_NOTE_ID) {
-            await this.loadNotebook(window.INITIAL_NOTE_ID);
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetInitialId = urlParams.get('noteId') || window.INITIAL_NOTE_ID;
+        if (targetInitialId) {
+            await this.loadNotebook(targetInitialId);
             return;
         }
 
@@ -863,7 +865,8 @@ class NotebookApp {
         if (topBar) topBar.classList.remove('hidden');
 
         if (authorEl) {
-            const isHost = (String(this.notebook.owner) === String(window.CURRENT_USER?.id));
+            const ownerId = this.notebook.owner?._id ? String(this.notebook.owner._id) : String(this.notebook.owner || '');
+            const isHost = Boolean(ownerId && window.CURRENT_USER?.id && (ownerId === String(window.CURRENT_USER.id)));
             const author = this.notebook.authorName || (isHost ? `${window.CURRENT_USER?.username || 'You'} (Host)` : 'Host');
             authorEl.innerText = `Host: @${author}`;
         }
@@ -1747,7 +1750,8 @@ class NotebookApp {
             if (this.notebook && this.notebook.isLive) {
                 if (topBar) topBar.classList.remove('hidden');
                 if (this.collab) {
-                    const isHost = (String(this.notebook.owner) === String(window.CURRENT_USER?.id));
+                    const ownerId = this.notebook.owner?._id ? String(this.notebook.owner._id) : String(this.notebook.owner || '');
+                    const isHost = Boolean(ownerId && window.CURRENT_USER?.id && (ownerId === String(window.CURRENT_USER.id)));
                     await this.collab.connectToNote(id, window.CURRENT_USER, isHost);
                     this.updateCollabTopBar();
                 }
