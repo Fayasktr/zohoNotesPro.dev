@@ -255,6 +255,23 @@ body.light-theme .nav-item.active {
     }
 }
 
+.cell-heading-wrapper {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex: 1;
+    min-width: 80px;
+    margin: 0 8px;
+    min-height: 24px;
+}
+
+@media (min-width: 640px) {
+    .cell-heading-wrapper {
+        min-width: 150px;
+        margin: 0 12px 0 6px;
+    }
+}
+
 .cell-title-input {
     background: none;
     border: none;
@@ -266,18 +283,12 @@ body.light-theme .nav-item.active {
     outline: none;
     transition: border-color 0.2s;
     width: 100%;
-    flex: 1;
-    min-width: 80px;
-    /* Reduced min-width for mobile */
-    margin: 0 8px;
+    margin: 0;
 }
 
 @media (min-width: 640px) {
     .cell-title-input {
         font-size: 14px;
-        min-width: 150px;
-        /* Removed max-width to prevent truncation of long labels */
-        margin: 0;
     }
 }
 
@@ -285,20 +296,16 @@ body.light-theme .nav-item.active {
     border-bottom-color: var(--accent);
 }
 
-/* Per-Box / Monaco Editor Live Coding Indicator */
+/* Per-Box / Monaco Editor Live Coding Indicator (Directly Under Heading Section) */
 .cell-coding-indicator {
-    background: rgba(48, 255, 106, 0.08);
-    border: 1px solid rgba(48, 255, 106, 0.25);
-    border-radius: 6px;
-    padding: 2px 7px;
     display: none;
     align-items: center;
-    gap: 5px;
-    margin: 0 4px;
-    flex-shrink: 0;
-    transition: all 0.2s ease-in-out;
+    gap: 4px;
+    margin-top: 2px;
+    padding: 0 2px;
     user-select: none;
     pointer-events: none;
+    text-transform: none !important;
 }
 
 .cell-coding-indicator.active {
@@ -306,12 +313,15 @@ body.light-theme .nav-item.active {
 }
 
 .cell-coding-text {
-    color: #30ff6a;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.2px;
-    text-transform: none;
-    white-space: nowrap;
+    color: #30ff6a !important;
+    font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, Monaco, monospace !important;
+    font-size: 10px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.25px !important;
+    text-transform: none !important;
+    white-space: nowrap !important;
+    line-height: 1.2 !important;
+    opacity: 0.95;
 }
 
 .cell.peer-coding {

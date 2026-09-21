@@ -1222,11 +1222,11 @@ class NotebookApp {
         let displayText = '';
 
         if (names.length === 1) {
-            displayText = `${names[0]} coding...`;
+            displayText = `${String(names[0]).toLowerCase()} coding...`;
         } else if (names.length === 2) {
-            displayText = `${names[0]} & ${names[1]} coding...`;
+            displayText = `${String(names[0]).toLowerCase()} & ${String(names[1]).toLowerCase()} coding...`;
         } else {
-            displayText = `${names[0]} & ${names.length - 1} others coding...`;
+            displayText = `${String(names[0]).toLowerCase()} & ${names.length - 1} others coding...`;
         }
 
         if (textEl) textEl.innerText = displayText;
@@ -2717,13 +2717,12 @@ class NotebookApp {
                     <button class="btn-reorder move-up" title="Move Up"><i data-lucide="chevron-up" style="width:12px;"></i></button>
                     <button class="btn-reorder move-down" title="Move Down"><i data-lucide="chevron-down" style="width:12px;"></i></button>
                 </div>
-                <input type="text" class="cell-title-input" placeholder="Set note label..." value="${cell.title || ''}">
-                <div class="cell-coding-indicator hidden" id="cell-coding-${cell.id}">
-                    <span class="relative flex h-2 w-2 flex-shrink-0">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#30ff6a] opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2 w-2 bg-[#30ff6a]"></span>
-                    </span>
-                    <span class="cell-coding-text"></span>
+                <div class="cell-heading-wrapper">
+                    <input type="text" class="cell-title-input" placeholder="Set note label..." value="${cell.title || ''}">
+                    <div class="cell-coding-indicator hidden" id="cell-coding-${cell.id}">
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#30ff6a] inline-block animate-pulse flex-shrink-0"></span>
+                        <span class="cell-coding-text"></span>
+                    </div>
                 </div>
                 ${!isMark ? `
                 <select class="cell-lang-select">
