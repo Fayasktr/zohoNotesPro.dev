@@ -1102,6 +1102,7 @@ app.get(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
             isStarred: !!(note.isStarred || contentObj.isStarred),
             isLive: !!(note.isLive || contentObj.isLive),
             shareCode: note.shareCode || contentObj.shareCode || '',
+            shareUrl: (note.shareCode || contentObj.shareCode) ? `${req.protocol}://${req.get('host')}/note/join/${note.shareCode || contentObj.shareCode}` : '',
             authorName: note.owner?.username || note.authorName || contentObj.authorName || 'Author',
             cells: cells,
             tags: tags,

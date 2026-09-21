@@ -803,7 +803,31 @@ class NotebookApp {
 
         // Wire Copy Live Share Link button
         document.getElementById('btn-copy-collab-link')?.addEventListener('click', async () => {
-            await this.copyCollabShareLink();
+            await this.openLiveShareModal();
+        });
+
+        // Wire Header Live Share Link button
+        document.getElementById('btn-live-share-header')?.addEventListener('click', async () => {
+            await this.openLiveShareModal();
+        });
+
+        // Wire Modal Copy button
+        document.getElementById('btn-copy-modal-link')?.addEventListener('click', async () => {
+            const input = document.getElementById('live-share-modal-input');
+            const btnText = document.getElementById('btn-copy-modal-link-text');
+            if (input && input.value) {
+                await navigator.clipboard.writeText(input.value);
+                if (btnText) btnText.innerText = 'Copied!';
+                setTimeout(() => {
+                    if (btnText) btnText.innerText = 'Copy Link';
+                }, 2500);
+                this.showToast('Live link copied to clipboard!');
+            }
+        });
+
+        // Click on input selects all
+        document.getElementById('live-share-modal-input')?.addEventListener('click', (e) => {
+            e.target.select();
         });
 
         // Wire Toggle Shared Notes section accordion
@@ -821,37 +845,96 @@ class NotebookApp {
         });
     }
 
-    async copyCollabShareLink() {
-        if (!this.notebook || !this.notebook.id) return;
-        const btnText = document.getElementById('collab-share-btn-text');
+    async openLiveShareModal(noteObj = null) {
+        const note = noteObj || this.notebook;
+        if (!note || !note.id) return;
 
-        try {
-            const res = await this.safeFetch(`/api/notes/${this.notebook.id}/share-code`, {
-                method: 'POST'
-            });
-            if (res.ok) {
-                const data = await res.json();
-                if (data.shareUrl) {
-                    await navigator.clipboard.writeText(data.shareUrl);
-                    if (btnText) btnText.innerText = 'Link Copied!';
-                    setTimeout(() => {
-                        if (btnText) btnText.innerText = 'Share Live Link';
-                    }, 2200);
-                    return;
-                }
-            }
-        } catch (e) {
-            console.warn('[Collab] Failed to get share link from server:', e);
+        this.openModal('modal-live-share');
+        const input = document.getElementById('live-share-modal-input');
+        const titleEl = document.getElementById('live-share-modal-title');
+        const testLinkBtn = document.getElementById('btn-open-live-guest-view');
+        const copyBtnText = document.getElementById('btn-copy-modal-link-text');
+
+        if (titleEl) {
+            titleEl.innerText = note.title || 'Live Coding Session';
         }
 
-        // Fallback to client-side code
-        const fallbackCode = this.notebook.shareCode || `collab-${this.notebook.id.replace('ntbk-', '')}`;
-        const fallbackUrl = `${window.location.origin}/note/join/${fallbackCode}`;
-        await navigator.clipboard.writeText(fallbackUrl);
-        if (btnText) btnText.innerText = 'Link Copied!';
-        setTimeout(() => {
-            if (btnText) btnText.innerText = 'Share Live Link';
-        }, 2200);
+        if (input) {
+            input.value = 'Generating live link...';
+        }
+        if (copyBtnText) {
+            copyBtnText.innerText = 'Copy Link';
+        }
+
+        let shareUrl = note.shareUrl;
+
+        // If shareUrl is not already present, fetch from server /api/notes/:id/share-code
+        if (!shareUrl) {
+            try {
+                const res = await this.safeFetch(`/api/notes/${note.id}/share-code`, {
+                    method: 'POST'
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    shareUrl = data.shareUrl;
+                    if (data.shareCode) {
+                        note.shareCode = data.shareCode;
+                        note.shareUrl = shareUrl;
+                        if (this.notebook && this.notebook.id === note.id) {
+                            this.notebook.shareCode = data.shareCode;
+                            this.notebook.shareUrl = shareUrl;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('[LiveShare] Failed to get shareUrl from server:', err);
+            }
+        }
+
+        if (!shareUrl) {
+            const fallbackCode = note.shareCode || `collab-${note.id.replace('ntbk-', '').replace('live-', '')}`;
+            shareUrl = `${window.location.origin}/note/join/${fallbackCode}`;
+        }
+
+        if (input) {
+            input.value = shareUrl;
+            input.select();
+        }
+
+        if (testLinkBtn) {
+            testLinkBtn.href = shareUrl;
+        }
+
+        // Auto copy to clipboard on open so the host has it ready immediately
+        try {
+            await navigator.clipboard.writeText(shareUrl);
+            if (copyBtnText) {
+                copyBtnText.innerText = 'Copied!';
+                setTimeout(() => {
+                    if (copyBtnText) copyBtnText.innerText = 'Copy Link';
+                }, 2500);
+            }
+            this.showToast('Live link copied to clipboard!');
+        } catch (_) {}
+
+        if (window.lucide) lucide.createIcons();
+    }
+
+    async copyCollabShareLink() {
+        await this.openLiveShareModal();
+    }
+
+    showToast(message, type = 'info') {
+        if (window.ZohoOfflineManager && typeof window.ZohoOfflineManager.showToast === 'function') {
+            window.ZohoOfflineManager.showToast(message, type);
+            return;
+        }
+        const toast = document.getElementById('toast');
+        if (!toast) return;
+        const msgEl = document.getElementById('toast-message');
+        if (msgEl) msgEl.innerText = message;
+        toast.classList.remove('translate-y-24', 'opacity-0');
+        setTimeout(() => toast.classList.add('translate-y-24', 'opacity-0'), 3000);
     }
 
     updateCollabTopBar() {
@@ -1417,20 +1500,33 @@ class NotebookApp {
         // Render Hosted live notes
         hosted.forEach(note => {
             const item = document.createElement('div');
-            item.className = 'live-note-item group';
+            item.className = 'live-note-item group flex items-center justify-between gap-1';
             const isActive = this.notebook && this.notebook.id === note.id;
             if (isActive) item.classList.add('active');
 
             item.innerHTML = `
-                <div class="flex items-center gap-2 overflow-hidden flex-1">
+                <div class="flex items-center gap-2 overflow-hidden flex-1 cursor-pointer">
                     <span class="relative flex h-2 w-2 flex-shrink-0">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                         <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
                     </span>
                     <span class="truncate text-xs text-[var(--text-main)]" title="${note.title || 'Live Session'}">${note.title || 'Untitled Live'}</span>
                 </div>
-                <span class="live-badge-host">Host</span>
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                    <button class="btn-share-live-item opacity-80 hover:opacity-100 text-rose-400 hover:text-white hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Share & Copy Live Link">
+                        <i data-lucide="share-2" style="width: 12px; height: 12px;"></i>
+                    </button>
+                    <span class="live-badge-host">Host</span>
+                </div>
             `;
+
+            const shareBtn = item.querySelector('.btn-share-live-item');
+            if (shareBtn) {
+                shareBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.openLiveShareModal(note);
+                };
+            }
 
             item.onclick = () => {
                 this.loadNotebook(note.id);
@@ -1442,20 +1538,33 @@ class NotebookApp {
         // Render Joined live notes
         joined.forEach(note => {
             const item = document.createElement('div');
-            item.className = 'live-note-item group';
+            item.className = 'live-note-item group flex items-center justify-between gap-1';
             const isActive = this.notebook && this.notebook.id === note.id;
             if (isActive) item.classList.add('active');
 
             item.innerHTML = `
-                <div class="flex items-center gap-2 overflow-hidden flex-1">
+                <div class="flex items-center gap-2 overflow-hidden flex-1 cursor-pointer">
                     <span class="relative flex h-2 w-2 flex-shrink-0">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                         <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
                     </span>
                     <span class="truncate text-xs text-[var(--text-main)]" title="${note.title || 'Live Session'}">${note.title || 'Untitled Live'}</span>
                 </div>
-                <span class="live-badge-guest">@${note.authorName || 'Host'}</span>
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                    <button class="btn-share-live-item opacity-80 hover:opacity-100 text-rose-400 hover:text-white hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Share & Copy Live Link">
+                        <i data-lucide="share-2" style="width: 12px; height: 12px;"></i>
+                    </button>
+                    <span class="live-badge-guest">@${note.authorName || 'Host'}</span>
+                </div>
             `;
+
+            const shareBtn = item.querySelector('.btn-share-live-item');
+            if (shareBtn) {
+                shareBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.openLiveShareModal(note);
+                };
+            }
 
             item.onclick = () => {
                 note.isShared = true;
@@ -1496,6 +1605,8 @@ class NotebookApp {
                 }
                 await this.fetchAndRenderLiveNotes();
                 await this.loadNotebook(newLiveNote.id);
+                // Immediately display the live link share modal
+                await this.openLiveShareModal(newLiveNote);
             } else {
                 const err = await res.json();
                 alert('Failed to create live note: ' + (err.error || 'Server error'));
@@ -1745,10 +1856,12 @@ class NotebookApp {
             }
 
             const topBar = document.getElementById('collab-top-bar');
+            const liveHeaderBtn = document.getElementById('btn-live-share-header');
             const offlineOverlay = document.getElementById('collab-host-offline-overlay');
 
             if (this.notebook && this.notebook.isLive) {
                 if (topBar) topBar.classList.remove('hidden');
+                if (liveHeaderBtn) liveHeaderBtn.classList.remove('hidden');
                 if (this.collab) {
                     const ownerId = this.notebook.owner?._id ? String(this.notebook.owner._id) : String(this.notebook.owner || '');
                     const isHost = Boolean(ownerId && window.CURRENT_USER?.id && (ownerId === String(window.CURRENT_USER.id)));
@@ -1757,6 +1870,7 @@ class NotebookApp {
                 }
             } else {
                 if (topBar) topBar.classList.add('hidden');
+                if (liveHeaderBtn) liveHeaderBtn.classList.add('hidden');
                 if (offlineOverlay) offlineOverlay.classList.add('hidden');
                 if (this.collab) {
                     await this.collab.disconnect();

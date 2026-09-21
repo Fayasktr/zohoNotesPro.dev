@@ -93,7 +93,13 @@ async function runTests() {
         if (indexHbs.includes('id="btn-open-live-modal"')) {
             throw new Error('FAILED: #btn-open-live-modal is still present in views/index.hbs');
         }
-        console.log('  ✅ views/index.hbs does NOT contain #btn-open-live-modal');
+        if (!indexHbs.includes('id="modal-live-share"')) {
+            throw new Error('FAILED: #modal-live-share is missing in views/index.hbs');
+        }
+        if (!indexHbs.includes('id="btn-live-share-header"')) {
+            throw new Error('FAILED: #btn-live-share-header is missing in views/index.hbs');
+        }
+        console.log('  ✅ views/index.hbs has modal-live-share & btn-live-share-header, and NO #btn-open-live-modal');
 
         // Test 2: Host creates normal note
         console.log('2. Creating normal notebook...');
@@ -205,6 +211,10 @@ async function runTests() {
         if (!Array.isArray(guestNoteContent.cells) || guestNoteContent.cells.length === 0) {
             throw new Error('FAILED: guestNoteContent has no cells');
         }
+        if (!guestNoteContent.shareUrl || !guestNoteContent.shareUrl.includes('/note/join/')) {
+            throw new Error(`FAILED: guestNoteContent missing valid shareUrl: ${guestNoteContent.shareUrl}`);
+        }
+        console.log('  ✅ Guest received valid shareUrl:', guestNoteContent.shareUrl);
 
         // Test 9: Guest pulls note via /api/sync/pull
         console.log('7. Guest pulling note content via /api/sync/pull...');
