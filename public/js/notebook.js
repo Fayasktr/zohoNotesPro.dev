@@ -629,11 +629,27 @@ class NotebookApp {
                     const chip = document.createElement('div');
                     chip.className = 'collab-avatar-chip';
                     chip.style.backgroundColor = u.color || '#6d5dfc';
-                    chip.title = `${u.username || 'User'}${u.id === this.collab.currentUser.id ? ' (You)' : ''}`;
+                    chip.title = `${u.username || 'User'}${u.peerId === this.collab.peerId ? ' (You)' : ''}`;
                     chip.innerText = (u.username || 'U').charAt(0).toUpperCase();
                     avatarsContainer.appendChild(chip);
                 });
             }
+            this.updateCollabTopBar();
+        };
+
+        // 1.5 Initial state sync when joining an active live session
+        this.collab.onRemoteInitSync = (cachedCells) => {
+            if (!Array.isArray(cachedCells) || cachedCells.length === 0) return;
+            cachedCells.forEach(({ cellId, content }) => {
+                const editor = this.editors[cellId];
+                if (editor && typeof content === 'string' && editor.getValue() !== content) {
+                    this.collab.suppressLocalEdits = true;
+                    editor.setValue(content);
+                    this.collab.suppressLocalEdits = false;
+                    const cell = this.notebook?.cells?.find(c => c.id === cellId);
+                    if (cell) cell.content = content;
+                }
+            });
         };
 
         // 2. Remote edits: apply non-conflicting operational changes to Monaco
@@ -1843,6 +1859,12 @@ class NotebookApp {
             this.disposeEditors();
             this.notebook = data;
 
+            // Bulletproof guarantee: any note starting with 'live-' IS a live note
+            if (this.notebook) {
+                const isLiveNote = Boolean(this.notebook.isLive || (id && typeof id === 'string' && id.startsWith('live-')));
+                this.notebook.isLive = isLiveNote;
+            }
+
             document.getElementById('cells-list').innerHTML = '';
             document.getElementById('notebook-title').value = this.notebook.title || 'Untitled';
             localStorage.setItem('zoho-notebook-current-id', id);
@@ -1864,7 +1886,11 @@ class NotebookApp {
                 if (liveHeaderBtn) liveHeaderBtn.classList.remove('hidden');
                 if (this.collab) {
                     const ownerId = this.notebook.owner?._id ? String(this.notebook.owner._id) : String(this.notebook.owner || '');
-                    const isHost = Boolean(ownerId && window.CURRENT_USER?.id && (ownerId === String(window.CURRENT_USER.id)));
+                    const currentUserId = window.CURRENT_USER?.id ? String(window.CURRENT_USER.id) : '';
+                    const isHost = Boolean(
+                        this.notebook.isOwner === true ||
+                        (ownerId && currentUserId && (ownerId === currentUserId))
+                    );
                     await this.collab.connectToNote(id, window.CURRENT_USER, isHost);
                     this.updateCollabTopBar();
                 }
@@ -2303,7 +2329,7 @@ class NotebookApp {
                 }
                 if (this.collab && this.collab.isConnected && !this.collab.suppressLocalEdits) {
                     if (event && event.changes && event.changes.length > 0) {
-                        this.collab.broadcastEdit(cell.id, event.changes);
+                        this.collab.broadcastEdit(cell.id, event.changes, editor.getValue());
                     }
                 }
                 this._autoSave();

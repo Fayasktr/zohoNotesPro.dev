@@ -644,6 +644,10 @@
                 tags: serverNote.tags || [],
                 updatedAt: serverNote.updatedAt || Date.now(),
                 owner: serverNote.owner,
+                authorName: serverNote.authorName || '',
+                isLive: Boolean(serverNote.isLive || (serverNote.content && serverNote.content.isLive) || (serverNote.id && typeof serverNote.id === 'string' && serverNote.id.startsWith('live-'))),
+                shareCode: serverNote.shareCode || (serverNote.content && serverNote.content.shareCode) || '',
+                shareUrl: serverNote.shareUrl || '',
                 _version: serverNote._version || 1,
                 _syncStatus: 'synced',
                 _hasFullContent: true

@@ -1551,11 +1551,36 @@ cron.schedule('*/10 * * * *', async () => {
 });
 
 // =====================================================
-// WebSocket Interactive Terminal Server
+// WebSocket Servers: Terminal + Real-Time Collaboration
 // =====================================================
-const wss = new WebSocketServer({ server, path: '/ws/terminal' });
+const terminalWss = new WebSocketServer({ noServer: true });
+const collabWss = new WebSocketServer({ noServer: true });
 
-wss.on('connection', (ws) => {
+// Route HTTP Upgrade headers to respective WebSocket Server
+server.on('upgrade', (request, socket, head) => {
+    try {
+        const host = request.headers.host || 'localhost';
+        const parsedUrl = new URL(request.url, `http://${host}`);
+        const pathname = parsedUrl.pathname;
+
+        if (pathname === '/ws/terminal') {
+            terminalWss.handleUpgrade(request, socket, head, (ws) => {
+                terminalWss.emit('connection', ws, request);
+            });
+        } else if (pathname === '/ws/collab') {
+            collabWss.handleUpgrade(request, socket, head, (ws) => {
+                collabWss.emit('connection', ws, request);
+            });
+        } else {
+            socket.destroy();
+        }
+    } catch (err) {
+        socket.destroy();
+    }
+});
+
+// Interactive Terminal WebSocket Connection
+terminalWss.on('connection', (ws) => {
     let child = null;
     let prepared = null;
     let killTimer = null;
@@ -1679,6 +1704,164 @@ wss.on('connection', (ws) => {
             prepared = null;
         }
     });
+});
+
+// =====================================================
+// Real-Time Live Collaboration WebSocket Server
+// =====================================================
+const collabRooms = new Map();       // noteId -> Map<peerId, { ws, user, joinedAt }>
+const collabCellsCache = new Map();  // noteId -> Map<cellId, string>
+
+function broadcastToCollabRoom(noteId, message, senderWs = null) {
+    const room = collabRooms.get(noteId);
+    if (!room) return;
+    const data = typeof message === 'string' ? message : JSON.stringify(message);
+    for (const [peerId, client] of room.entries()) {
+        if (senderWs && client.ws === senderWs) continue;
+        if (client.ws && client.ws.readyState === 1) {
+            try {
+                client.ws.send(data);
+            } catch (e) { }
+        }
+    }
+}
+
+function getCollabRoomPresence(noteId) {
+    const room = collabRooms.get(noteId);
+    if (!room) return { users: [], count: 0, isHostOnline: false };
+    const users = [];
+    for (const [peerId, client] of room.entries()) {
+        users.push({
+            id: client.user?.id || peerId,
+            peerId: peerId,
+            username: client.user?.username || 'Collaborator',
+            color: client.user?.color || '#6d5dfc',
+            isHost: Boolean(client.user?.isHost)
+        });
+    }
+    const isHostOnline = users.some(u => u.isHost === true);
+    return { users, count: users.length, isHostOnline };
+}
+
+collabWss.on('connection', (ws) => {
+    let currentNoteId = null;
+    let currentPeerId = null;
+
+    ws.on('message', (raw) => {
+        let msg;
+        try {
+            msg = JSON.parse(raw.toString());
+        } catch (e) {
+            return;
+        }
+
+        switch (msg.type) {
+            case 'join': {
+                const { noteId, peerId, user } = msg;
+                if (!noteId || !peerId) return;
+
+                currentNoteId = noteId;
+                currentPeerId = peerId;
+
+                if (!collabRooms.has(noteId)) {
+                    collabRooms.set(noteId, new Map());
+                }
+                if (!collabCellsCache.has(noteId)) {
+                    collabCellsCache.set(noteId, new Map());
+                }
+
+                const room = collabRooms.get(noteId);
+                room.set(peerId, {
+                    ws,
+                    user: user || {},
+                    joinedAt: Date.now()
+                });
+
+                const presence = getCollabRoomPresence(noteId);
+                const cellsMap = collabCellsCache.get(noteId);
+                const cachedCells = Array.from(cellsMap.entries()).map(([cellId, content]) => ({ cellId, content }));
+
+                ws.send(JSON.stringify({
+                    type: 'joined',
+                    noteId,
+                    peerId,
+                    presence,
+                    cachedCells
+                }));
+
+                broadcastToCollabRoom(noteId, {
+                    type: 'presence',
+                    users: presence.users,
+                    count: presence.count,
+                    isHostOnline: presence.isHostOnline
+                });
+                break;
+            }
+
+            case 'edit': {
+                if (!currentNoteId) return;
+                if (msg.cellId && typeof msg.fullContent === 'string') {
+                    const cellsMap = collabCellsCache.get(currentNoteId);
+                    if (cellsMap) cellsMap.set(msg.cellId, msg.fullContent);
+                }
+                broadcastToCollabRoom(currentNoteId, msg, ws);
+                break;
+            }
+
+            case 'cursor':
+            case 'cell_add':
+            case 'cell_delete':
+            case 'exec_start':
+            case 'exec_log':
+            case 'exec_done': {
+                if (!currentNoteId) return;
+                broadcastToCollabRoom(currentNoteId, msg, ws);
+                break;
+            }
+
+            case 'cell_content_sync': {
+                if (!currentNoteId || !msg.cellId) return;
+                const cellsMap = collabCellsCache.get(currentNoteId);
+                if (cellsMap) cellsMap.set(msg.cellId, msg.content);
+                broadcastToCollabRoom(currentNoteId, msg, ws);
+                break;
+            }
+
+            case 'ping': {
+                try { ws.send(JSON.stringify({ type: 'pong' })); } catch (_) { }
+                break;
+            }
+        }
+    });
+
+    const cleanup = () => {
+        if (currentNoteId && currentPeerId) {
+            const room = collabRooms.get(currentNoteId);
+            if (room) {
+                room.delete(currentPeerId);
+                if (room.size === 0) {
+                    setTimeout(() => {
+                        const r = collabRooms.get(currentNoteId);
+                        if (r && r.size === 0) {
+                            collabRooms.delete(currentNoteId);
+                            collabCellsCache.delete(currentNoteId);
+                        }
+                    }, 60000);
+                } else {
+                    const presence = getCollabRoomPresence(currentNoteId);
+                    broadcastToCollabRoom(currentNoteId, {
+                        type: 'presence',
+                        users: presence.users,
+                        count: presence.count,
+                        isHostOnline: presence.isHostOnline
+                    });
+                }
+            }
+        }
+    };
+
+    ws.on('close', cleanup);
+    ws.on('error', cleanup);
 });
 
 server.listen(PORT, '0.0.0.0', () => {
