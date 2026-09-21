@@ -2008,6 +2008,7 @@ collabWss.on('connection', (ws) => {
                 break;
             }
 
+            case 'typing':
             case 'cell_reorder':
             case 'cursor':
             case 'cell_add':

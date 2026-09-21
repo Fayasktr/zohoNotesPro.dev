@@ -35,6 +35,7 @@ class NotebookApp {
         this.collab = window.ZohoCollabEngine;
         this.remoteDecorations = {}; // cellId -> { peerId -> decorationIds[] }
         this.sharedNotebooks = [];
+        this.activeTypers = new Map(); // peerId -> { username, timer }
 
         this.expandedFolders = new Set(JSON.parse(localStorage.getItem('zoho-expanded-folders') || '[]'));
         this.persistedFolders = this.getPersistedFolders();
@@ -675,6 +676,19 @@ class NotebookApp {
                     avatarsContainer.appendChild(chip);
                 });
             }
+
+            if (this.activeTypers && this.activeTypers.size > 0) {
+                const activePeerIds = new Set(users.map(u => u.peerId));
+                let changed = false;
+                for (const [peerId, t] of this.activeTypers.entries()) {
+                    if (!activePeerIds.has(peerId)) {
+                        clearTimeout(t.timer);
+                        this.activeTypers.delete(peerId);
+                        changed = true;
+                    }
+                }
+                if (changed) this.updateTypingIndicatorUI();
+            }
             this.updateCollabTopBar();
         };
 
@@ -728,8 +742,17 @@ class NotebookApp {
             }
         };
 
+        // 1.8 Remote typing indicator: "fayas coding..."
+        this.collab.onRemoteTyping = (data) => {
+            if (data && data.peerId) {
+                this.handlePeerTyping(data.peerId, data.username);
+            }
+        };
+
         // 2. Remote edits: apply non-conflicting operational changes to Monaco
         this.collab.onRemoteEdit = (cellId, changes, senderId) => {
+            const peer = this.collab?.usersList?.find(u => u.peerId === senderId);
+            this.handlePeerTyping(senderId, peer?.username);
             const editor = this.editors[cellId];
             if (!editor || !changes || !changes.length) return;
 
@@ -967,17 +990,28 @@ class NotebookApp {
 
             const runBtn = cellElem.querySelector('.btn-run');
             const outputContainer = cellElem.querySelector('.output-container');
-            const outputContent = cellElem.querySelector('.output-content');
+            const runner = execData.runnerName || 'Collaborator';
 
             if (execData.status === 'running') {
                 if (runBtn) {
                     runBtn.disabled = true;
-                    runBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin" style="width: 12px;"></i> Running (@${execData.runnerName})...`;
+                    runBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin" style="width: 12px;"></i> Running (@${runner})...`;
                     if (window.lucide) lucide.createIcons();
                 }
-                if (outputContainer) outputContainer.classList.remove('hidden');
-                if (outputContent) {
-                    outputContent.innerHTML = `<span style="color: #6d5dfc; font-size: 11px;">⚡ Running locally on <strong>@${execData.runnerName}</strong>'s machine...</span>\n`;
+                if (outputContainer) {
+                    outputContainer.classList.remove('hidden');
+                    outputContainer.innerHTML = `
+                        <div class="output-header flex items-center justify-between" style="font-size: 10px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                            <span class="output-label" style="color: var(--text-dim); text-transform: uppercase; font-weight: bold; opacity: 0.7;">OUTPUT:</span>
+                            <span class="output-runner-badge flex items-center gap-1.5" style="color: #6d5dfc; font-size: 10px;">
+                                <span class="w-1.5 h-1.5 rounded-full bg-[#6d5dfc] animate-ping inline-block"></span>
+                                <span>Running by <strong style="color: #6d5dfc; font-weight: 600;">${runner}</strong>...</span>
+                            </span>
+                        </div>
+                        <div class="output-log" style="color: #6d5dfc; font-size: 11px; opacity: 0.85;">
+                            ⚡ Running code on <strong>${runner}</strong>'s machine...
+                        </div>
+                    `;
                 }
             } else if (execData.status === 'completed' || execData.status === 'error') {
                 if (runBtn) {
@@ -985,8 +1019,12 @@ class NotebookApp {
                     runBtn.innerHTML = `<i data-lucide="play" style="width: 12px;"></i> Run`;
                     if (window.lucide) lucide.createIcons();
                 }
+                const cell = this.notebook?.cells?.find(c => c.id === cellId);
+                if (cell) {
+                    cell.lastRunBy = runner;
+                }
                 if (execData.output) {
-                    this.displayOutput(cellId, execData.output);
+                    this.displayOutput(cellId, execData.output, runner);
                 }
             }
         };
@@ -1094,6 +1132,57 @@ class NotebookApp {
         document.querySelectorAll('#cells-list .cell-lang-select').forEach(sel => {
             sel.disabled = Boolean(readOnly);
         });
+    }
+
+    handlePeerTyping(peerId, username) {
+        if (!this.activeTypers) this.activeTypers = new Map();
+
+        // Do not show typing indicator for yourself
+        if (this.collab && peerId === this.collab.peerId) return;
+
+        const cleanName = (username && username !== 'Anonymous') ? username : 'Collaborator';
+
+        if (this.activeTypers.has(peerId)) {
+            clearTimeout(this.activeTypers.get(peerId).timer);
+        }
+
+        const timer = setTimeout(() => {
+            if (this.activeTypers) {
+                this.activeTypers.delete(peerId);
+                this.updateTypingIndicatorUI();
+            }
+        }, 2500);
+
+        this.activeTypers.set(peerId, { username: cleanName, timer });
+        this.updateTypingIndicatorUI();
+    }
+
+    updateTypingIndicatorUI() {
+        const indicatorEl = document.getElementById('note-typing-indicator');
+        const textEl = document.getElementById('note-typing-text');
+        if (!indicatorEl || !textEl) return;
+
+        if (!this.activeTypers || this.activeTypers.size === 0) {
+            indicatorEl.classList.add('hidden');
+            indicatorEl.classList.remove('flex');
+            textEl.innerText = '';
+            return;
+        }
+
+        const names = Array.from(this.activeTypers.values()).map(t => t.username);
+        let displayText = '';
+
+        if (names.length === 1) {
+            displayText = `${names[0]} coding...`;
+        } else if (names.length === 2) {
+            displayText = `${names[0]} & ${names[1]} coding...`;
+        } else {
+            displayText = `${names[0]} & ${names.length - 1} others coding...`;
+        }
+
+        textEl.innerText = displayText;
+        indicatorEl.classList.remove('hidden');
+        indicatorEl.classList.add('flex');
     }
 
     async getLiveShareUrl(noteObj = null) {
@@ -2295,6 +2384,12 @@ class NotebookApp {
                 this.notebook.isLive = isLiveNote;
             }
 
+            if (this.activeTypers) {
+                this.activeTypers.forEach(t => clearTimeout(t.timer));
+                this.activeTypers.clear();
+            }
+            this.updateTypingIndicatorUI();
+
             document.getElementById('cells-list').innerHTML = '';
             document.getElementById('notebook-title').value = this.notebook.title || 'Untitled';
             localStorage.setItem('zoho-notebook-current-id', id);
@@ -2572,7 +2667,7 @@ class NotebookApp {
         container.appendChild(cellElem);
         lucide.createIcons();
 
-        if (cell.output) this.displayOutput(cell.id, cell.output);
+        if (cell.output) this.displayOutput(cell.id, cell.output, cell.lastRunBy);
 
         require(['vs/editor/editor.main'], () => {
             // Global Monaco Configuration (Only once)
@@ -2760,6 +2855,7 @@ class NotebookApp {
                 if (this.collab && this.collab.isConnected && !this.collab.suppressLocalEdits) {
                     if (event && event.changes && event.changes.length > 0) {
                         this.collab.broadcastEdit(cell.id, event.changes, editor.getValue());
+                        this.collab.broadcastTyping(cell.id);
                     }
                 }
                 this._autoSave();
@@ -2905,9 +3001,23 @@ class NotebookApp {
             runBtn.disabled = true;
         }
 
+        const currentUsername = (this.collab?.currentUser?.username && this.collab.currentUser.username !== 'Anonymous')
+            ? this.collab.currentUser.username
+            : (this.userSettings?.username || window.CURRENT_USER?.username || 'You');
+        const displayRunner = currentUsername === 'You' ? 'You' : currentUsername;
+        cell.lastRunBy = displayRunner;
+
         const outputDiv = document.getElementById(`output-${cellId}`);
         if (outputDiv) {
-            outputDiv.innerHTML = '<div class="output-label" style="font-size: 10px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase; font-weight: bold; opacity: 0.7;">output:</div>';
+            outputDiv.innerHTML = `
+                <div class="output-header flex items-center justify-between" style="font-size: 10px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                    <span class="output-label" style="color: var(--text-dim); text-transform: uppercase; font-weight: bold; opacity: 0.7;">OUTPUT:</span>
+                    <span class="output-runner-badge flex items-center gap-1.5" style="color: var(--text-dim); font-size: 10px;">
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#30ff6a] animate-pulse inline-block"></span>
+                        <span>Running by <strong style="color: var(--text-main); font-weight: 600;">${displayRunner}</strong>...</span>
+                    </span>
+                </div>
+            `;
             outputDiv.classList.remove('hidden');
         }
 
@@ -2919,7 +3029,7 @@ class NotebookApp {
         }
 
         if (this.collab && this.collab.isConnected) {
-            this.collab.broadcastExecutionStart(cellId);
+            this.collab.broadcastExecutionStart(cellId, currentUsername);
         }
 
         const activeEngine = this.engine || window.ZohoBrowserEngine;
@@ -2927,7 +3037,7 @@ class NotebookApp {
         // ── Interactive Terminal Mode ──
         // Activates only for server-executed languages with stdin-reading code
         if (activeEngine && activeEngine.needsInteractiveTerminal && activeEngine.needsInteractiveTerminal(code, lang)) {
-            this._runInteractiveTerminal(cellId, code, lang, activeEngine, outputDiv, runBtn);
+            this._runInteractiveTerminal(cellId, code, lang, activeEngine, outputDiv, runBtn, displayRunner);
             return;
         }
 
@@ -2952,12 +3062,12 @@ class NotebookApp {
             }
 
             cell.output = data;
-            this.displayOutput(cellId, data);
+            this.displayOutput(cellId, data, displayRunner);
             if (this.broadcaster && this.broadcaster.isBroadcasting) {
                 this.broadcaster.syncCellOutput(cellId, data, data && data.success ? 'idle' : 'error');
             }
             if (this.collab && this.collab.isConnected) {
-                this.collab.broadcastExecutionComplete(cellId, data, data && data.success);
+                this.collab.broadcastExecutionComplete(cellId, data, data && data.success, currentUsername);
             }
             this._autoSave();
         } catch (err) {
@@ -2965,12 +3075,12 @@ class NotebookApp {
             if (err.message === 'AUTH_EXPIRED') userMsg = 'Session expired. Please login again.';
             if (err.message === 'CSRF_ERROR') userMsg = 'Security validation failed. Please refresh the page.';
 
-            this.displayOutput(cellId, { success: false, error: userMsg });
+            this.displayOutput(cellId, { success: false, error: userMsg }, displayRunner);
             if (this.broadcaster && this.broadcaster.isBroadcasting) {
                 this.broadcaster.syncCellOutput(cellId, { success: false, error: userMsg }, 'error');
             }
             if (this.collab && this.collab.isConnected) {
-                this.collab.broadcastExecutionComplete(cellId, { success: false, error: userMsg }, false);
+                this.collab.broadcastExecutionComplete(cellId, { success: false, error: userMsg }, false, currentUsername);
             }
         } finally {
             if (runBtn) {
@@ -2988,18 +3098,30 @@ class NotebookApp {
      * Render a live interactive terminal in the output area.
      * Streams stdout/stderr in real-time and accepts stdin line-by-line via WebSocket.
      */
-    _runInteractiveTerminal(cellId, code, lang, engine, outputDiv, runBtn) {
+    _runInteractiveTerminal(cellId, code, lang, engine, outputDiv, runBtn, runnerName = null) {
         if (!outputDiv) return;
+
+        const cell = this.notebook?.cells?.find(c => c.id === cellId);
+        const finalRunner = runnerName || (cell && cell.lastRunBy) || null;
 
         // Build interactive terminal UI
         outputDiv.innerHTML = `
             <div class="interactive-terminal" id="terminal-${cellId}">
-                <div class="terminal-header">
-                    <span class="terminal-title"><i data-lucide="terminal" style="width:12px;height:12px;margin-right:5px;vertical-align:-2px;"></i> Interactive Terminal</span>
-                    <span class="terminal-status" id="terminal-status-${cellId}">Connecting...</span>
-                    <button class="terminal-kill-btn" id="terminal-kill-${cellId}" title="Kill Process">
-                        <i data-lucide="square" style="width:12px;height:12px;"></i>
-                    </button>
+                <div class="terminal-header flex items-center justify-between" style="font-size: 10px;">
+                    <div class="flex items-center gap-2">
+                        <span class="terminal-title"><i data-lucide="terminal" style="width:12px;height:12px;margin-right:5px;vertical-align:-2px;"></i> Interactive Terminal</span>
+                        <span class="terminal-status" id="terminal-status-${cellId}">Connecting...</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        ${finalRunner ? `
+                        <span class="output-runner-badge flex items-center gap-1.5" style="color: var(--text-dim); font-size: 10px;">
+                            <span class="w-1.5 h-1.5 rounded-full bg-[#30ff6a] inline-block"></span>
+                            <span>Ran by <strong style="color: var(--text-main); font-weight: 600;">${finalRunner}</strong></span>
+                        </span>` : ''}
+                        <button class="terminal-kill-btn" id="terminal-kill-${cellId}" title="Kill Process">
+                            <i data-lucide="square" style="width:12px;height:12px;"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="terminal-output" id="terminal-output-${cellId}"></div>
                 <div class="terminal-input-line" id="terminal-input-line-${cellId}">
@@ -3105,7 +3227,7 @@ class NotebookApp {
                     }, exitCode === 0 ? 'idle' : 'error');
                 }
                 if (this.collab && this.collab.isConnected) {
-                    this.collab.broadcastExecutionComplete(cellId, cell ? cell.output : null, exitCode === 0);
+                    this.collab.broadcastExecutionComplete(cellId, cell ? cell.output : null, exitCode === 0, finalRunner);
                 }
 
                 // Reset run button
@@ -3282,11 +3404,25 @@ class NotebookApp {
         }
     }
 
-    displayOutput(cellId, data) {
+    displayOutput(cellId, data, runnerName = null) {
         const outputDiv = document.getElementById(`output-${cellId}`);
         if (!outputDiv) return;
         outputDiv.classList.remove('hidden');
-        outputDiv.innerHTML = '<div class="output-label" style="font-size: 10px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase; font-weight: bold; opacity: 0.7;">output:</div>';
+
+        const cell = this.notebook?.cells?.find(c => c.id === cellId);
+        const finalRunner = runnerName || (cell && cell.lastRunBy) || null;
+
+        outputDiv.innerHTML = `
+            <div class="output-header flex items-center justify-between" style="font-size: 10px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                <span class="output-label" style="color: var(--text-dim); text-transform: uppercase; font-weight: bold; opacity: 0.7;">OUTPUT:</span>
+                ${finalRunner ? `
+                <span class="output-runner-badge flex items-center gap-1.5" style="color: var(--text-dim); font-size: 10px;">
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#30ff6a] inline-block"></span>
+                    <span>Ran by <strong style="color: var(--text-main); font-weight: 600;">${finalRunner}</strong></span>
+                </span>
+                ` : ''}
+            </div>
+        `;
 
         const displayedLogs = new Set();
 

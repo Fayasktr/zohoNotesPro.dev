@@ -67,6 +67,7 @@
             this.onRemoteExecution = null; // (cellId, execData) => {}
             this.onRemoteLogChunk = null; // (cellId, chunk) => {}
             this.onRemoteInitSync = null; // (cachedCells) => {}
+            this.onRemoteTyping = null; // ({ peerId, username, cellId }) => {}
 
             this.cursorDebounce = null;
             this.suppressLocalEdits = false;
@@ -199,6 +200,27 @@
                             if (typeof this.onRemoteEdit === 'function') {
                                 this.onRemoteEdit(msg.cellId, msg.changes, msg.senderPeerId);
                             }
+                            if (typeof this.onRemoteTyping === 'function') {
+                                this.onRemoteTyping({
+                                    peerId: msg.senderPeerId,
+                                    username: msg.username || 'Collaborator',
+                                    cellId: msg.cellId
+                                });
+                            }
+                            break;
+                        }
+
+                        case 'typing': {
+                            if (msg.senderPeerId === this.peerId) return;
+                            if (!this.isHost && !this.hostOnline) return;
+
+                            if (typeof this.onRemoteTyping === 'function') {
+                                this.onRemoteTyping({
+                                    peerId: msg.senderPeerId,
+                                    username: msg.username || 'Collaborator',
+                                    cellId: msg.cellId
+                                });
+                            }
                             break;
                         }
 
@@ -313,7 +335,8 @@
                             if (typeof this.onRemoteExecution === 'function') {
                                 this.onRemoteExecution(msg.cellId, {
                                     status: msg.success ? 'completed' : 'error',
-                                    output: msg.output
+                                    output: msg.output,
+                                    runnerName: msg.runnerName
                                 });
                             }
                             break;
@@ -541,6 +564,7 @@
                 cellId: cellId,
                 changes: serialized,
                 fullContent: fullContent,
+                username: this.currentUser.username,
                 senderPeerId: this.peerId
             });
 
@@ -550,7 +574,40 @@
                     this.noteRef.child('edits').push({
                         cellId,
                         changes: serialized,
+                        username: this.currentUser.username,
                         senderPeerId: this.peerId,
+                        timestamp: firebase.database.ServerValue.TIMESTAMP
+                    });
+                } catch (_) { }
+            }
+        }
+
+        /**
+         * Broadcast real-time typing / coding indicator (throttled to 1s)
+         */
+        broadcastTyping(cellId) {
+            if (!this.isConnected || !cellId) return;
+            if (!this.isHost && !this.hostOnline) return;
+
+            const now = Date.now();
+            if (this._lastTypingBroadcast && (now - this._lastTypingBroadcast < 1000)) {
+                return;
+            }
+            this._lastTypingBroadcast = now;
+
+            this.sendWsMessage({
+                type: 'typing',
+                noteId: this.noteId,
+                cellId: cellId,
+                username: this.currentUser.username || 'Collaborator',
+                senderPeerId: this.peerId
+            });
+
+            if (this.noteRef) {
+                try {
+                    this.noteRef.child(`typing/${this.peerId}`).set({
+                        username: this.currentUser.username || 'Collaborator',
+                        cellId: cellId,
                         timestamp: firebase.database.ServerValue.TIMESTAMP
                     });
                 } catch (_) { }
@@ -621,16 +678,18 @@
         /**
          * Broadcast start of local execution
          */
-        broadcastExecutionStart(cellId) {
+        broadcastExecutionStart(cellId, runnerName = null) {
             if (!this.isConnected || !cellId) return;
             if (!this.isHost && !this.hostOnline) return;
+
+            const finalRunner = runnerName || this.currentUser.username;
 
             this.sendWsMessage({
                 type: 'exec_start',
                 noteId: this.noteId,
                 cellId: cellId,
                 runnerId: this.currentUser.id,
-                runnerName: this.currentUser.username,
+                runnerName: finalRunner,
                 senderPeerId: this.peerId
             });
 
@@ -640,7 +699,7 @@
                     this.noteRef.child(`executions/${cellId}`).set({
                         status: 'running',
                         runnerId: this.currentUser.id,
-                        runnerName: this.currentUser.username,
+                        runnerName: finalRunner,
                         startedAt: firebase.database.ServerValue.TIMESTAMP
                     });
                 } catch (_) { }
@@ -677,9 +736,11 @@
         /**
          * Broadcast execution completion
          */
-        broadcastExecutionComplete(cellId, output, success = true) {
+        broadcastExecutionComplete(cellId, output, success = true, runnerName = null) {
             if (!this.isConnected || !cellId) return;
             if (!this.isHost && !this.hostOnline) return;
+
+            const finalRunner = runnerName || this.currentUser.username;
 
             this.sendWsMessage({
                 type: 'exec_done',
@@ -687,6 +748,7 @@
                 cellId: cellId,
                 output: output || null,
                 success: Boolean(success),
+                runnerName: finalRunner,
                 senderPeerId: this.peerId
             });
 
@@ -695,7 +757,7 @@
                     this.noteRef.child(`executions/${cellId}`).set({
                         status: success ? 'completed' : 'error',
                         runnerId: this.currentUser.id,
-                        runnerName: this.currentUser.username,
+                        runnerName: finalRunner,
                         output: output || null,
                         completedAt: firebase.database.ServerValue.TIMESTAMP
                     });
