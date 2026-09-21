@@ -28,6 +28,9 @@ noteSchema.pre('save', function (next) {
         const crypto = require('crypto');
         this.shareCode = 'collab-' + crypto.randomBytes(6).toString('hex');
     }
+    if (!this.isLive && (this.shareCode === null || this.shareCode === '')) {
+        this.shareCode = undefined;
+    }
     next();
 });
 

@@ -1872,6 +1872,24 @@ body.light-theme #add-folder-sidebar {
     border-radius: 4px;
 }
 
+.btn-delete-live-item {
+    padding: 3px;
+    border-radius: 4px;
+    color: #a0a0a5;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-delete-live-item:hover {
+    color: #f43f5e;
+    background: rgba(244, 63, 94, 0.15);
+}
+
 /* Collab Host Offline Overlay */
 .collab-host-offline-overlay {
     position: absolute;

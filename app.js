@@ -706,11 +706,11 @@ app.get('/', isAuthenticated, (req, res) => {
 app.get('/note/join/:shareCode', async (req, res) => {
     try {
         const shareCode = req.params.shareCode;
-        let note = await Note.findOne({ shareCode });
-        if (!note) {
+        let note = await Note.findOne({ shareCode, isLive: true, isTrashed: { $ne: true } });
+        if (!note || !note.shareCode) {
             return res.status(404).render('error', {
-                title: 'Note Not Found',
-                message: 'This live shared note link is invalid or has expired.'
+                title: 'Live Session Not Found',
+                message: 'This live shared note link has been deleted, ended by the host, or expired.'
             });
         }
 
@@ -862,6 +862,76 @@ app.post('/api/notes/live', isAuthenticated, async (req, res) => {
     }
 });
 
+// --- API: DELETE LIVE NOTE (HOST) OR REMOVE FROM JOINED LIST (GUEST) ---
+app.delete('/api/notes/live/:noteId', isAuthenticated, async (req, res) => {
+    try {
+        const currentUserId = req.session.userId || (req.user ? req.user._id : null);
+        const { noteId } = req.params;
+
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(currentUserId) ? new mongoose.Types.ObjectId(currentUserId) : currentUserId;
+
+        const note = await Note.findOne({
+            id: noteId,
+            $or: [
+                { owner: { $in: [currentUserId, userObjId] } },
+                { 'collaborators.user': { $in: [currentUserId, userObjId] } }
+            ]
+        });
+
+        if (!note) return res.status(404).json({ error: 'Note not found or access denied' });
+
+        const isOwner = Boolean(
+            String(note.owner?._id || note.owner) === String(currentUserId)
+        );
+
+        if (isOwner) {
+            // Host: permanently trash the live note and unset shareCode ($unset avoids duplicate null index error)
+            await Note.updateOne(
+                { _id: note._id },
+                {
+                    $set: {
+                        isTrashed: true,
+                        trashedAt: new Date(),
+                        isLive: false,
+                        'content.isLive': false
+                    },
+                    $unset: { shareCode: 1 }
+                }
+            );
+
+            // Notify all connected WebSocket peers that this session was deleted
+            broadcastToCollabRoom(noteId, {
+                type: 'session_deleted',
+                noteId: noteId,
+                message: 'The host has ended and deleted this live session.'
+            });
+
+            collabRooms.delete(noteId);
+            collabCellsCache.delete(noteId);
+
+            return res.json({ success: true, action: 'deleted', noteId });
+        } else {
+            // Guest: remove self from collaborators
+            note.collaborators = (note.collaborators || []).filter(c => 
+                String(c.user?._id || c.user) !== String(currentUserId)
+            );
+            await note.save();
+
+            // Notify room of departure
+            broadcastToCollabRoom(noteId, {
+                type: 'user_left',
+                userId: String(currentUserId)
+            });
+
+            return res.json({ success: true, action: 'removed', noteId });
+        }
+    } catch (err) {
+        console.error('[LiveNotes] Error deleting/leaving live note:', err);
+        res.status(500).json({ error: 'Failed to delete live note' });
+    }
+});
+
 // --- API: FETCH SHARED WITH ME NOTES ---
 app.get('/api/notes/shared', isAuthenticated, async (req, res) => {
     try {
@@ -936,6 +1006,50 @@ app.post('/api/notes/:noteId/share-code', isAuthenticated, async (req, res) => {
     } catch (err) {
         console.error('[ShareCode] Error:', err);
         res.status(500).json({ error: 'Failed to get share code' });
+    }
+});
+
+// --- API: REVOKE / DELETE ONLY THE LIVE SHARE LINK ---
+app.post('/api/notes/:noteId/revoke-share', isAuthenticated, async (req, res) => {
+    try {
+        const currentUserId = req.session.userId || (req.user ? req.user._id : null);
+        const { noteId } = req.params;
+
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(currentUserId) ? new mongoose.Types.ObjectId(currentUserId) : currentUserId;
+
+        const note = await Note.findOne({
+            id: noteId,
+            owner: { $in: [currentUserId, userObjId] }
+        });
+
+        if (!note) return res.status(404).json({ error: 'Note not found or you are not the host' });
+
+        await Note.updateOne(
+            { _id: note._id },
+            {
+                $set: {
+                    isLive: false,
+                    'content.isLive': false
+                },
+                $unset: { shareCode: 1 }
+            }
+        );
+
+        // Broadcast to collab room that live sharing was revoked
+        broadcastToCollabRoom(noteId, {
+            type: 'session_ended',
+            noteId: noteId,
+            message: 'The host has revoked the live link for this note.'
+        });
+
+        collabRooms.delete(noteId);
+        collabCellsCache.delete(noteId);
+
+        return res.json({ success: true, message: 'Live link deleted and sharing revoked', isLive: false });
+    } catch (err) {
+        console.error('[ShareRevoke] Error revoking live share link:', err);
+        res.status(500).json({ error: 'Failed to revoke live share link' });
     }
 });
 
@@ -1255,13 +1369,35 @@ app.delete(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
     const notebookId = req.params[0];
     try {
         const userId = req.session.userId || (req.user ? req.user._id : null);
-        const result = await Note.updateOne(
-            { id: notebookId, owner: userId },
-            { isTrashed: true, trashedAt: new Date() }
-        );
-        if (result.matchedCount === 0) return res.status(404).json({ error: 'Notebook not found' });
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
+        const note = await Note.findOne({
+            id: notebookId,
+            $or: [{ owner: userId }, { owner: userObjId }]
+        });
+
+        if (!note) return res.status(404).json({ error: 'Notebook not found' });
+
+        note.isTrashed = true;
+        note.trashedAt = new Date();
+        if (note.isLive) {
+            note.isLive = false;
+            note.shareCode = null;
+            if (note.content) note.content.isLive = false;
+            broadcastToCollabRoom(notebookId, {
+                type: 'session_deleted',
+                noteId: notebookId,
+                message: 'This session has been deleted.'
+            });
+            collabRooms.delete(notebookId);
+            collabCellsCache.delete(notebookId);
+        }
+        await note.save();
+
         res.json({ success: true });
     } catch (err) {
+        console.error('Failed to move note to trash:', err);
         res.status(500).json({ error: 'Failed to move to trash' });
     }
 });

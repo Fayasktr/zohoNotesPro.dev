@@ -9,7 +9,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css?v=26">
+    <link rel="stylesheet" href="/css/style.css?v=27">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/split.js/1.6.5/split.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -608,10 +608,28 @@
                 </div>
             </div>
 
-            <div class="flex items-start gap-2.5 p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 text-rose-300 text-[11px] mb-5 text-left leading-relaxed">
+            <div class="flex items-start gap-2.5 p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 text-rose-300 text-[11px] mb-4 text-left leading-relaxed">
                 <i data-lucide="info" class="w-4 h-4 text-rose-400 mt-0.5 flex-shrink-0"></i>
                 <div>
                     <strong>How Live Sharing Works:</strong> Collaborators open this link, log in, and their edits and code runs sync automatically with you in real time. (Live editing is active while you, the host, are connected).
+                </div>
+            </div>
+
+            <!-- Link Management & Deletion Actions -->
+            <div id="live-share-modal-danger-zone" class="p-3 rounded-xl bg-red-500/5 border border-red-500/20 mb-5 text-left">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[11px] font-bold text-rose-400 uppercase tracking-wider">Live Link Management</span>
+                    <span class="text-[10px] text-[var(--text-dim)]">Host controls</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button id="btn-revoke-live-link" class="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer" title="Invalidate and delete the live share link">
+                        <i data-lucide="link-2-off" class="w-3.5 h-3.5 text-rose-400"></i>
+                        <span>Delete Live Link</span>
+                    </button>
+                    <button id="btn-delete-live-note-modal" class="px-3 py-1.5 bg-red-600/15 hover:bg-red-600/30 text-red-300 border border-red-500/30 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer" title="Delete this entire live notebook">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400"></i>
+                        <span>Delete Live Note</span>
+                    </button>
                 </div>
             </div>
 
@@ -667,9 +685,9 @@
         </script>
         <script src="/js/broadcast_engine.js?v=25"></script>
         <!-- Real-Time Collaboration Engine -->
-        <script src="/js/collab_engine.js?v=25"></script>
+        <script src="/js/collab_engine.js?v=27"></script>
         <!-- Core Notebook UI Application -->
-        <script src="/js/notebook.js?v=26"></script>
+        <script src="/js/notebook.js?v=27"></script>
         <!-- Progressive Web App Handler -->
         <script src="/js/pwa.js?v=25"></script>
         <script>

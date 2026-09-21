@@ -179,6 +179,14 @@
                             break;
                         }
 
+                        case 'session_deleted':
+                        case 'session_ended': {
+                            if (typeof this.onSessionEnded === 'function') {
+                                this.onSessionEnded(msg);
+                            }
+                            break;
+                        }
+
                         case 'edit': {
                             if (msg.senderPeerId === this.peerId) return;
                             if (!this.isHost && !this.hostOnline) return;

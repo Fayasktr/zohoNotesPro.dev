@@ -817,6 +817,22 @@ class NotebookApp {
             }
         };
 
+        // 8. Live session ended or deleted by host
+        this.collab.onSessionEnded = (msg) => {
+            this.showToast(msg.message || 'This live session was ended or deleted by the host.', 'error');
+            this.setEditorsReadOnly(true);
+            const topBar = document.getElementById('collab-top-bar');
+            if (topBar) topBar.classList.add('hidden');
+            const overlay = document.getElementById('collab-host-offline-overlay');
+            if (overlay) {
+                const title = overlay.querySelector('h3');
+                const desc = overlay.querySelector('p');
+                if (title) title.innerText = 'Live Session Ended';
+                if (desc) desc.innerText = msg.message || 'The host has ended or deleted this live session.';
+                overlay.classList.remove('hidden');
+            }
+        };
+
         // Wire Copy Live Share Link button (direct 1-click clipboard copy)
         document.getElementById('btn-copy-collab-link')?.addEventListener('click', async (e) => {
             e.stopPropagation();
@@ -833,6 +849,24 @@ class NotebookApp {
         document.getElementById('btn-live-share-header')?.addEventListener('click', async (e) => {
             e.stopPropagation();
             await this.openLiveShareModal();
+        });
+
+        // Wire Revoke / Delete Live Link button in modal
+        document.getElementById('btn-revoke-live-link')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const targetNote = this._liveShareModalTargetNote || this.notebook;
+            if (targetNote) {
+                await this.revokeLiveShareLink(targetNote.id);
+            }
+        });
+
+        // Wire Delete Live Note button in modal
+        document.getElementById('btn-delete-live-note-modal')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const targetNote = this._liveShareModalTargetNote || this.notebook;
+            if (targetNote) {
+                await this.deleteLiveNote(targetNote.id, targetNote.title, true);
+            }
         });
 
         // Wire Modal Copy button
@@ -906,11 +940,25 @@ class NotebookApp {
         const note = noteObj || this.notebook;
         if (!note || !note.id) return;
 
+        this._liveShareModalTargetNote = note;
+
         this.openModal('modal-live-share');
         const input = document.getElementById('live-share-modal-input');
         const titleEl = document.getElementById('live-share-modal-title');
         const testLinkBtn = document.getElementById('btn-open-live-guest-view');
         const copyBtnText = document.getElementById('btn-copy-modal-link-text');
+        const dangerZone = document.getElementById('live-share-modal-danger-zone');
+
+        const ownerId = note.owner?._id ? String(note.owner._id) : String(note.owner || '');
+        const currentUserId = window.CURRENT_USER?.id ? String(window.CURRENT_USER.id) : '';
+        const isOwner = Boolean(
+            note.isOwner === true ||
+            (ownerId && currentUserId && (ownerId === currentUserId))
+        );
+
+        if (dangerZone) {
+            dangerZone.style.display = isOwner ? 'block' : 'none';
+        }
 
         if (titleEl) {
             titleEl.innerText = note.title || 'Live Coding Session';
@@ -970,6 +1018,99 @@ class NotebookApp {
         } catch (err) {
             // Fallback to opening modal if clipboard permission denied
             await this.openLiveShareModal();
+        }
+    }
+
+    async revokeLiveShareLink(noteId = null) {
+        const id = noteId || this.notebook?.id;
+        if (!id) return;
+
+        const ok = confirm('Delete this live link?\n\nCollaborators will immediately lose access and live editing will be disabled. The note will be kept as a private note.');
+        if (!ok) return;
+
+        try {
+            const res = await this.safeFetch(`/api/notes/${id}/revoke-share`, { method: 'POST' });
+            if (res.ok) {
+                if (this.notebook && this.notebook.id === id) {
+                    this.notebook.isLive = false;
+                    this.notebook.shareCode = null;
+                    this.notebook.shareUrl = null;
+                    if (this.collab) await this.collab.disconnect();
+                    const topBar = document.getElementById('collab-top-bar');
+                    if (topBar) topBar.classList.add('hidden');
+                    const headerBtn = document.getElementById('btn-live-share-header');
+                    if (headerBtn) headerBtn.classList.add('hidden');
+                }
+
+                if (this.db) {
+                    const localNote = await this.db.getNote(id);
+                    if (localNote) {
+                        localNote.isLive = false;
+                        localNote.shareCode = null;
+                        localNote.shareUrl = null;
+                        await this.db.putNote(localNote);
+                    }
+                }
+
+                this.closeModal('modal-live-share');
+                await this.loadLiveNotes();
+                await this.refreshNotebookList();
+                this.showToast('Live link deleted and live session ended.');
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                alert(errData.error || 'Failed to revoke live link');
+            }
+        } catch (e) {
+            console.error('Revoke live link failed:', e);
+            alert('Failed to revoke live link');
+        }
+    }
+
+    async deleteLiveNote(id, title = null, isOwner = true) {
+        const noteTitle = title || (this.notebook?.id === id ? this.notebook.title : 'Live Session');
+
+        const message = isOwner
+            ? `Delete live note "${noteTitle}"?\n\nThis will permanently delete this note and its live share link for all collaborators.`
+            : `Remove "${noteTitle}" from your joined live notes?`;
+
+        const ok = confirm(message);
+        if (!ok) return;
+
+        try {
+            const res = await this.safeFetch(`/api/notes/live/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                if (this.db) {
+                    await this.db.permanentlyDeleteNote(id);
+                }
+
+                const isActive = this.notebook && this.notebook.id === id;
+                if (isActive) {
+                    if (this.collab) await this.collab.disconnect();
+                    const topBar = document.getElementById('collab-top-bar');
+                    if (topBar) topBar.classList.add('hidden');
+                    const headerBtn = document.getElementById('btn-live-share-header');
+                    if (headerBtn) headerBtn.classList.add('hidden');
+
+                    const savedId = localStorage.getItem('zoho-notebook-current-id');
+                    if (savedId === id) {
+                        localStorage.removeItem('zoho-notebook-current-id');
+                    }
+                    this.closeModal('modal-live-share');
+                    await this.init();
+                } else {
+                    this.closeModal('modal-live-share');
+                    await this.loadLiveNotes();
+                    await this.refreshNotebookList();
+                }
+
+                this.showToast(isOwner ? 'Live note and link deleted.' : 'Removed from joined live notes.');
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                alert(errData.error || 'Failed to delete live note');
+            }
+        } catch (e) {
+            console.error('Delete live note failed:', e);
+            alert('Failed to delete live note');
         }
     }
 
@@ -1561,9 +1702,12 @@ class NotebookApp {
                     </span>
                     <span class="truncate text-xs text-[var(--text-main)]" title="${note.title || 'Live Session'}">${note.title || 'Untitled Live'}</span>
                 </div>
-                <div class="flex items-center gap-1.5 flex-shrink-0">
-                    <button class="btn-share-live-item opacity-80 hover:opacity-100 text-rose-400 hover:text-white hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Share & Copy Live Link">
+                <div class="flex items-center gap-1 flex-shrink-0">
+                    <button class="btn-share-live-item opacity-75 hover:opacity-100 text-rose-400 hover:text-white hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Share & Copy Live Link">
                         <i data-lucide="share-2" style="width: 12px; height: 12px;"></i>
+                    </button>
+                    <button class="btn-delete-live-item opacity-75 hover:opacity-100 text-[#a0a0a5] hover:text-rose-400 hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Delete Live Note & Invalidate Link">
+                        <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
                     </button>
                     <span class="live-badge-host">Host</span>
                 </div>
@@ -1574,6 +1718,14 @@ class NotebookApp {
                 shareBtn.onclick = (e) => {
                     e.stopPropagation();
                     this.openLiveShareModal(note);
+                };
+            }
+
+            const deleteBtn = item.querySelector('.btn-delete-live-item');
+            if (deleteBtn) {
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.deleteLiveNote(note.id, note.title, true);
                 };
             }
 
@@ -1599,9 +1751,12 @@ class NotebookApp {
                     </span>
                     <span class="truncate text-xs text-[var(--text-main)]" title="${note.title || 'Live Session'}">${note.title || 'Untitled Live'}</span>
                 </div>
-                <div class="flex items-center gap-1.5 flex-shrink-0">
-                    <button class="btn-share-live-item opacity-80 hover:opacity-100 text-rose-400 hover:text-white hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Share & Copy Live Link">
+                <div class="flex items-center gap-1 flex-shrink-0">
+                    <button class="btn-share-live-item opacity-75 hover:opacity-100 text-rose-400 hover:text-white hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Share & Copy Live Link">
                         <i data-lucide="share-2" style="width: 12px; height: 12px;"></i>
+                    </button>
+                    <button class="btn-delete-live-item opacity-75 hover:opacity-100 text-[#a0a0a5] hover:text-rose-400 hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Remove from Joined Notes">
+                        <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
                     </button>
                     <span class="live-badge-guest">@${note.authorName || 'Host'}</span>
                 </div>
@@ -1612,6 +1767,14 @@ class NotebookApp {
                 shareBtn.onclick = (e) => {
                     e.stopPropagation();
                     this.openLiveShareModal(note);
+                };
+            }
+
+            const deleteBtn = item.querySelector('.btn-delete-live-item');
+            if (deleteBtn) {
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.deleteLiveNote(note.id, note.title, false);
                 };
             }
 
