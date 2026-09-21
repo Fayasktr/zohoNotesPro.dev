@@ -199,6 +199,17 @@
             }
             const finalVersion = (currentVersion !== null ? currentVersion : 0) + (options.isRemoteSync ? 0 : 1);
 
+            const currentUserId = window.CURRENT_USER?.id ? String(window.CURRENT_USER.id) : '';
+            const ownerId = noteData.owner?._id ? String(noteData.owner._id) : String(noteData.owner || '');
+            let computedIsOwner = true;
+            if (noteData.isOwner !== undefined) {
+                computedIsOwner = Boolean(noteData.isOwner);
+            } else if (noteData.isShared) {
+                computedIsOwner = false;
+            } else if (ownerId && currentUserId && ownerId !== 'current_user' && ownerId !== currentUserId) {
+                computedIsOwner = false;
+            }
+
             const noteRecord = {
                 id: noteData.id,
                 title: noteData.title || 'Untitled Notebook',
@@ -208,14 +219,14 @@
                 trashedAt: noteData.trashedAt || null,
                 cells: Array.isArray(noteData.cells) ? noteData.cells : [],
                 tags: Array.isArray(noteData.tags) ? noteData.tags : [],
-                owner: noteData.owner || 'current_user',
+                owner: noteData.owner || (currentUserId || 'current_user'),
                 authorName: noteData.authorName || '',
                 isLive: Boolean(noteData.isLive || (noteData.id && typeof noteData.id === 'string' && noteData.id.startsWith('live-'))),
                 shareCode: noteData.shareCode || '',
                 shareUrl: noteData.shareUrl || '',
                 collaborators: Array.isArray(noteData.collaborators) ? noteData.collaborators : [],
-                isOwner: noteData.isOwner !== undefined ? noteData.isOwner : true,
-                isShared: !!noteData.isShared,
+                isOwner: computedIsOwner,
+                isShared: noteData.isShared !== undefined ? Boolean(noteData.isShared) : !computedIsOwner,
                 updatedAt: noteData.updatedAt ? new Date(noteData.updatedAt).getTime() : now,
                 _version: finalVersion,
                 _syncStatus: options.isRemoteSync ? 'synced' : (options.syncStatus || 'pending'),

@@ -239,23 +239,28 @@ router.post('/pull', async (req, res) => {
             ]
         }).lean();
 
-        const formatted = notes.map(n => ({
-            id: n.id,
-            title: n.title,
-            folder: n.folder,
-            isStarred: n.isStarred,
-            isTrashed: n.isTrashed,
-            trashedAt: n.trashedAt,
-            content: n.content || {},
-            cells: Array.isArray(n.content?.cells) ? n.content.cells : (Array.isArray(n.cells) ? n.cells : []),
-            tags: Array.isArray(n.content?.tags) ? n.content.tags : (Array.isArray(n.tags) ? n.tags : []),
-            updatedAt: n.updatedAt ? new Date(n.updatedAt).getTime() : Date.now(),
-            _version: typeof n._version === 'number' ? n._version : 1,
-            owner: String(n.owner),
-            shareCode: n.shareCode || '',
-            authorName: n.authorName || '',
-            isLive: !!(n.isLive || n.content?.isLive)
-        }));
+        const formatted = notes.map(n => {
+            const isOwner = String(n.owner) === String(userId);
+            return {
+                id: n.id,
+                title: n.title,
+                folder: n.folder,
+                isStarred: n.isStarred,
+                isTrashed: n.isTrashed,
+                trashedAt: n.trashedAt,
+                content: n.content || {},
+                cells: Array.isArray(n.content?.cells) ? n.content.cells : (Array.isArray(n.cells) ? n.cells : []),
+                tags: Array.isArray(n.content?.tags) ? n.content.tags : (Array.isArray(n.tags) ? n.tags : []),
+                updatedAt: n.updatedAt ? new Date(n.updatedAt).getTime() : Date.now(),
+                _version: typeof n._version === 'number' ? n._version : 1,
+                owner: String(n.owner),
+                isOwner: isOwner,
+                isShared: !isOwner,
+                shareCode: n.shareCode || '',
+                authorName: n.authorName || '',
+                isLive: !!(n.isLive || n.content?.isLive)
+            };
+        });
 
         res.json({ notes: formatted });
     } catch (err) {
@@ -330,6 +335,17 @@ router.post('/push', async (req, res) => {
                     targetNoteId = `ntbk-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
                     resolution.updateDoc.id = targetNoteId;
                     if (resolution.updateDoc.content) resolution.updateDoc.content.id = targetNoteId;
+                }
+            }
+
+            // Collaborator Protection: collaborators can update cell contents, but cannot trash or alter live status/shareCode of host notes
+            if (existing && String(existing.owner) !== String(userId)) {
+                delete resolution.updateDoc.isTrashed;
+                delete resolution.updateDoc.trashedAt;
+                delete resolution.updateDoc.isLive;
+                delete resolution.updateDoc.shareCode;
+                if (resolution.updateDoc.content) {
+                    resolution.updateDoc.content.isLive = Boolean(existing.isLive);
                 }
             }
 

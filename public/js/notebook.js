@@ -1076,20 +1076,34 @@ class NotebookApp {
             await this.openLiveShareModal();
         });
 
-        // Wire Revoke / Delete Live Link button in modal
+        // Wire Revoke / Delete Live Link button in modal (Host only)
         document.getElementById('btn-revoke-live-link')?.addEventListener('click', async (e) => {
             e.stopPropagation();
             const targetNote = this._liveShareModalTargetNote || this.notebook;
             if (targetNote) {
+                const ownerId = targetNote.owner?._id ? String(targetNote.owner._id) : String(targetNote.owner || '');
+                const currentUserId = window.CURRENT_USER?.id ? String(window.CURRENT_USER.id) : '';
+                const isHost = Boolean(ownerId && currentUserId && (ownerId === currentUserId) && !targetNote.isShared);
+                if (!isHost) {
+                    this.showToast('Only the host can delete or revoke this live link.', 'warning');
+                    return;
+                }
                 await this.revokeLiveShareLink(targetNote.id);
             }
         });
 
-        // Wire Delete Live Note button in modal
+        // Wire Delete Live Note button in modal (Host only)
         document.getElementById('btn-delete-live-note-modal')?.addEventListener('click', async (e) => {
             e.stopPropagation();
             const targetNote = this._liveShareModalTargetNote || this.notebook;
             if (targetNote) {
+                const ownerId = targetNote.owner?._id ? String(targetNote.owner._id) : String(targetNote.owner || '');
+                const currentUserId = window.CURRENT_USER?.id ? String(window.CURRENT_USER.id) : '';
+                const isHost = Boolean(ownerId && currentUserId && (ownerId === currentUserId) && !targetNote.isShared);
+                if (!isHost) {
+                    this.showToast('Only the host can delete this live note.', 'warning');
+                    return;
+                }
                 await this.deleteLiveNote(targetNote.id, targetNote.title, true);
             }
         });
@@ -1233,13 +1247,18 @@ class NotebookApp {
 
         const ownerId = note.owner?._id ? String(note.owner._id) : String(note.owner || '');
         const currentUserId = window.CURRENT_USER?.id ? String(window.CURRENT_USER.id) : '';
-        const isOwner = Boolean(
-            note.isOwner === true ||
-            (ownerId && currentUserId && (ownerId === currentUserId))
+        const isHost = Boolean(
+            ownerId && currentUserId && (ownerId === currentUserId) && !note.isShared
         );
 
         if (dangerZone) {
-            dangerZone.style.display = isOwner ? 'block' : 'none';
+            if (isHost) {
+                dangerZone.classList.remove('hidden');
+                dangerZone.style.display = 'block';
+            } else {
+                dangerZone.classList.add('hidden');
+                dangerZone.style.display = 'none';
+            }
         }
 
         if (titleEl) {
@@ -1304,8 +1323,18 @@ class NotebookApp {
     }
 
     async revokeLiveShareLink(noteId = null) {
-        const id = noteId || this.notebook?.id;
+        const targetNote = (noteId && this.notebook?.id === noteId) ? this.notebook : (this._liveShareModalTargetNote || this.notebook);
+        const id = noteId || targetNote?.id;
         if (!id) return;
+
+        const ownerId = targetNote?.owner?._id ? String(targetNote.owner._id) : String(targetNote?.owner || '');
+        const currentUserId = window.CURRENT_USER?.id ? String(window.CURRENT_USER.id) : '';
+        const isHost = Boolean(ownerId && currentUserId && (ownerId === currentUserId) && !targetNote?.isShared);
+
+        if (!isHost) {
+            this.showToast('Only the host can delete or revoke this live link.', 'warning');
+            return;
+        }
 
         this.confirmAction(
             'Delete Live Link?',
@@ -1354,15 +1383,25 @@ class NotebookApp {
     async deleteLiveNote(id, title = null, isOwner = true) {
         const noteTitle = title || (this.notebook?.id === id ? this.notebook.title : 'Live Session');
 
-        const modalTitle = isOwner ? 'Delete Live Note?' : 'Leave Live Session?';
-        const modalDesc = isOwner
+        const targetNote = (this.notebook?.id === id) ? this.notebook : (this.liveNotebooks?.hosted?.find(n => n.id === id) || this.liveNotebooks?.joined?.find(n => n.id === id) || this._liveShareModalTargetNote);
+        const ownerId = targetNote?.owner?._id ? String(targetNote.owner._id) : String(targetNote?.owner || '');
+        const currentUserId = window.CURRENT_USER?.id ? String(window.CURRENT_USER.id) : '';
+        const realIsOwner = Boolean(
+            ownerId && currentUserId && (ownerId === currentUserId) && !targetNote?.isShared && isOwner !== false
+        );
+
+        const modalTitle = realIsOwner ? 'Delete Live Note?' : 'Leave Live Session?';
+        const modalDesc = realIsOwner
             ? `Permanently delete "${noteTitle}" and revoke its live share link for all collaborators?`
-            : `Remove "${noteTitle}" from your joined live notes?`;
+            : `Remove "${noteTitle}" from your joined live notes? You can rejoin anytime using the host's link.`;
 
         this.confirmAction(modalTitle, modalDesc, async () => {
             try {
                 const res = await this.safeFetch(`/api/notes/live/${id}`, { method: 'DELETE' });
                 if (res.ok) {
+                    const resData = await res.json().catch(() => ({}));
+                    const wasDeleted = resData.action === 'deleted' || realIsOwner;
+
                     if (this.db) {
                         await this.db.permanentlyDeleteNote(id);
                     }
@@ -1387,7 +1426,7 @@ class NotebookApp {
                         await this.refreshNotebookList();
                     }
 
-                    this.showToast(isOwner ? 'Live note and link deleted.' : 'Removed from joined live notes.');
+                    this.showToast(wasDeleted ? 'Live note and link deleted.' : 'Removed from joined live notes.');
                 } else {
                     const errData = await res.json().catch(() => ({}));
                     this.showToast(errData.error || 'Failed to delete live note', 'error');
@@ -2413,9 +2452,10 @@ class NotebookApp {
                     const ownerId = this.notebook.owner?._id ? String(this.notebook.owner._id) : String(this.notebook.owner || '');
                     const currentUserId = window.CURRENT_USER?.id ? String(window.CURRENT_USER.id) : '';
                     const isHost = Boolean(
-                        this.notebook.isOwner === true ||
-                        (ownerId && currentUserId && (ownerId === currentUserId))
+                        ownerId && currentUserId && (ownerId === currentUserId) && !this.notebook.isShared
                     );
+                    this.notebook.isOwner = isHost;
+                    this.notebook.isShared = !isHost;
                     await this.collab.connectToNote(id, window.CURRENT_USER, isHost);
                     this.updateCollabTopBar();
                 }

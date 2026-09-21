@@ -788,6 +788,8 @@
                         tags: remoteNote.content?.tags || remoteNote.tags || [],
                         updatedAt: new Date(remoteNote.updatedAt).getTime(),
                         owner: remoteNote.owner,
+                        isOwner: remoteNote.isOwner !== undefined ? Boolean(remoteNote.isOwner) : (remoteNote.owner && window.CURRENT_USER?.id ? String(remoteNote.owner) === String(window.CURRENT_USER.id) : false),
+                        isShared: remoteNote.isShared !== undefined ? Boolean(remoteNote.isShared) : (remoteNote.owner && window.CURRENT_USER?.id ? String(remoteNote.owner) !== String(window.CURRENT_USER.id) : true),
                         isLive: !!(remoteNote.isLive || remoteNote.content?.isLive),
                         shareCode: remoteNote.shareCode || '',
                         authorName: remoteNote.authorName || '',

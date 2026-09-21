@@ -1023,7 +1023,7 @@ app.post('/api/notes/:noteId/revoke-share', isAuthenticated, async (req, res) =>
             owner: { $in: [currentUserId, userObjId] }
         });
 
-        if (!note) return res.status(404).json({ error: 'Note not found or you are not the host' });
+        if (!note) return res.status(403).json({ error: 'Only the host can delete or revoke this live link.' });
 
         await Note.updateOne(
             { _id: note._id },
