@@ -9,7 +9,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/style.css?v=26">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/split.js/1.6.5/split.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -250,14 +250,14 @@
                             <i data-lucide="copy" class="w-4 h-4"></i>
                         </button>
                         <button
-                            class="h-9 px-3 flex items-center gap-1.5 bg-rose-500/15 border border-rose-500/30 text-rose-400 rounded-lg hover:bg-rose-500 hover:text-white transition-all flex-shrink-0 hidden text-xs font-semibold cursor-pointer"
-                            id="btn-live-share-header" title="Share & Copy Live Link">
-                            <span class="relative flex h-2 w-2">
+                            class="w-9 h-9 flex items-center justify-center bg-rose-500/15 border border-rose-500/30 text-rose-400 rounded-lg hover:bg-rose-500 hover:text-white transition-all flex-shrink-0 hidden cursor-pointer relative shadow-sm"
+                            id="btn-live-share-header" title="Live Session Active (Click to Copy Link & Details)">
+                            <i data-lucide="share-2" class="w-4 h-4"></i>
+                            <span class="absolute -top-1 -right-1 flex h-2.5 w-2.5 pointer-events-none">
                                 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 border border-[#16171f]"></span>
                             </span>
-                            <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
-                            <span id="btn-live-share-header-text">Live Share Link</span>
+                            <span id="btn-live-share-header-text" class="sr-only">Live Share Link</span>
                         </button>
                     </div>
 
@@ -281,19 +281,22 @@
                 <div id="collab-top-bar" class="collab-top-bar hidden">
                     <div class="collab-presence-pill">
                         <div class="collab-count-badge">
-                            <span style="width: 6px; height: 6px; border-radius: 50%; background: #30ff6a; box-shadow: 0 0 6px #30ff6a;"></span>
+                            <span class="collab-status-dot"></span>
                             <span id="collab-user-count">1</span> Online
                         </div>
                         <div id="collab-avatars" class="collab-avatars-group">
                             <!-- Injected user avatar chips -->
                         </div>
-                        <span id="collab-author-info" style="font-size: 11px; color: var(--text-dim); margin-left: 6px;"></span>
+                        <span id="collab-author-info" class="collab-author-label"></span>
                     </div>
 
                     <div class="collab-actions">
-                        <button id="btn-copy-collab-link" class="btn-collab-share" title="Copy Live Collaborative Link for Live Coding">
-                            <i data-lucide="share-2" style="width: 13px; height: 13px;"></i>
-                            <span id="collab-share-btn-text">Share Live Link</span>
+                        <button id="btn-copy-collab-link" class="btn-collab-share" title="Copy Live Collaborative Link">
+                            <i data-lucide="link-2" class="collab-share-icon" style="width: 13px; height: 13px;"></i>
+                            <span id="collab-share-btn-text">Copy Live Link</span>
+                        </button>
+                        <button id="btn-open-collab-modal" class="btn-collab-info" title="View Full Live Session Details & QR">
+                            <i data-lucide="info" style="width: 13px; height: 13px;"></i>
                         </button>
                     </div>
                 </div>
@@ -666,7 +669,7 @@
         <!-- Real-Time Collaboration Engine -->
         <script src="/js/collab_engine.js?v=25"></script>
         <!-- Core Notebook UI Application -->
-        <script src="/js/notebook.js?v=25"></script>
+        <script src="/js/notebook.js?v=26"></script>
         <!-- Progressive Web App Handler -->
         <script src="/js/pwa.js?v=25"></script>
         <script>

@@ -4,7 +4,7 @@ const assert = require('assert');
 async function runTest() {
     console.log('🚀 Starting Live Collaboration WebSocket E2E Test...');
 
-    const noteId = 'live-1789976862578-h0u4';
+    const noteId = `live-test-${Date.now()}`;
     const wsUrl = 'ws://localhost:4321/ws/collab';
 
     const client1 = new WebSocket(wsUrl);

@@ -1602,13 +1602,14 @@ body.light-theme #add-folder-sidebar {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 8px 16px;
-    background: rgba(18, 19, 27, 0.75);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid var(--border-color);
+    padding: 8px 14px;
+    background: linear-gradient(135deg, rgba(22, 24, 34, 0.85), rgba(15, 16, 24, 0.9));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(109, 93, 252, 0.22);
     border-radius: 12px;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), 0 0 15px rgba(109, 93, 252, 0.05);
     transition: all 0.3s ease;
 }
 
@@ -1616,25 +1617,41 @@ body.light-theme #add-folder-sidebar {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .collab-count-badge {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 3px 8px;
+    gap: 6px;
+    padding: 3px 10px;
     border-radius: 20px;
     font-size: 11px;
     font-weight: 700;
-    background: rgba(48, 255, 106, 0.1);
+    background: rgba(48, 255, 106, 0.12);
     color: #30ff6a;
-    border: 1px solid rgba(48, 255, 106, 0.25);
+    border: 1px solid rgba(48, 255, 106, 0.28);
+    box-shadow: 0 0 10px rgba(48, 255, 106, 0.1);
+}
+
+.collab-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #30ff6a;
+    box-shadow: 0 0 6px #30ff6a;
+    animation: livePulseGlow 2s infinite ease-in-out;
+}
+
+@keyframes livePulseGlow {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
 }
 
 .collab-avatars-group {
     display: flex;
     align-items: center;
-    margin-left: 4px;
+    margin-left: 2px;
 }
 
 .collab-avatar-chip {
@@ -1649,13 +1666,26 @@ body.light-theme #add-folder-sidebar {
     color: #fff;
     border: 2px solid var(--card-bg, #16171f);
     margin-left: -6px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
     position: relative;
     cursor: default;
+    transition: transform 0.2s ease;
+}
+
+.collab-avatar-chip:hover {
+    transform: translateY(-2px) scale(1.1);
+    z-index: 5;
 }
 
 .collab-avatar-chip:first-child {
     margin-left: 0;
+}
+
+.collab-author-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: 4px;
+    font-weight: 500;
 }
 
 .collab-actions {
@@ -1665,25 +1695,58 @@ body.light-theme #add-folder-sidebar {
 }
 
 .btn-collab-share {
-    background: rgba(109, 93, 252, 0.12);
-    border: 1px solid rgba(109, 93, 252, 0.3);
-    color: #8c7eff;
+    background: rgba(109, 93, 252, 0.15);
+    border: 1px solid rgba(109, 93, 252, 0.35);
+    color: #a594fd;
     font-size: 11px;
     font-weight: 600;
-    padding: 5px 10px;
+    padding: 6px 12px;
     border-radius: 8px;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    transition: all 0.2s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
 }
 
 .btn-collab-share:hover {
-    background: var(--accent);
+    background: #6d5dfc;
     color: #ffffff;
-    border-color: var(--accent);
-    box-shadow: 0 0 12px var(--accent-glow);
+    border-color: #6d5dfc;
+    box-shadow: 0 0 14px rgba(109, 93, 252, 0.5);
+    transform: translateY(-1px);
+}
+
+.btn-collab-share:active {
+    transform: translateY(0);
+}
+
+.btn-collab-share.copied {
+    background: rgba(48, 255, 106, 0.2) !important;
+    border-color: rgba(48, 255, 106, 0.5) !important;
+    color: #30ff6a !important;
+    box-shadow: 0 0 12px rgba(48, 255, 106, 0.3) !important;
+}
+
+.btn-collab-info {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-dim);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-collab-info:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-main);
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
 /* Monaco Remote Cursor Caret & Flags */

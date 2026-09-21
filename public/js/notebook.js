@@ -817,13 +817,21 @@ class NotebookApp {
             }
         };
 
-        // Wire Copy Live Share Link button
-        document.getElementById('btn-copy-collab-link')?.addEventListener('click', async () => {
+        // Wire Copy Live Share Link button (direct 1-click clipboard copy)
+        document.getElementById('btn-copy-collab-link')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await this.copyCollabShareLink();
+        });
+
+        // Wire Collab Info button (opens detailed modal with QR & instructions)
+        document.getElementById('btn-open-collab-modal')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
             await this.openLiveShareModal();
         });
 
-        // Wire Header Live Share Link button
-        document.getElementById('btn-live-share-header')?.addEventListener('click', async () => {
+        // Wire Header Live Share Link button (opens modal & auto-copies)
+        document.getElementById('btn-live-share-header')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
             await this.openLiveShareModal();
         });
 
@@ -861,6 +869,39 @@ class NotebookApp {
         });
     }
 
+    async getLiveShareUrl(noteObj = null) {
+        const note = noteObj || this.notebook;
+        if (!note || !note.id) return null;
+
+        if (note.shareUrl) return note.shareUrl;
+
+        // If shareUrl is not already present, fetch from server /api/notes/:id/share-code
+        try {
+            const res = await this.safeFetch(`/api/notes/${note.id}/share-code`, {
+                method: 'POST'
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.shareUrl) {
+                    note.shareUrl = data.shareUrl;
+                    if (data.shareCode) note.shareCode = data.shareCode;
+                    if (this.notebook && this.notebook.id === note.id) {
+                        this.notebook.shareUrl = data.shareUrl;
+                        if (data.shareCode) this.notebook.shareCode = data.shareCode;
+                    }
+                    return data.shareUrl;
+                }
+            }
+        } catch (err) {
+            console.warn('[LiveShare] Failed to get shareUrl from server:', err);
+        }
+
+        const fallbackCode = note.shareCode || `collab-${note.id.replace('ntbk-', '').replace('live-', '')}`;
+        const shareUrl = `${window.location.origin}/note/join/${fallbackCode}`;
+        note.shareUrl = shareUrl;
+        return shareUrl;
+    }
+
     async openLiveShareModal(noteObj = null) {
         const note = noteObj || this.notebook;
         if (!note || !note.id) return;
@@ -882,62 +923,54 @@ class NotebookApp {
             copyBtnText.innerText = 'Copy Link';
         }
 
-        let shareUrl = note.shareUrl;
+        const shareUrl = await this.getLiveShareUrl(note);
 
-        // If shareUrl is not already present, fetch from server /api/notes/:id/share-code
-        if (!shareUrl) {
-            try {
-                const res = await this.safeFetch(`/api/notes/${note.id}/share-code`, {
-                    method: 'POST'
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    shareUrl = data.shareUrl;
-                    if (data.shareCode) {
-                        note.shareCode = data.shareCode;
-                        note.shareUrl = shareUrl;
-                        if (this.notebook && this.notebook.id === note.id) {
-                            this.notebook.shareCode = data.shareCode;
-                            this.notebook.shareUrl = shareUrl;
-                        }
-                    }
-                }
-            } catch (err) {
-                console.warn('[LiveShare] Failed to get shareUrl from server:', err);
-            }
-        }
-
-        if (!shareUrl) {
-            const fallbackCode = note.shareCode || `collab-${note.id.replace('ntbk-', '').replace('live-', '')}`;
-            shareUrl = `${window.location.origin}/note/join/${fallbackCode}`;
-        }
-
-        if (input) {
+        if (input && shareUrl) {
             input.value = shareUrl;
             input.select();
         }
 
-        if (testLinkBtn) {
+        if (testLinkBtn && shareUrl) {
             testLinkBtn.href = shareUrl;
         }
 
-        // Auto copy to clipboard on open so the host has it ready immediately
-        try {
-            await navigator.clipboard.writeText(shareUrl);
-            if (copyBtnText) {
-                copyBtnText.innerText = 'Copied!';
-                setTimeout(() => {
-                    if (copyBtnText) copyBtnText.innerText = 'Copy Link';
-                }, 2500);
-            }
-            this.showToast('Live link copied to clipboard!');
-        } catch (_) {}
+        if (shareUrl) {
+            try {
+                await navigator.clipboard.writeText(shareUrl);
+                if (copyBtnText) {
+                    copyBtnText.innerText = 'Copied!';
+                    setTimeout(() => {
+                        if (copyBtnText) copyBtnText.innerText = 'Copy Link';
+                    }, 2500);
+                }
+                this.showToast('Live link copied to clipboard!');
+            } catch (_) {}
+        }
 
         if (window.lucide) lucide.createIcons();
     }
 
     async copyCollabShareLink() {
-        await this.openLiveShareModal();
+        const shareUrl = await this.getLiveShareUrl();
+        if (!shareUrl) return;
+
+        const btn = document.getElementById('btn-copy-collab-link');
+        const textEl = document.getElementById('collab-share-btn-text');
+
+        try {
+            await navigator.clipboard.writeText(shareUrl);
+            if (btn) btn.classList.add('copied');
+            if (textEl) textEl.innerText = 'Copied!';
+            this.showToast('Live link copied to clipboard!');
+
+            setTimeout(() => {
+                if (btn) btn.classList.remove('copied');
+                if (textEl) textEl.innerText = 'Copy Live Link';
+            }, 2500);
+        } catch (err) {
+            // Fallback to opening modal if clipboard permission denied
+            await this.openLiveShareModal();
+        }
     }
 
     showToast(message, type = 'info') {
