@@ -59,6 +59,11 @@
             this.onRemoteCursor = null;   // (peerUser) => {}
             this.onRemoteCellAdded = null; // (cell) => {}
             this.onRemoteCellDeleted = null; // (cellId) => {}
+            this.onRemoteCellTitle = null; // (cellId, title) => {}
+            this.onRemoteNotebookTitle = null; // (title) => {}
+            this.onRemoteCellLang = null; // (cellId, lang) => {}
+            this.onRemoteCellStar = null; // (cellId, isStarred) => {}
+            this.onRemoteCellReorder = null; // (cellIdsOrder) => {}
             this.onRemoteExecution = null; // (cellId, execData) => {}
             this.onRemoteLogChunk = null; // (cellId, chunk) => {}
             this.onRemoteInitSync = null; // (cachedCells) => {}
@@ -159,7 +164,7 @@
                                 this.onHostStatusChanged(this.hostOnline, { isOnline: this.hostOnline });
                             }
                             if (Array.isArray(msg.cachedCells) && typeof this.onRemoteInitSync === 'function') {
-                                this.onRemoteInitSync(msg.cachedCells);
+                                this.onRemoteInitSync(msg.cachedCells, msg.cachedMetadata || null);
                             }
                             break;
                         }
@@ -193,6 +198,56 @@
 
                             if (typeof this.onRemoteEdit === 'function') {
                                 this.onRemoteEdit(msg.cellId, msg.changes, msg.senderPeerId);
+                            }
+                            break;
+                        }
+
+                        case 'cell_title': {
+                            if (msg.senderPeerId === this.peerId) return;
+                            if (!this.isHost && !this.hostOnline) return;
+
+                            if (typeof this.onRemoteCellTitle === 'function') {
+                                this.onRemoteCellTitle(msg.cellId, msg.title);
+                            }
+                            break;
+                        }
+
+                        case 'notebook_title': {
+                            if (msg.senderPeerId === this.peerId) return;
+                            if (!this.isHost && !this.hostOnline) return;
+
+                            if (typeof this.onRemoteNotebookTitle === 'function') {
+                                this.onRemoteNotebookTitle(msg.title);
+                            }
+                            break;
+                        }
+
+                        case 'cell_lang': {
+                            if (msg.senderPeerId === this.peerId) return;
+                            if (!this.isHost && !this.hostOnline) return;
+
+                            if (typeof this.onRemoteCellLang === 'function') {
+                                this.onRemoteCellLang(msg.cellId, msg.lang);
+                            }
+                            break;
+                        }
+
+                        case 'cell_star': {
+                            if (msg.senderPeerId === this.peerId) return;
+                            if (!this.isHost && !this.hostOnline) return;
+
+                            if (typeof this.onRemoteCellStar === 'function') {
+                                this.onRemoteCellStar(msg.cellId, msg.isStarred);
+                            }
+                            break;
+                        }
+
+                        case 'cell_reorder': {
+                            if (msg.senderPeerId === this.peerId) return;
+                            if (!this.isHost && !this.hostOnline) return;
+
+                            if (typeof this.onRemoteCellReorder === 'function') {
+                                this.onRemoteCellReorder(msg.cellIdsOrder);
                             }
                             break;
                         }
@@ -646,6 +701,108 @@
                     });
                 } catch (_) { }
             }
+        }
+
+        /**
+         * Broadcast cell title change in real time
+         */
+        broadcastCellTitle(cellId, title) {
+            if (!this.isConnected || !cellId) return;
+            if (!this.isHost && !this.hostOnline) return;
+
+            this.sendWsMessage({
+                type: 'cell_title',
+                noteId: this.noteId,
+                cellId: cellId,
+                title: title,
+                senderPeerId: this.peerId
+            });
+
+            if (this.noteRef) {
+                try {
+                    this.noteRef.child(`cells/${cellId}/title`).set(title);
+                } catch (_) { }
+            }
+        }
+
+        /**
+         * Broadcast notebook title change in real time
+         */
+        broadcastNotebookTitle(title) {
+            if (!this.isConnected) return;
+            if (!this.isHost && !this.hostOnline) return;
+
+            this.sendWsMessage({
+                type: 'notebook_title',
+                noteId: this.noteId,
+                title: title,
+                senderPeerId: this.peerId
+            });
+
+            if (this.noteRef) {
+                try {
+                    this.noteRef.child('title').set(title);
+                } catch (_) { }
+            }
+        }
+
+        /**
+         * Broadcast cell language selector change in real time
+         */
+        broadcastCellLang(cellId, lang) {
+            if (!this.isConnected || !cellId) return;
+            if (!this.isHost && !this.hostOnline) return;
+
+            this.sendWsMessage({
+                type: 'cell_lang',
+                noteId: this.noteId,
+                cellId: cellId,
+                lang: lang,
+                senderPeerId: this.peerId
+            });
+
+            if (this.noteRef) {
+                try {
+                    this.noteRef.child(`cells/${cellId}/lang`).set(lang);
+                } catch (_) { }
+            }
+        }
+
+        /**
+         * Broadcast cell star status in real time
+         */
+        broadcastCellStar(cellId, isStarred) {
+            if (!this.isConnected || !cellId) return;
+            if (!this.isHost && !this.hostOnline) return;
+
+            this.sendWsMessage({
+                type: 'cell_star',
+                noteId: this.noteId,
+                cellId: cellId,
+                isStarred: Boolean(isStarred),
+                senderPeerId: this.peerId
+            });
+
+            if (this.noteRef) {
+                try {
+                    this.noteRef.child(`cells/${cellId}/isStarred`).set(Boolean(isStarred));
+                } catch (_) { }
+            }
+        }
+
+        /**
+         * Broadcast cell reordering in real time
+         */
+        broadcastCellReorder(cellIdsOrder) {
+            if (!this.isConnected || !Array.isArray(cellIdsOrder)) return;
+            if (!this.isHost && !this.hostOnline) return;
+
+            this.sendWsMessage({
+                type: 'cell_reorder',
+                noteId: this.noteId,
+                cellIdsOrder: cellIdsOrder,
+                senderPeerId: this.peerId
+            });
         }
     }
 

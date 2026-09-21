@@ -1845,8 +1845,9 @@ terminalWss.on('connection', (ws) => {
 // =====================================================
 // Real-Time Live Collaboration WebSocket Server
 // =====================================================
-const collabRooms = new Map();       // noteId -> Map<peerId, { ws, user, joinedAt }>
-const collabCellsCache = new Map();  // noteId -> Map<cellId, string>
+const collabRooms = new Map();         // noteId -> Map<peerId, { ws, user, joinedAt }>
+const collabCellsCache = new Map();    // noteId -> Map<cellId, string>
+const collabMetadataCache = new Map(); // noteId -> { title?: string, cells?: Map<cellId, { title?: string, lang?: string, isStarred?: boolean }> }
 
 function broadcastToCollabRoom(noteId, message, senderWs = null) {
     const room = collabRooms.get(noteId);
@@ -1917,12 +1918,22 @@ collabWss.on('connection', (ws) => {
                 const cellsMap = collabCellsCache.get(noteId);
                 const cachedCells = Array.from(cellsMap.entries()).map(([cellId, content]) => ({ cellId, content }));
 
+                let cachedMetadata = null;
+                const meta = collabMetadataCache.get(noteId);
+                if (meta) {
+                    cachedMetadata = {
+                        title: meta.title,
+                        cells: meta.cells ? Array.from(meta.cells.entries()).map(([cellId, d]) => ({ cellId, ...d })) : []
+                    };
+                }
+
                 ws.send(JSON.stringify({
                     type: 'joined',
                     noteId,
                     peerId,
                     presence,
-                    cachedCells
+                    cachedCells,
+                    cachedMetadata
                 }));
 
                 broadcastToCollabRoom(noteId, {
@@ -1944,6 +1955,60 @@ collabWss.on('connection', (ws) => {
                 break;
             }
 
+            case 'cell_title': {
+                if (!currentNoteId || !msg.cellId) return;
+                if (!collabMetadataCache.has(currentNoteId)) {
+                    collabMetadataCache.set(currentNoteId, { cells: new Map() });
+                }
+                const meta = collabMetadataCache.get(currentNoteId);
+                if (!meta.cells) meta.cells = new Map();
+                const cellMeta = meta.cells.get(msg.cellId) || {};
+                cellMeta.title = msg.title;
+                meta.cells.set(msg.cellId, cellMeta);
+                broadcastToCollabRoom(currentNoteId, msg, ws);
+                break;
+            }
+
+            case 'notebook_title': {
+                if (!currentNoteId) return;
+                if (!collabMetadataCache.has(currentNoteId)) {
+                    collabMetadataCache.set(currentNoteId, { title: msg.title, cells: new Map() });
+                } else {
+                    collabMetadataCache.get(currentNoteId).title = msg.title;
+                }
+                broadcastToCollabRoom(currentNoteId, msg, ws);
+                break;
+            }
+
+            case 'cell_lang': {
+                if (!currentNoteId || !msg.cellId) return;
+                if (!collabMetadataCache.has(currentNoteId)) {
+                    collabMetadataCache.set(currentNoteId, { cells: new Map() });
+                }
+                const meta = collabMetadataCache.get(currentNoteId);
+                if (!meta.cells) meta.cells = new Map();
+                const cellMeta = meta.cells.get(msg.cellId) || {};
+                cellMeta.lang = msg.lang;
+                meta.cells.set(msg.cellId, cellMeta);
+                broadcastToCollabRoom(currentNoteId, msg, ws);
+                break;
+            }
+
+            case 'cell_star': {
+                if (!currentNoteId || !msg.cellId) return;
+                if (!collabMetadataCache.has(currentNoteId)) {
+                    collabMetadataCache.set(currentNoteId, { cells: new Map() });
+                }
+                const meta = collabMetadataCache.get(currentNoteId);
+                if (!meta.cells) meta.cells = new Map();
+                const cellMeta = meta.cells.get(msg.cellId) || {};
+                cellMeta.isStarred = Boolean(msg.isStarred);
+                meta.cells.set(msg.cellId, cellMeta);
+                broadcastToCollabRoom(currentNoteId, msg, ws);
+                break;
+            }
+
+            case 'cell_reorder':
             case 'cursor':
             case 'cell_add':
             case 'cell_delete':
@@ -1981,6 +2046,7 @@ collabWss.on('connection', (ws) => {
                         if (r && r.size === 0) {
                             collabRooms.delete(currentNoteId);
                             collabCellsCache.delete(currentNoteId);
+                            collabMetadataCache.delete(currentNoteId);
                         }
                     }, 60000);
                 } else {

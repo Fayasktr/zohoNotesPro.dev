@@ -283,6 +283,9 @@ class NotebookApp {
             if (this.broadcaster && this.broadcaster.isBroadcasting) {
                 this.broadcaster.syncNotebookTitle(e.target.value);
             }
+            if (this.collab && this.collab.isConnected) {
+                this.collab.broadcastNotebookTitle(e.target.value);
+            }
             this._autoSave();
         });
 
@@ -419,6 +422,12 @@ class NotebookApp {
                 const cellId = cellElem.id.replace('container-', '');
                 const cell = this.notebook.cells.find(c => c.id === cellId);
                 if (cell) cell.title = e.target.value;
+                if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                    this.broadcaster.syncNotebookStructure(this.notebook.cells);
+                }
+                if (this.collab && this.collab.isConnected) {
+                    this.collab.broadcastCellTitle(cellId, e.target.value);
+                }
                 this._autoSave();
             }
         });
@@ -638,18 +647,53 @@ class NotebookApp {
         };
 
         // 1.5 Initial state sync when joining an active live session
-        this.collab.onRemoteInitSync = (cachedCells) => {
-            if (!Array.isArray(cachedCells) || cachedCells.length === 0) return;
-            cachedCells.forEach(({ cellId, content }) => {
-                const editor = this.editors[cellId];
-                if (editor && typeof content === 'string' && editor.getValue() !== content) {
-                    this.collab.suppressLocalEdits = true;
-                    editor.setValue(content);
-                    this.collab.suppressLocalEdits = false;
-                    const cell = this.notebook?.cells?.find(c => c.id === cellId);
-                    if (cell) cell.content = content;
+        this.collab.onRemoteInitSync = (cachedCells, cachedMetadata = null) => {
+            if (Array.isArray(cachedCells) && cachedCells.length > 0) {
+                cachedCells.forEach(({ cellId, content }) => {
+                    const editor = this.editors[cellId];
+                    if (editor && typeof content === 'string' && editor.getValue() !== content) {
+                        this.collab.suppressLocalEdits = true;
+                        editor.setValue(content);
+                        this.collab.suppressLocalEdits = false;
+                        const cell = this.notebook?.cells?.find(c => c.id === cellId);
+                        if (cell) cell.content = content;
+                    }
+                });
+            }
+
+            if (cachedMetadata) {
+                if (cachedMetadata.title && typeof cachedMetadata.title === 'string') {
+                    if (this.notebook) this.notebook.title = cachedMetadata.title;
+                    const titleEl = document.getElementById('notebook-title');
+                    if (titleEl) titleEl.value = cachedMetadata.title;
+                    this.updateCurrentNotebookItemUI();
                 }
-            });
+                if (Array.isArray(cachedMetadata.cells)) {
+                    cachedMetadata.cells.forEach(meta => {
+                        const cell = this.notebook?.cells?.find(c => c.id === meta.cellId);
+                        if (cell) {
+                            if (typeof meta.title === 'string') {
+                                cell.title = meta.title;
+                                const titleInp = document.querySelector(`#container-${meta.cellId} .cell-title-input`);
+                                if (titleInp) titleInp.value = meta.title;
+                            }
+                            if (typeof meta.lang === 'string') {
+                                cell.lang = meta.lang;
+                                const langSel = document.querySelector(`#container-${meta.cellId} .cell-lang-select`);
+                                if (langSel) langSel.value = meta.lang;
+                            }
+                            if (typeof meta.isStarred === 'boolean') {
+                                cell.isStarred = meta.isStarred;
+                                const starI = document.querySelector(`#container-${meta.cellId} .btn-star-cell i`);
+                                if (starI) {
+                                    starI.style.fill = meta.isStarred ? '#ffcc00' : 'none';
+                                    starI.style.color = meta.isStarred ? '#ffcc00' : 'var(--text-dim)';
+                                }
+                            }
+                        }
+                    });
+                }
+            }
         };
 
         // 2. Remote edits: apply non-conflicting operational changes to Monaco
@@ -771,6 +815,117 @@ class NotebookApp {
                 this.updateCellIndices();
                 this._autoSave();
             }
+        };
+
+        // 5.1 Remote cell title updated lively
+        this.collab.onRemoteCellTitle = (cellId, title) => {
+            const cell = this.notebook?.cells?.find(c => c.id === cellId);
+            if (cell) {
+                cell.title = title;
+            }
+            const input = document.querySelector(`#container-${cellId} .cell-title-input`);
+            if (input && input.value !== title) {
+                const isFocused = document.activeElement === input;
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                input.value = title || '';
+                if (isFocused && start !== null) {
+                    try { input.setSelectionRange(start, end); } catch (_) {}
+                }
+            }
+        };
+
+        // 5.2 Remote notebook title updated lively
+        this.collab.onRemoteNotebookTitle = (title) => {
+            if (this.notebook) {
+                this.notebook.title = title;
+            }
+            const titleInput = document.getElementById('notebook-title');
+            if (titleInput && titleInput.value !== title) {
+                const isFocused = document.activeElement === titleInput;
+                const start = titleInput.selectionStart;
+                const end = titleInput.selectionEnd;
+                titleInput.value = title || '';
+                if (isFocused && start !== null) {
+                    try { titleInput.setSelectionRange(start, end); } catch (_) {}
+                }
+            }
+            this.updateCurrentNotebookItemUI();
+        };
+
+        // 5.3 Remote cell language selector changed lively
+        this.collab.onRemoteCellLang = (cellId, lang) => {
+            const cell = this.notebook?.cells?.find(c => c.id === cellId);
+            if (cell) {
+                cell.lang = lang;
+            }
+            const select = document.querySelector(`#container-${cellId} .cell-lang-select`);
+            if (select) {
+                select.value = lang;
+            }
+            const editor = this.editors[cellId];
+            if (editor) {
+                let monacoLang = 'javascript';
+                if (lang === 'python') monacoLang = 'python';
+                else if (lang === 'java') monacoLang = 'java';
+                else if (lang === 'c') monacoLang = 'c';
+                else if (lang === 'cpp') monacoLang = 'cpp';
+                else if (lang === 'typescript') monacoLang = 'typescript';
+                const model = editor.getModel();
+                if (model) {
+                    monaco.editor.setModelLanguage(model, monacoLang);
+                }
+                editor.updateOptions({
+                    hover: { enabled: lang === 'typescript' },
+                    parameterHints: { enabled: lang === 'typescript' }
+                });
+            }
+        };
+
+        // 5.4 Remote cell star toggled lively
+        this.collab.onRemoteCellStar = (cellId, isStarred) => {
+            const cell = this.notebook?.cells?.find(c => c.id === cellId);
+            if (cell) {
+                cell.isStarred = Boolean(isStarred);
+            }
+            const btn = document.querySelector(`#container-${cellId} .btn-star-cell i`);
+            if (btn) {
+                if (isStarred) {
+                    btn.style.fill = '#ffcc00';
+                    btn.style.color = '#ffcc00';
+                } else {
+                    btn.style.fill = 'none';
+                    btn.style.color = 'var(--text-dim)';
+                }
+            }
+        };
+
+        // 5.5 Remote cell reorder synchronized
+        this.collab.onRemoteCellReorder = (cellIdsOrder) => {
+            if (!this.notebook || !Array.isArray(this.notebook.cells) || !Array.isArray(cellIdsOrder)) return;
+            const cellsListEl = document.getElementById('cells-list');
+            if (!cellsListEl) return;
+
+            cellIdsOrder.forEach(id => {
+                const elem = document.getElementById(`container-${id}`);
+                if (elem) {
+                    cellsListEl.appendChild(elem);
+                }
+            });
+
+            const cellMap = new Map(this.notebook.cells.map(c => [c.id, c]));
+            const newCells = [];
+            cellIdsOrder.forEach(id => {
+                if (cellMap.has(id)) {
+                    newCells.push(cellMap.get(id));
+                    cellMap.delete(id);
+                }
+            });
+            for (const rem of cellMap.values()) {
+                newCells.push(rem);
+            }
+            this.notebook.cells = newCells;
+            this.updateCellIndices();
         };
 
         // 6. Remote execution event (another peer clicked Run on their machine)
@@ -900,6 +1055,12 @@ class NotebookApp {
             if (editor && typeof editor.updateOptions === 'function') {
                 editor.updateOptions({ readOnly });
             }
+        });
+        document.querySelectorAll('#cells-list .cell-title-input').forEach(input => {
+            input.readOnly = Boolean(readOnly);
+        });
+        document.querySelectorAll('#cells-list .cell-lang-select').forEach(sel => {
+            sel.disabled = Boolean(readOnly);
         });
     }
 
@@ -2620,6 +2781,10 @@ class NotebookApp {
                             currentCell.content = editor.getValue();
                         }
 
+                        if (this.collab && this.collab.isConnected) {
+                            this.collab.broadcastCellLang(cell.id, newLang);
+                        }
+
                         this._autoSave();
                     });
                 }
@@ -2970,6 +3135,9 @@ class NotebookApp {
         if (this.broadcaster && this.broadcaster.isBroadcasting) {
             this.broadcaster.syncNotebookStructure(this.notebook.cells);
         }
+        if (this.collab && this.collab.isConnected) {
+            this.collab.broadcastCellReorder(this.notebook.cells.map(c => c.id));
+        }
     }
 
     updateCellIndices() {
@@ -3113,6 +3281,9 @@ class NotebookApp {
                     btn.style.fill = 'none';
                     btn.style.color = 'var(--text-dim)';
                 }
+            }
+            if (this.collab && this.collab.isConnected) {
+                this.collab.broadcastCellStar(cellId, cell.isStarred);
             }
             this.saveToBackend();
         }
@@ -3344,6 +3515,12 @@ class NotebookApp {
             }
 
             this._autoSave();
+            if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                this.broadcaster.syncNotebookStructure(this.notebook.cells);
+            }
+            if (this.collab && this.collab.isConnected) {
+                this.collab.broadcastCellReorder(this.notebook.cells.map(c => c.id));
+            }
         }
     }
 
