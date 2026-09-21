@@ -16,14 +16,15 @@ const noteSchema = new mongoose.Schema({
     }],
     shareCode: { type: String, unique: true, sparse: true, index: true },
     authorName: { type: String, default: '' },
+    isLive: { type: Boolean, default: false, index: true },
     updatedAt: { type: Date, default: Date.now },
     trashedAt: { type: Date }, // Date when the note was moved to trash
     _version: { type: Number, default: 1 } // Monotonic version vector for multi-device sync
 }, { collection: 'notes' });
 
-// Auto-generate unique shareCode if missing
+// Auto-generate unique shareCode if note is marked live and shareCode is missing
 noteSchema.pre('save', function (next) {
-    if (!this.shareCode) {
+    if (this.isLive && !this.shareCode) {
         const crypto = require('crypto');
         this.shareCode = 'collab-' + crypto.randomBytes(6).toString('hex');
     }

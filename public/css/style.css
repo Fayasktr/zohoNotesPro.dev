@@ -1755,3 +1755,98 @@ body.light-theme #add-folder-sidebar {
     margin-left: 6px;
     flex-shrink: 0;
 }
+
+/* Live Notes Sidebar Section */
+.live-notes-section {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color);
+}
+
+.live-note-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-dim);
+    border: 1px solid transparent;
+}
+
+.live-note-item:hover {
+    background: var(--card-bg);
+    color: var(--text-main);
+    border-color: rgba(244, 63, 94, 0.2);
+}
+
+.live-note-item.active {
+    background: rgba(244, 63, 94, 0.12);
+    color: #f43f5e;
+    border-color: rgba(244, 63, 94, 0.35);
+    font-weight: 600;
+}
+
+.live-badge-host {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: rgba(244, 63, 94, 0.2);
+    color: #fb7185;
+    padding: 1px 5px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+}
+
+.live-badge-guest {
+    font-size: 9px;
+    font-weight: 600;
+    background: rgba(109, 93, 252, 0.2);
+    color: #a49aff;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+/* Collab Host Offline Overlay */
+.collab-host-offline-overlay {
+    position: absolute;
+    top: 52px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background: rgba(10, 10, 15, 0.82);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    border-radius: 16px;
+    animation: fadeInOverlay 0.25s ease-out;
+}
+
+.collab-host-offline-overlay.hidden {
+    display: none !important;
+}
+
+@keyframes fadeInOverlay {
+    from { opacity: 0; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.collab-offline-card {
+    background: rgba(20, 20, 28, 0.95);
+    border: 1px solid rgba(244, 63, 94, 0.3);
+    border-radius: 20px;
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 24px rgba(244, 63, 94, 0.15);
+    max-width: 360px;
+    width: 100%;
+}

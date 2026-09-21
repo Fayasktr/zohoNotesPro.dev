@@ -30,6 +30,11 @@
             this.myPresenceRef = null;
             this.isConnected = false;
 
+            this.isHost = false;
+            this.hostRef = null;
+            this.hostOnline = false;
+            this.hostInfo = null;
+
             // Local user profile
             this.currentUser = {
                 id: 'anon_' + Math.random().toString(36).substring(2, 8),
@@ -39,6 +44,7 @@
 
             // Callbacks
             this.onPresenceChanged = null; // (usersList, count) => {}
+            this.onHostStatusChanged = null; // (isOnline, hostInfo) => {}
             this.onRemoteEdit = null;     // (cellId, changes, senderId) => {}
             this.onRemoteCursor = null;   // (peerUser) => {}
             this.onRemoteCellAdded = null; // (cell) => {}
@@ -89,13 +95,13 @@
         }
 
         /**
-         * Connect to a specific notebook session
+         * Connect to a specific live notebook session
          */
-        async connectToNote(noteId, user = null) {
+        async connectToNote(noteId, user = null, isHost = false) {
             if (!noteId) return;
 
-            // If already connected to this note, nothing to do
-            if (this.isConnected && this.noteId === noteId) return;
+            // If already connected to this note with same role, nothing to do
+            if (this.isConnected && this.noteId === noteId && this.isHost === isHost) return;
 
             // Disconnect old note if switching
             if (this.isConnected) {
@@ -106,6 +112,7 @@
             if (!this.db) return;
 
             this.noteId = noteId;
+            this.isHost = !!isHost;
 
             // Setup local user identity
             if (user && user.id) {
@@ -128,6 +135,7 @@
                 id: this.currentUser.id,
                 username: this.currentUser.username,
                 color: this.currentUser.color,
+                isHost: this.isHost,
                 activeCellId: null,
                 cursor: null,
                 selection: null,
@@ -139,6 +147,40 @@
 
             // Automatically remove presence on disconnect
             this.myPresenceRef.onDisconnect().remove();
+
+            // Host Presence Management
+            this.hostRef = this.noteRef.child('host');
+            if (this.isHost) {
+                await this.hostRef.set({
+                    userId: this.currentUser.id,
+                    username: this.currentUser.username,
+                    isOnline: true,
+                    lastSeen: firebase.database.ServerValue.TIMESTAMP
+                });
+                this.hostRef.onDisconnect().update({
+                    isOnline: false,
+                    lastSeen: firebase.database.ServerValue.TIMESTAMP
+                });
+                this.hostOnline = true;
+                this.hostInfo = {
+                    userId: this.currentUser.id,
+                    username: this.currentUser.username,
+                    isOnline: true
+                };
+                if (typeof this.onHostStatusChanged === 'function') {
+                    this.onHostStatusChanged(true, this.hostInfo);
+                }
+            } else {
+                // Collaborator / Guest: Listen for host's presence
+                this.hostRef.on('value', (snapshot) => {
+                    const host = snapshot.val();
+                    this.hostInfo = host;
+                    this.hostOnline = !!(host && host.isOnline === true);
+                    if (typeof this.onHostStatusChanged === 'function') {
+                        this.onHostStatusChanged(this.hostOnline, this.hostInfo);
+                    }
+                });
+            }
 
             // 1. Listen for Presence changes (Active Users Counter & Avatars)
             this.presenceRef.on('value', (snapshot) => {
@@ -163,6 +205,7 @@
             editsRef.limitToLast(20).on('child_added', (snapshot) => {
                 const edit = snapshot.val();
                 if (!edit || edit.senderId === this.currentUser.id) return;
+                if (!this.isHost && !this.hostOnline) return;
 
                 if (typeof this.onRemoteEdit === 'function') {
                     this.onRemoteEdit(edit.cellId, edit.changes, edit.senderId);
@@ -174,6 +217,7 @@
             structureRef.limitToLast(10).on('child_added', (snapshot) => {
                 const event = snapshot.val();
                 if (!event || event.senderId === this.currentUser.id) return;
+                if (!this.isHost && !this.hostOnline) return;
 
                 if (event.action === 'add' && typeof this.onRemoteCellAdded === 'function') {
                     this.onRemoteCellAdded(event.cell);
@@ -188,6 +232,7 @@
                 const execData = snapshot.val();
                 const cellId = snapshot.key;
                 if (!execData || execData.runnerId === this.currentUser.id) return;
+                if (!this.isHost && !this.hostOnline) return;
 
                 if (typeof this.onRemoteExecution === 'function') {
                     this.onRemoteExecution(cellId, execData);
@@ -197,6 +242,7 @@
                 const execData = snapshot.val();
                 const cellId = snapshot.key;
                 if (!execData || execData.runnerId === this.currentUser.id) return;
+                if (!this.isHost && !this.hostOnline) return;
 
                 if (typeof this.onRemoteExecution === 'function') {
                     this.onRemoteExecution(cellId, execData);
@@ -208,6 +254,7 @@
             streamRef.limitToLast(50).on('child_added', (snapshot) => {
                 const log = snapshot.val();
                 if (!log || log.senderId === this.currentUser.id) return;
+                if (!this.isHost && !this.hostOnline) return;
 
                 if (typeof this.onRemoteLogChunk === 'function') {
                     this.onRemoteLogChunk(log.cellId, log.text);
@@ -229,6 +276,17 @@
                     await this.myPresenceRef.remove();
                 }
                 if (this.presenceRef) this.presenceRef.off();
+                if (this.hostRef) {
+                    if (this.isHost) {
+                        try {
+                            await this.hostRef.update({
+                                isOnline: false,
+                                lastSeen: firebase.database.ServerValue.TIMESTAMP
+                            });
+                        } catch (err) { }
+                    }
+                    this.hostRef.off();
+                }
                 if (this.noteRef) {
                     this.noteRef.child('edits').off();
                     this.noteRef.child('structure_events').off();
@@ -243,6 +301,10 @@
                 this.noteRef = null;
                 this.presenceRef = null;
                 this.myPresenceRef = null;
+                this.hostRef = null;
+                this.isHost = false;
+                this.hostOnline = false;
+                this.hostInfo = null;
             }
         }
 
@@ -251,6 +313,7 @@
          */
         broadcastCursor(cellId, position, selection = null) {
             if (!this.isConnected || !this.myPresenceRef) return;
+            if (!this.isHost && !this.hostOnline) return;
 
             if (this.cursorDebounce) clearTimeout(this.cursorDebounce);
             this.cursorDebounce = setTimeout(() => {
@@ -275,6 +338,7 @@
          */
         broadcastEdit(cellId, changes) {
             if (!this.isConnected || !this.noteRef || this.suppressLocalEdits || !changes || !changes.length) return;
+            if (!this.isHost && !this.hostOnline) return;
 
             try {
                 // Serialize changes
@@ -306,6 +370,7 @@
          */
         broadcastCellAdded(cell) {
             if (!this.isConnected || !this.noteRef || !cell) return;
+            if (!this.isHost && !this.hostOnline) return;
             try {
                 this.noteRef.child('structure_events').push({
                     action: 'add',
@@ -328,6 +393,7 @@
          */
         broadcastCellDeleted(cellId) {
             if (!this.isConnected || !this.noteRef || !cellId) return;
+            if (!this.isHost && !this.hostOnline) return;
             try {
                 this.noteRef.child('structure_events').push({
                     action: 'delete',
@@ -343,6 +409,7 @@
          */
         broadcastExecutionStart(cellId) {
             if (!this.isConnected || !this.noteRef || !cellId) return;
+            if (!this.isHost && !this.hostOnline) return;
             try {
                 // Clear old logs first
                 this.noteRef.child(`log_streams`).remove();
@@ -361,6 +428,7 @@
          */
         broadcastLogChunk(cellId, text) {
             if (!this.isConnected || !this.noteRef || !cellId || !text) return;
+            if (!this.isHost && !this.hostOnline) return;
             try {
                 this.noteRef.child('log_streams').push({
                     cellId,
@@ -376,6 +444,7 @@
          */
         broadcastExecutionComplete(cellId, output, success = true) {
             if (!this.isConnected || !this.noteRef || !cellId) return;
+            if (!this.isHost && !this.hostOnline) return;
             try {
                 this.noteRef.child(`executions/${cellId}`).set({
                     status: success ? 'completed' : 'error',

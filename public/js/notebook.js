@@ -257,6 +257,20 @@ class NotebookApp {
             this.createFolder();
         });
 
+        // Wire Live Notes Section
+        document.getElementById('toggle-live-notes')?.addEventListener('click', (e) => {
+            if (e.target.closest('#btn-create-live-note')) return;
+            const list = document.getElementById('live-notes-list');
+            const chevron = document.getElementById('chevron-live-notes');
+            if (list) list.classList.toggle('hidden');
+            if (chevron) chevron.classList.toggle('rotate-180');
+        });
+
+        document.getElementById('btn-create-live-note')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.createLiveNotebook();
+        });
+
         const titleInput = document.getElementById('notebook-title');
         titleInput.addEventListener('input', (e) => {
             this.notebook.title = e.target.value;
@@ -573,6 +587,28 @@ class NotebookApp {
     setupCollabEngine() {
         if (!this.collab) return;
 
+        // 0. Host presence status changed: gate guest collaboration when host is offline
+        this.collab.onHostStatusChanged = (isOnline, hostInfo) => {
+            const overlay = document.getElementById('collab-host-offline-overlay');
+            const hostNameEl = document.getElementById('collab-offline-host-name');
+            if (hostNameEl && hostInfo && hostInfo.username) {
+                hostNameEl.innerText = '@' + hostInfo.username;
+            }
+
+            if (this.collab.isHost) {
+                if (overlay) overlay.classList.add('hidden');
+                this.setEditorsReadOnly(false);
+            } else {
+                if (isOnline) {
+                    if (overlay) overlay.classList.add('hidden');
+                    this.setEditorsReadOnly(false);
+                } else {
+                    if (overlay) overlay.classList.remove('hidden');
+                    this.setEditorsReadOnly(true);
+                }
+            }
+        };
+
         // 1. Presence changed: update top collaboration bar with active users count and avatars
         this.collab.onPresenceChanged = (users, count) => {
             const countEl = document.getElementById('collab-user-count');
@@ -581,7 +617,7 @@ class NotebookApp {
 
             if (countEl) countEl.innerText = count;
             if (topBar) {
-                if (this.notebook && this.notebook.id) topBar.classList.remove('hidden');
+                if (this.notebook && this.notebook.id && this.notebook.isLive) topBar.classList.remove('hidden');
                 else topBar.classList.add('hidden');
             }
 
@@ -775,6 +811,14 @@ class NotebookApp {
         });
     }
 
+    setEditorsReadOnly(readOnly) {
+        Object.values(this.editors).forEach(editor => {
+            if (editor && typeof editor.updateOptions === 'function') {
+                editor.updateOptions({ readOnly });
+            }
+        });
+    }
+
     async copyCollabShareLink() {
         if (!this.notebook || !this.notebook.id) return;
         const btnText = document.getElementById('collab-share-btn-text');
@@ -811,7 +855,7 @@ class NotebookApp {
     updateCollabTopBar() {
         const topBar = document.getElementById('collab-top-bar');
         const authorEl = document.getElementById('collab-author-info');
-        if (!this.notebook || !this.notebook.id) {
+        if (!this.notebook || !this.notebook.id || !this.notebook.isLive) {
             if (topBar) topBar.classList.add('hidden');
             return;
         }
@@ -819,8 +863,9 @@ class NotebookApp {
         if (topBar) topBar.classList.remove('hidden');
 
         if (authorEl) {
-            const author = this.notebook.authorName || (this.notebook.isShared ? 'Collaborator' : (window.CURRENT_USER?.username || 'You'));
-            authorEl.innerText = `Created by @${author}`;
+            const isHost = (String(this.notebook.owner) === String(window.CURRENT_USER?.id));
+            const author = this.notebook.authorName || (isHost ? `${window.CURRENT_USER?.username || 'You'} (Host)` : 'Host');
+            authorEl.innerText = `Host: @${author}`;
         }
     }
 
@@ -1261,6 +1306,7 @@ class NotebookApp {
             this.filteredNotebooks = list || [];
             this.renderNotebookList(this.allNotebooks);
             this.fetchAndRenderSharedNotes();
+            this.fetchAndRenderLiveNotes();
             return this.allNotebooks;
         } catch (e) {
             console.error('Failed to load notebook list', e);
@@ -1272,6 +1318,7 @@ class NotebookApp {
                         this.filteredNotebooks = fallback;
                         this.renderNotebookList(fallback);
                         this.fetchAndRenderSharedNotes();
+                        this.fetchAndRenderLiveNotes();
                         return fallback;
                     }
                 } catch (err) { }
@@ -1332,6 +1379,128 @@ class NotebookApp {
         });
 
         if (window.lucide) lucide.createIcons();
+    }
+
+    async fetchAndRenderLiveNotes() {
+        try {
+            const res = await this.safeFetch('/api/notes/live');
+            if (res.ok) {
+                const data = await res.json();
+                this.liveNotebooks = data || { hosted: [], joined: [] };
+                this.renderLiveNotesList(this.liveNotebooks);
+            }
+        } catch (e) {
+            console.warn('[NotebookApp] Failed to load live notes:', e);
+        }
+    }
+
+    renderLiveNotesList(data) {
+        const listEl = document.getElementById('live-notes-list');
+        if (!listEl) return;
+        listEl.innerHTML = '';
+
+        const hosted = (data && data.hosted) || [];
+        const joined = (data && data.joined) || [];
+
+        if (hosted.length === 0 && joined.length === 0) {
+            listEl.innerHTML = `
+                <div style="font-size: 11px; color: var(--text-dim); padding: 6px 10px; font-style: italic;">
+                    No live notes yet. Click "+ New Live" to create one!
+                </div>
+            `;
+            return;
+        }
+
+        // Render Hosted live notes
+        hosted.forEach(note => {
+            const item = document.createElement('div');
+            item.className = 'live-note-item group';
+            const isActive = this.notebook && this.notebook.id === note.id;
+            if (isActive) item.classList.add('active');
+
+            item.innerHTML = `
+                <div class="flex items-center gap-2 overflow-hidden flex-1">
+                    <span class="relative flex h-2 w-2 flex-shrink-0">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                    </span>
+                    <span class="truncate text-xs text-[var(--text-main)]" title="${note.title || 'Live Session'}">${note.title || 'Untitled Live'}</span>
+                </div>
+                <span class="live-badge-host">Host</span>
+            `;
+
+            item.onclick = () => {
+                this.loadNotebook(note.id);
+            };
+
+            listEl.appendChild(item);
+        });
+
+        // Render Joined live notes
+        joined.forEach(note => {
+            const item = document.createElement('div');
+            item.className = 'live-note-item group';
+            const isActive = this.notebook && this.notebook.id === note.id;
+            if (isActive) item.classList.add('active');
+
+            item.innerHTML = `
+                <div class="flex items-center gap-2 overflow-hidden flex-1">
+                    <span class="relative flex h-2 w-2 flex-shrink-0">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                    </span>
+                    <span class="truncate text-xs text-[var(--text-main)]" title="${note.title || 'Live Session'}">${note.title || 'Untitled Live'}</span>
+                </div>
+                <span class="live-badge-guest">@${note.authorName || 'Host'}</span>
+            `;
+
+            item.onclick = () => {
+                note.isShared = true;
+                this.loadNotebook(note.id);
+            };
+
+            listEl.appendChild(item);
+        });
+
+        if (window.lucide) lucide.createIcons();
+    }
+
+    async createLiveNotebook(title = null) {
+        try {
+            const noteTitle = title || prompt('Enter title for Live Note:', 'Live Coding Session');
+            if (noteTitle === null) return; // User cancelled
+
+            const res = await this.safeFetch('/api/notes/live', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: noteTitle.trim() || 'Live Coding Session',
+                    cells: [{
+                        id: 'cell-' + Date.now(),
+                        type: 'code',
+                        lang: this.userSettings?.defaultLanguage || 'javascript',
+                        title: 'Live Cell 1',
+                        content: '// Welcome to live collaborative coding!\nconsole.log("Hello from live session!");',
+                        output: null
+                    }]
+                })
+            });
+
+            if (res.ok) {
+                const newLiveNote = await res.json();
+                if (this.db) {
+                    await this.db.putNote(newLiveNote, { hasFullContent: true });
+                }
+                await this.fetchAndRenderLiveNotes();
+                await this.loadNotebook(newLiveNote.id);
+            } else {
+                const err = await res.json();
+                alert('Failed to create live note: ' + (err.error || 'Server error'));
+            }
+        } catch (e) {
+            console.error('Failed to create live notebook:', e);
+            alert('Could not create live note: ' + e.message);
+        }
     }
 
     filterNotebooks(query) {
@@ -1572,9 +1741,23 @@ class NotebookApp {
                 this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
             }
 
-            if (this.collab) {
-                this.collab.connectToNote(id, window.CURRENT_USER);
-                this.updateCollabTopBar();
+            const topBar = document.getElementById('collab-top-bar');
+            const offlineOverlay = document.getElementById('collab-host-offline-overlay');
+
+            if (this.notebook && this.notebook.isLive) {
+                if (topBar) topBar.classList.remove('hidden');
+                if (this.collab) {
+                    const isHost = (String(this.notebook.owner) === String(window.CURRENT_USER?.id));
+                    await this.collab.connectToNote(id, window.CURRENT_USER, isHost);
+                    this.updateCollabTopBar();
+                }
+            } else {
+                if (topBar) topBar.classList.add('hidden');
+                if (offlineOverlay) offlineOverlay.classList.add('hidden');
+                if (this.collab) {
+                    await this.collab.disconnect();
+                }
+                this.setEditorsReadOnly(false);
             }
 
             if (targetCellId) {
@@ -1704,6 +1887,11 @@ class NotebookApp {
 
 
     addCell(type, content = '') {
+        if (this.notebook && this.notebook.isLive && this.collab && !this.collab.isHost && !this.collab.hostOnline) {
+            alert('Host is currently offline. Adding cells is paused until host reconnects.');
+            return;
+        }
+
         const cellId = 'cell-' + Math.random().toString(36).substr(2, 9);
         const lang = type === 'code' ? (this.userSettings.defaultLanguage || 'javascript') : 'markdown';
 
@@ -1906,6 +2094,7 @@ class NotebookApp {
                 theme: 'vs-dark-plus',
                 automaticLayout: true,
                 minimap: { enabled: false },
+                readOnly: !!(this.notebook && this.notebook.isLive && this.collab && !this.collab.isHost && !this.collab.hostOnline),
                 scrollBeyondLastLine: false,
                 fontSize: 14,
                 lineNumbers: isMark ? 'off' : 'on',
@@ -2122,6 +2311,11 @@ class NotebookApp {
     }
 
     async runCell(cellId) {
+        if (this.notebook && this.notebook.isLive && this.collab && !this.collab.isHost && !this.collab.hostOnline) {
+            alert('Host is currently offline. Code execution is paused until host reconnects.');
+            return;
+        }
+
         const cell = this.notebook.cells.find(c => c.id === cellId);
         if (!cell || cell.type !== 'code') return;
         const editor = this.editors[cellId];
@@ -2585,6 +2779,11 @@ class NotebookApp {
     }
 
     async deleteCell(cellId) {
+        if (this.notebook && this.notebook.isLive && this.collab && !this.collab.isHost && !this.collab.hostOnline) {
+            alert('Host is currently offline. Deleting cells is paused until host reconnects.');
+            return;
+        }
+
         this.confirmAction('Delete Note?', 'Are you sure you want to remove this cell?', async () => {
             const cellIndex = this.notebook.cells.findIndex(c => c.id === cellId);
             if (cellIndex === -1) return;

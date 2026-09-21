@@ -93,11 +93,13 @@ function resolvePushItem(existing, incoming, options = {}) {
             _version: nextVersion,
             shareCode: shareCode,
             authorName: (existing && existing.authorName) ? existing.authorName : (note.authorName || ''),
+            isLive: !!(note.isLive || (existing && existing.isLive)),
             content: {
                 id: note.id,
                 title: note.title || 'Untitled Notebook',
                 folder: note.folder || 'root',
                 isStarred: !!note.isStarred,
+                isLive: !!(note.isLive || (existing && existing.isLive)),
                 cells: clientCells,
                 tags: Array.isArray(note.tags) ? note.tags : (note.content && Array.isArray(note.content.tags) ? note.content.tags : [])
             },
@@ -121,7 +123,8 @@ function formatServerNote(n) {
         _version: typeof n._version === 'number' ? n._version : 1,
         owner: String(n.owner),
         shareCode: n.shareCode || '',
-        authorName: n.authorName || ''
+        authorName: n.authorName || '',
+        isLive: !!n.isLive
     };
 }
 
@@ -155,7 +158,8 @@ router.get('/hydrate', async (req, res) => {
             _version: typeof n._version === 'number' ? n._version : 1,
             owner: String(n.owner),
             shareCode: n.shareCode || '',
-            authorName: n.authorName || ''
+            authorName: n.authorName || '',
+            isLive: !!n.isLive
         }));
 
         res.json({
@@ -185,7 +189,7 @@ router.get('/manifest', async (req, res) => {
                 { owner: userId },
                 { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }
             ]
-        }, 'id title folder isStarred isTrashed trashedAt updatedAt _version owner shareCode authorName').sort({ updatedAt: -1 }).lean();
+        }, 'id title folder isStarred isTrashed trashedAt updatedAt _version owner shareCode authorName isLive').sort({ updatedAt: -1 }).lean();
 
         const manifest = notes.map(n => ({
             id: n.id,
@@ -198,7 +202,8 @@ router.get('/manifest', async (req, res) => {
             _version: typeof n._version === 'number' ? n._version : 1,
             owner: String(n.owner),
             shareCode: n.shareCode || '',
-            authorName: n.authorName || ''
+            authorName: n.authorName || '',
+            isLive: !!n.isLive
         }));
 
         res.json(manifest);

@@ -749,6 +749,112 @@ app.get('/note/join/:shareCode', async (req, res) => {
     }
 });
 
+// --- API: FETCH ALL LIVE NOTES (HOSTED + JOINED) ---
+app.get('/api/notes/live', isAuthenticated, async (req, res) => {
+    try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const liveNotes = await Note.find({
+            isLive: true,
+            isTrashed: { $ne: true },
+            $or: [
+                { owner: userId },
+                { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }
+            ]
+        }).populate('owner', 'username email').sort({ updatedAt: -1 }).lean();
+
+        const hosted = [];
+        const joined = [];
+
+        liveNotes.forEach(n => {
+            const isOwner = String(n.owner?._id || n.owner) === String(userId);
+            const item = {
+                id: n.id,
+                title: n.title || 'Live Coding Session',
+                isLive: true,
+                shareCode: n.shareCode || '',
+                shareUrl: `${req.protocol}://${req.get('host')}/note/join/${n.shareCode}`,
+                authorName: n.owner?.username || n.authorName || 'Host',
+                isOwner: isOwner,
+                updatedAt: n.updatedAt ? new Date(n.updatedAt).getTime() : Date.now(),
+                owner: String(n.owner?._id || n.owner)
+            };
+            if (isOwner) {
+                hosted.push(item);
+            } else {
+                joined.push(item);
+            }
+        });
+
+        res.json({ hosted, joined });
+    } catch (err) {
+        console.error('[LiveNotes] Error fetching live notes:', err);
+        res.status(500).json({ error: 'Failed to fetch live notes' });
+    }
+});
+
+// --- API: CREATE A NEW DEDICATED LIVE NOTE ---
+app.post('/api/notes/live', isAuthenticated, async (req, res) => {
+    try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        const userDoc = await User.findById(userId);
+        const title = (req.body.title || '').trim() || 'Live Coding Session';
+        const defaultLang = userDoc?.settings?.defaultLanguage || 'javascript';
+
+        const noteId = 'live-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+        const crypto = require('crypto');
+        const shareCode = 'collab-' + crypto.randomBytes(6).toString('hex');
+
+        const initialCells = [
+            {
+                id: 'cell-' + Math.random().toString(36).substring(2, 9),
+                type: 'code',
+                lang: defaultLang,
+                title: 'Live Workspace',
+                isStarred: false,
+                content: defaultLang === 'python' ? 'print("Welcome to Live Coding!")' : 'console.log("Welcome to Live Coding!");',
+                output: null
+            }
+        ];
+
+        const note = await Note.create({
+            id: noteId,
+            title: title,
+            folder: 'root',
+            owner: userId,
+            authorName: userDoc ? userDoc.username : 'Host',
+            isLive: true,
+            shareCode: shareCode,
+            content: {
+                id: noteId,
+                title: title,
+                folder: 'root',
+                isLive: true,
+                cells: initialCells,
+                tags: []
+            }
+        });
+
+        const shareUrl = `${req.protocol}://${req.get('host')}/note/join/${note.shareCode}`;
+
+        res.json({
+            id: note.id,
+            title: note.title,
+            isLive: true,
+            shareCode: note.shareCode,
+            shareUrl: shareUrl,
+            authorName: note.authorName,
+            isOwner: true,
+            cells: initialCells,
+            owner: String(userId)
+        });
+    } catch (err) {
+        console.error('[LiveNotes] Error creating live note:', err);
+        res.status(500).json({ error: 'Failed to create live note' });
+    }
+});
+
 // --- API: FETCH SHARED WITH ME NOTES ---
 app.get('/api/notes/shared', isAuthenticated, async (req, res) => {
     try {
@@ -914,18 +1020,20 @@ app.get('/api/notebooks', isAuthenticated, async (req, res) => {
     try {
         const userId = req.session.userId || (req.user ? req.user._id : null);
 
-        // Find notebooks owned by the user
+        // Find notebooks owned by the user (only normal notes)
         const ownedNotes = await Note.find({
             owner: userId,
+            isLive: { $ne: true },
             isTrashed: { $ne: true }
-        }, 'id title folder isStarred updatedAt').sort({ updatedAt: -1 }).lean();
+        }, 'id title folder isStarred updatedAt isLive').sort({ updatedAt: -1 }).lean();
 
-        // Find notebooks shared with the user (accepted)
+        // Find notebooks shared with the user (only normal notes)
         const sharedNotes = await Note.find({
             'collaborators.user': userId,
             'collaborators.status': 'accepted',
+            isLive: { $ne: true },
             isTrashed: { $ne: true }
-        }, 'id title folder isStarred updatedAt owner').populate('owner', 'username').lean();
+        }, 'id title folder isStarred updatedAt owner isLive').populate('owner', 'username').lean();
 
         // Combine and mark shared ones
         const allNotes = [
