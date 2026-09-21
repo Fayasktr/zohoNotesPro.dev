@@ -456,7 +456,9 @@ app.post('/signup', async (req, res) => {
         req.session.userId = user._id;
         req.session.username = user.username;
         req.session.role = user.role;
-        res.redirect('/');
+        const returnUrl = req.session.returnTo || '/';
+        delete req.session.returnTo;
+        res.redirect(returnUrl);
     } catch (err) {
         res.render('signup', {
             title: 'Sign Up - Zoho Notes',
@@ -473,7 +475,9 @@ app.get('/auth/google/callback',
     passport.authenticate('google', { failureRedirect: '/login' }),
     (req, res) => {
         // Successful authentication
-        res.redirect('/');
+        const returnUrl = req.session.returnTo || '/';
+        delete req.session.returnTo;
+        res.redirect(returnUrl);
     }
 );
 
@@ -482,13 +486,15 @@ app.get('/login', (req, res) => {
         return req.session.role === 'admin' ? res.redirect('/admin/dashboard') : res.redirect('/');
     }
     const error = req.query.error;
+    const notice = req.query.notice;
     res.render('login', {
         title: 'Login - Zoho Notes',
         metaTitle: 'Login - Zoho Notes',
         metaDescription: 'Sign in to Zoho Notes to access your interactive polyglot notebooks, run code snippets, and collaborate with your team.',
         metaKeywords: 'zoho notes login, interactive notebook login, python runner login, code editor sign in',
         canonicalUrl: `${req.protocol}://${req.get('host')}/login`,
-        error
+        error,
+        notice
     });
 });
 
@@ -532,7 +538,9 @@ app.post('/login', async (req, res) => {
             if (user.role === 'admin') {
                 res.redirect('/admin/dashboard');
             } else {
-                res.redirect('/');
+                const returnUrl = req.session.returnTo || '/';
+                delete req.session.returnTo;
+                res.redirect(returnUrl);
             }
         } else {
             // Track failures
@@ -667,6 +675,9 @@ app.post('/reset-password/:token', async (req, res) => {
 // --- CORE APP ROUTES ---
 
 app.get('/', isAuthenticated, (req, res) => {
+    const currentUserId = (req.session.userId || (req.user ? req.user._id : null))?.toString();
+    const currentUserEmail = req.user?.email || res.locals.currentUser?.email || '';
+
     res.render('index', {
         title: 'Zoho Notes',
         metaTitle: 'Zoho Notes',
@@ -674,6 +685,9 @@ app.get('/', isAuthenticated, (req, res) => {
         metaKeywords: 'zoho notes, online code runner, polyglot compiler, javascript python java compiler, monaco editor notebook, developer documentation',
         canonicalUrl: `${req.protocol}://${req.get('host')}/`,
         username: res.locals.username,
+        userId: currentUserId,
+        userEmail: currentUserEmail,
+        initialNoteId: req.query.noteId || '',
         isAdmin: req.session.role === 'admin' || (req.user && req.user.role === 'admin'),
         defaultLanguage: res.locals.currentUser?.settings?.defaultLanguage || 'javascript',
         firebaseConfig: {
@@ -686,6 +700,123 @@ app.get('/', isAuthenticated, (req, res) => {
             appId: process.env.FIREBASE_APP_ID || '1:1059658217465:web:6f0a7e1052b6566a07af28'
         }
     });
+});
+
+// --- LIVE COLLABORATION JOIN ROUTE (AUTH-GATED) ---
+app.get('/note/join/:shareCode', async (req, res) => {
+    try {
+        const shareCode = req.params.shareCode;
+        let note = await Note.findOne({ shareCode });
+        if (!note) {
+            return res.status(404).render('error', {
+                title: 'Note Not Found',
+                message: 'This live shared note link is invalid or has expired.'
+            });
+        }
+
+        const currentUserId = req.session.userId || (req.user ? req.user._id : null);
+        if (!currentUserId) {
+            // Unauthenticated: store return target and redirect to login
+            req.session.returnTo = `/note/join/${shareCode}`;
+            return res.redirect(`/login?notice=${encodeURIComponent('Please log in or create an account to collaborate on this live note.')}`);
+        }
+
+        // If the user is the owner, go straight to the note
+        if (note.owner && note.owner.equals(currentUserId)) {
+            return res.redirect(`/?noteId=${note.id}`);
+        }
+
+        // If user is a collaborator, ensure accepted status; otherwise add them
+        const existingCollab = note.collaborators.find(c => c.user && c.user.equals(currentUserId));
+        if (!existingCollab) {
+            const userDoc = await User.findById(currentUserId);
+            note.collaborators.push({
+                user: currentUserId,
+                email: userDoc ? userDoc.email : '',
+                status: 'accepted',
+                joinedAt: new Date()
+            });
+            await note.save();
+        } else if (existingCollab.status !== 'accepted') {
+            existingCollab.status = 'accepted';
+            await note.save();
+        }
+
+        return res.redirect(`/?noteId=${note.id}`);
+    } catch (err) {
+        console.error('[CollabJoin] Join error:', err);
+        return res.redirect('/?error=collab_join_failed');
+    }
+});
+
+// --- API: FETCH SHARED WITH ME NOTES ---
+app.get('/api/notes/shared', isAuthenticated, async (req, res) => {
+    try {
+        const currentUserId = req.session.userId || (req.user ? req.user._id : null);
+        if (!currentUserId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const sharedNotes = await Note.find({
+            'collaborators': { $elemMatch: { user: currentUserId, status: 'accepted' } }
+        }).populate('owner', 'username email').sort({ updatedAt: -1 }).lean();
+
+        const formatted = sharedNotes.map(n => ({
+            id: n.id,
+            title: n.title || 'Untitled Notebook',
+            authorName: n.owner?.username || n.authorName || 'Collaborator',
+            authorEmail: n.owner?.email || '',
+            shareCode: n.shareCode || '',
+            cells: Array.isArray(n.content?.cells) ? n.content.cells : (Array.isArray(n.cells) ? n.cells : []),
+            updatedAt: n.updatedAt ? new Date(n.updatedAt).getTime() : Date.now(),
+            owner: String(n.owner?._id || n.owner)
+        }));
+
+        res.json(formatted);
+    } catch (err) {
+        console.error('[CollabNotes] Error fetching shared notes:', err);
+        res.status(500).json({ error: 'Failed to fetch shared notes' });
+    }
+});
+
+// --- API: GET OR GENERATE LIVE SHARE CODE FOR A NOTE ---
+app.post('/api/notes/:noteId/share-code', isAuthenticated, async (req, res) => {
+    try {
+        const currentUserId = req.session.userId || (req.user ? req.user._id : null);
+        const { noteId } = req.params;
+
+        let note = await Note.findOne({
+            id: noteId,
+            $or: [
+                { owner: currentUserId },
+                { 'collaborators': { $elemMatch: { user: currentUserId, status: 'accepted' } } }
+            ]
+        }).populate('owner', 'username email');
+
+        if (!note) return res.status(404).json({ error: 'Note not found or access denied' });
+
+        if (!note.shareCode) {
+            const crypto = require('crypto');
+            note.shareCode = 'collab-' + crypto.randomBytes(6).toString('hex');
+            if (note.owner && !note.authorName) {
+                note.authorName = note.owner.username || '';
+            }
+            await note.save();
+        }
+
+        const shareUrl = `${req.protocol}://${req.get('host')}/note/join/${note.shareCode}`;
+        const isOwner = note.owner ? (note.owner._id ? note.owner._id.equals(currentUserId) : note.owner.equals(currentUserId)) : false;
+
+        res.json({
+            success: true,
+            noteId: note.id,
+            shareCode: note.shareCode,
+            shareUrl,
+            authorName: note.owner?.username || note.authorName || 'Author',
+            isOwner
+        });
+    } catch (err) {
+        console.error('[ShareCode] Error:', err);
+        res.status(500).json({ error: 'Failed to get share code' });
+    }
 });
 
 // --- LIVE SPECTATOR / BROADCAST VIEW ---

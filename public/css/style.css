@@ -1591,3 +1591,167 @@ body.light-theme #add-folder-sidebar {
         width: 100% !important;
     }
 }
+
+/* ==========================================================================
+   Real-Time Collaboration & Multi-Cursor Styles
+   ========================================================================== */
+
+/* Top Active Collaboration Bar */
+.collab-top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 16px;
+    background: rgba(18, 19, 27, 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    transition: all 0.3s ease;
+}
+
+.collab-presence-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.collab-count-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(48, 255, 106, 0.1);
+    color: #30ff6a;
+    border: 1px solid rgba(48, 255, 106, 0.25);
+}
+
+.collab-avatars-group {
+    display: flex;
+    align-items: center;
+    margin-left: 4px;
+}
+
+.collab-avatar-chip {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 800;
+    color: #fff;
+    border: 2px solid var(--card-bg, #16171f);
+    margin-left: -6px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    position: relative;
+    cursor: default;
+}
+
+.collab-avatar-chip:first-child {
+    margin-left: 0;
+}
+
+.collab-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-collab-share {
+    background: rgba(109, 93, 252, 0.12);
+    border: 1px solid rgba(109, 93, 252, 0.3);
+    color: #8c7eff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+
+.btn-collab-share:hover {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* Monaco Remote Cursor Caret & Flags */
+.remote-cursor-caret {
+    position: absolute;
+    width: 2px !important;
+    height: 100% !important;
+    pointer-events: none;
+    animation: remoteCursorBlink 1.2s infinite ease-in-out;
+}
+
+@keyframes remoteCursorBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.remote-cursor-label {
+    position: absolute;
+    top: -18px;
+    left: -2px;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #ffffff;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 50;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+
+.remote-selection-highlight {
+    opacity: 0.22;
+    border-radius: 2px;
+}
+
+/* Sidebar "Shared with Me" Section */
+.shared-tree-section {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+.shared-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    padding: 4px 10px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.shared-section-header:hover {
+    color: var(--text-main);
+}
+
+.shared-note-author-tag {
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: rgba(109, 93, 252, 0.15);
+    color: #a49aff;
+    font-weight: 600;
+    margin-left: 6px;
+    flex-shrink: 0;
+}

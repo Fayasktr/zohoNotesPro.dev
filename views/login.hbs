@@ -250,6 +250,13 @@
         <div class="error-msg">{{error}}</div>
         {{/if}}
 
+        {{#if notice}}
+        <div style="background: rgba(109, 93, 252, 0.15); color: #a49aff; border: 1px solid rgba(109, 93, 252, 0.3); padding: 12px; border-radius: 10px; font-size: 13px; margin-bottom: 20px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <i data-lucide="info" style="width: 16px; height: 16px; flex-shrink: 0;"></i>
+            <span>{{notice}}</span>
+        </div>
+        {{/if}}
+
         <form action="/login" method="POST">
             <input type="hidden" name="_csrf" value="{{csrfToken}}">
             <div class="form-group">

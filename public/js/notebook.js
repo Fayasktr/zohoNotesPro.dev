@@ -32,6 +32,9 @@ class NotebookApp {
         this.sync = window.ZohoBackupEngine || window.ZohoSyncEngine;
         this.engine = window.ZohoBrowserEngine;
         this.broadcaster = window.ZohoBroadcastEngine;
+        this.collab = window.ZohoCollabEngine;
+        this.remoteDecorations = {}; // cellId -> { peerId -> decorationIds[] }
+        this.sharedNotebooks = [];
 
         this.expandedFolders = new Set(JSON.parse(localStorage.getItem('zoho-expanded-folders') || '[]'));
         this.persistedFolders = this.getPersistedFolders();
@@ -41,6 +44,7 @@ class NotebookApp {
         this.setupSmartOutput();
         this.setupEventListeners();
         this.setupBroadcastEngine();
+        this.setupCollabEngine();
         this.setupMobileSidebar();
         this.initSplitJS();
         this.setupConsoleInterception();
@@ -158,6 +162,11 @@ class NotebookApp {
 
         // Fetch local notes first with zero network delay
         let notebooks = await this.refreshNotebookList(false);
+
+        if (window.INITIAL_NOTE_ID) {
+            await this.loadNotebook(window.INITIAL_NOTE_ID);
+            return;
+        }
 
         const savedId = localStorage.getItem('zoho-notebook-current-id');
         if (savedId) {
@@ -559,6 +568,260 @@ class NotebookApp {
                 alert('Invalid JSON: ' + err.message);
             }
         });
+    }
+
+    setupCollabEngine() {
+        if (!this.collab) return;
+
+        // 1. Presence changed: update top collaboration bar with active users count and avatars
+        this.collab.onPresenceChanged = (users, count) => {
+            const countEl = document.getElementById('collab-user-count');
+            const avatarsContainer = document.getElementById('collab-avatars');
+            const topBar = document.getElementById('collab-top-bar');
+
+            if (countEl) countEl.innerText = count;
+            if (topBar) {
+                if (this.notebook && this.notebook.id) topBar.classList.remove('hidden');
+                else topBar.classList.add('hidden');
+            }
+
+            if (avatarsContainer) {
+                avatarsContainer.innerHTML = '';
+                users.forEach(u => {
+                    const chip = document.createElement('div');
+                    chip.className = 'collab-avatar-chip';
+                    chip.style.backgroundColor = u.color || '#6d5dfc';
+                    chip.title = `${u.username || 'User'}${u.id === this.collab.currentUser.id ? ' (You)' : ''}`;
+                    chip.innerText = (u.username || 'U').charAt(0).toUpperCase();
+                    avatarsContainer.appendChild(chip);
+                });
+            }
+        };
+
+        // 2. Remote edits: apply non-conflicting operational changes to Monaco
+        this.collab.onRemoteEdit = (cellId, changes, senderId) => {
+            const editor = this.editors[cellId];
+            if (!editor || !changes || !changes.length) return;
+
+            try {
+                const monacoEdits = changes.map(c => ({
+                    range: new monaco.Range(
+                        c.range.startLineNumber,
+                        c.range.startColumn,
+                        c.range.endLineNumber,
+                        c.range.endColumn
+                    ),
+                    text: c.text,
+                    forceMoveMarkers: true
+                }));
+
+                this.collab.suppressLocalEdits = true;
+                editor.executeEdits('remote-peer', monacoEdits);
+                this.collab.suppressLocalEdits = false;
+
+                // Sync internal cell content
+                const cell = this.notebook?.cells?.find(c => c.id === cellId);
+                if (cell) {
+                    cell.content = editor.getValue();
+                }
+            } catch (err) {
+                console.warn('[Collab] Failed to apply remote edit:', err);
+                this.collab.suppressLocalEdits = false;
+            }
+        };
+
+        // 3. Remote cursor & selection: render colored caret lines and name tags
+        this.collab.onRemoteCursor = (peer) => {
+            if (!peer || !peer.activeCellId || !peer.cursor) {
+                // Clear any leftover decorations for this peer across all editors
+                Object.keys(this.editors).forEach(cId => {
+                    if (this.remoteDecorations[cId] && this.remoteDecorations[cId][peer.id]) {
+                        const editor = this.editors[cId];
+                        if (editor) editor.deltaDecorations(this.remoteDecorations[cId][peer.id], []);
+                        delete this.remoteDecorations[cId][peer.id];
+                    }
+                });
+                return;
+            }
+
+            const targetCellId = peer.activeCellId;
+            const editor = this.editors[targetCellId];
+            if (!editor) return;
+
+            // Ensure store initialized
+            if (!this.remoteDecorations[targetCellId]) this.remoteDecorations[targetCellId] = {};
+            const oldDecs = this.remoteDecorations[targetCellId][peer.id] || [];
+
+            // Clear this peer's decorations on other cells
+            Object.keys(this.editors).forEach(cId => {
+                if (cId !== targetCellId && this.remoteDecorations[cId] && this.remoteDecorations[cId][peer.id]) {
+                    this.editors[cId].deltaDecorations(this.remoteDecorations[cId][peer.id], []);
+                    delete this.remoteDecorations[cId][peer.id];
+                }
+            });
+
+            // Prepare decoration for cursor and optional selection
+            const decs = [];
+            const pos = peer.cursor;
+            decs.push({
+                range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column),
+                options: {
+                    className: 'remote-cursor-caret',
+                    hoverMessage: { value: `**${peer.username || 'User'}** is here` },
+                    before: {
+                        content: peer.username || 'User',
+                        inlineClassName: 'remote-cursor-label'
+                    }
+                }
+            });
+
+            if (peer.selection) {
+                const sel = peer.selection;
+                decs.push({
+                    range: new monaco.Range(sel.startLineNumber, sel.startColumn, sel.endLineNumber, sel.endColumn),
+                    options: {
+                        className: 'remote-selection-highlight'
+                    }
+                });
+            }
+
+            try {
+                this.remoteDecorations[targetCellId][peer.id] = editor.deltaDecorations(oldDecs, decs);
+            } catch (e) { }
+        };
+
+        // 4. Remote cell added: mount and render new cell in DOM
+        this.collab.onRemoteCellAdded = (cell) => {
+            if (!this.notebook || !Array.isArray(this.notebook.cells)) return;
+            const exists = this.notebook.cells.some(c => c.id === cell.id);
+            if (exists) return;
+
+            this.notebook.cells.push(cell);
+            this.renderCell(cell, this.notebook.cells.length);
+            this._autoSave();
+            if (window.lucide) lucide.createIcons();
+        };
+
+        // 5. Remote cell deleted
+        this.collab.onRemoteCellDeleted = (cellId) => {
+            if (!this.notebook || !Array.isArray(this.notebook.cells)) return;
+            const idx = this.notebook.cells.findIndex(c => c.id === cellId);
+            if (idx !== -1) {
+                this.notebook.cells.splice(idx, 1);
+                const elem = document.getElementById(`container-${cellId}`);
+                if (elem) elem.remove();
+                if (this.editors[cellId]) {
+                    this.editors[cellId].dispose();
+                    delete this.editors[cellId];
+                }
+                this.updateCellIndices();
+                this._autoSave();
+            }
+        };
+
+        // 6. Remote execution event (another peer clicked Run on their machine)
+        this.collab.onRemoteExecution = (cellId, execData) => {
+            const cellElem = document.getElementById(`container-${cellId}`);
+            if (!cellElem) return;
+
+            const runBtn = cellElem.querySelector('.btn-run');
+            const outputContainer = cellElem.querySelector('.output-container');
+            const outputContent = cellElem.querySelector('.output-content');
+
+            if (execData.status === 'running') {
+                if (runBtn) {
+                    runBtn.disabled = true;
+                    runBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin" style="width: 12px;"></i> Running (@${execData.runnerName})...`;
+                    if (window.lucide) lucide.createIcons();
+                }
+                if (outputContainer) outputContainer.classList.remove('hidden');
+                if (outputContent) {
+                    outputContent.innerHTML = `<span style="color: #6d5dfc; font-size: 11px;">⚡ Running locally on <strong>@${execData.runnerName}</strong>'s machine...</span>\n`;
+                }
+            } else if (execData.status === 'completed' || execData.status === 'error') {
+                if (runBtn) {
+                    runBtn.disabled = false;
+                    runBtn.innerHTML = `<i data-lucide="play" style="width: 12px;"></i> Run`;
+                    if (window.lucide) lucide.createIcons();
+                }
+                if (execData.output) {
+                    this.displayOutput(cellId, execData.output);
+                }
+            }
+        };
+
+        // 7. Streaming terminal logs from peer execution
+        this.collab.onRemoteLogChunk = (cellId, chunk) => {
+            const cellElem = document.getElementById(`container-${cellId}`);
+            if (!cellElem) return;
+            const outputContainer = cellElem.querySelector('.output-container');
+            const outputContent = cellElem.querySelector('.output-content');
+            if (outputContainer) outputContainer.classList.remove('hidden');
+            if (outputContent) {
+                outputContent.innerText += chunk;
+                outputContent.scrollTop = outputContent.scrollHeight;
+            }
+        };
+
+        // Wire Copy Live Share Link button
+        document.getElementById('btn-copy-collab-link')?.addEventListener('click', async () => {
+            await this.copyCollabShareLink();
+        });
+
+        // Wire Toggle Shared Notes section accordion
+        document.getElementById('toggle-shared-section')?.addEventListener('click', () => {
+            const list = document.getElementById('shared-notes-list');
+            if (list) list.classList.toggle('hidden');
+        });
+    }
+
+    async copyCollabShareLink() {
+        if (!this.notebook || !this.notebook.id) return;
+        const btnText = document.getElementById('collab-share-btn-text');
+
+        try {
+            const res = await this.safeFetch(`/api/notes/${this.notebook.id}/share-code`, {
+                method: 'POST'
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.shareUrl) {
+                    await navigator.clipboard.writeText(data.shareUrl);
+                    if (btnText) btnText.innerText = 'Link Copied!';
+                    setTimeout(() => {
+                        if (btnText) btnText.innerText = 'Share Live Link';
+                    }, 2200);
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('[Collab] Failed to get share link from server:', e);
+        }
+
+        // Fallback to client-side code
+        const fallbackCode = this.notebook.shareCode || `collab-${this.notebook.id.replace('ntbk-', '')}`;
+        const fallbackUrl = `${window.location.origin}/note/join/${fallbackCode}`;
+        await navigator.clipboard.writeText(fallbackUrl);
+        if (btnText) btnText.innerText = 'Link Copied!';
+        setTimeout(() => {
+            if (btnText) btnText.innerText = 'Share Live Link';
+        }, 2200);
+    }
+
+    updateCollabTopBar() {
+        const topBar = document.getElementById('collab-top-bar');
+        const authorEl = document.getElementById('collab-author-info');
+        if (!this.notebook || !this.notebook.id) {
+            if (topBar) topBar.classList.add('hidden');
+            return;
+        }
+
+        if (topBar) topBar.classList.remove('hidden');
+
+        if (authorEl) {
+            const author = this.notebook.authorName || (this.notebook.isShared ? 'Collaborator' : (window.CURRENT_USER?.username || 'You'));
+            authorEl.innerText = `Created by @${author}`;
+        }
     }
 
     async startLiveBroadcast() {
@@ -997,6 +1260,7 @@ class NotebookApp {
             this.allNotebooks = list || [];
             this.filteredNotebooks = list || [];
             this.renderNotebookList(this.allNotebooks);
+            this.fetchAndRenderSharedNotes();
             return this.allNotebooks;
         } catch (e) {
             console.error('Failed to load notebook list', e);
@@ -1007,12 +1271,67 @@ class NotebookApp {
                         this.allNotebooks = fallback;
                         this.filteredNotebooks = fallback;
                         this.renderNotebookList(fallback);
+                        this.fetchAndRenderSharedNotes();
                         return fallback;
                     }
                 } catch (err) { }
             }
             return this.allNotebooks || [];
         }
+    }
+
+    async fetchAndRenderSharedNotes() {
+        try {
+            const res = await this.safeFetch('/api/notes/shared');
+            if (res.ok) {
+                const sharedNotes = await res.json();
+                this.sharedNotebooks = sharedNotes || [];
+                this.renderSharedNotesList(this.sharedNotebooks);
+            }
+        } catch (e) {
+            console.warn('[NotebookApp] Failed to load shared notes:', e);
+        }
+    }
+
+    renderSharedNotesList(notes) {
+        const countEl = document.getElementById('shared-notes-count');
+        const listEl = document.getElementById('shared-notes-list');
+        if (countEl) countEl.innerText = notes ? notes.length : 0;
+        if (!listEl) return;
+
+        listEl.innerHTML = '';
+        if (!notes || notes.length === 0) {
+            listEl.innerHTML = `
+                <div style="font-size: 11px; color: var(--text-dim); padding: 8px 10px; font-style: italic;">
+                    No notes shared with you yet.
+                </div>
+            `;
+            return;
+        }
+
+        notes.forEach(note => {
+            const item = document.createElement('div');
+            item.className = 'tree-item is-file flex items-center justify-between group py-1.5 px-2 rounded-lg cursor-pointer transition-all hover:bg-[var(--card-bg)]';
+            const isActive = this.notebook && this.notebook.id === note.id;
+            if (isActive) item.classList.add('active');
+
+            item.innerHTML = `
+                <div class="flex items-center gap-2 overflow-hidden flex-1">
+                    <i data-lucide="file-code" class="tree-icon w-3.5 h-3.5 text-[#00d2ff] flex-shrink-0"></i>
+                    <span class="tree-label truncate text-xs text-[var(--text-main)]" title="${note.title}">${note.title || 'Untitled'}</span>
+                </div>
+                <span class="shared-note-author-tag" title="Created by @${note.authorName}">by @${note.authorName}</span>
+            `;
+
+            item.onclick = () => {
+                note.isShared = true;
+                this.loadNotebook(note.id);
+            };
+
+            listEl.appendChild(item);
+        });
+
+        if (window.lucide) lucide.createIcons();
     }
 
     filterNotebooks(query) {
@@ -1253,6 +1572,11 @@ class NotebookApp {
                 this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
             }
 
+            if (this.collab) {
+                this.collab.connectToNote(id, window.CURRENT_USER);
+                this.updateCollabTopBar();
+            }
+
             if (targetCellId) {
                 setTimeout(() => {
                     const el = document.getElementById(`container-${targetCellId}`);
@@ -1408,6 +1732,10 @@ class NotebookApp {
         if (this.broadcaster && this.broadcaster.isBroadcasting) {
             this.broadcaster.syncNotebookStructure(this.notebook.cells);
             this.broadcaster.syncActiveCell(cell.id);
+        }
+
+        if (this.collab && this.collab.isConnected) {
+            this.collab.broadcastCellAdded(cell);
         }
 
         // Auto-scroll to the new cell
@@ -1657,7 +1985,7 @@ class NotebookApp {
             updateHeight();
             setTimeout(updateHeight, 50);
 
-            editor.onDidChangeModelContent(() => {
+            editor.onDidChangeModelContent((event) => {
                 const currentCell = this.notebook.cells.find(c => c.id === cell.id);
                 if (currentCell) currentCell.content = editor.getValue();
                 if (this.sync && typeof this.sync.recordUserActivity === 'function') {
@@ -1666,12 +1994,26 @@ class NotebookApp {
                 if (this.broadcaster && this.broadcaster.isBroadcasting) {
                     this.broadcaster.syncCellContent(cell.id, editor.getValue(), cell.lang, cell.type);
                 }
+                if (this.collab && this.collab.isConnected && !this.collab.suppressLocalEdits) {
+                    if (event && event.changes && event.changes.length > 0) {
+                        this.collab.broadcastEdit(cell.id, event.changes);
+                    }
+                }
                 this._autoSave();
+            });
+
+            editor.onDidChangeCursorPosition((e) => {
+                if (this.collab && this.collab.isConnected) {
+                    this.collab.broadcastCursor(cell.id, e.position, editor.getSelection());
+                }
             });
 
             editor.onDidFocusEditorWidget(() => {
                 if (this.broadcaster && this.broadcaster.isBroadcasting) {
                     this.broadcaster.syncActiveCell(cell.id);
+                }
+                if (this.collab && this.collab.isConnected) {
+                    this.collab.broadcastCursor(cell.id, editor.getPosition(), editor.getSelection());
                 }
             });
 
@@ -1804,6 +2146,10 @@ class NotebookApp {
             this.broadcaster.syncCellStatus(cellId, 'running');
         }
 
+        if (this.collab && this.collab.isConnected) {
+            this.collab.broadcastExecutionStart(cellId);
+        }
+
         const activeEngine = this.engine || window.ZohoBrowserEngine;
 
         // ── Interactive Terminal Mode ──
@@ -1838,6 +2184,9 @@ class NotebookApp {
             if (this.broadcaster && this.broadcaster.isBroadcasting) {
                 this.broadcaster.syncCellOutput(cellId, data, data && data.success ? 'idle' : 'error');
             }
+            if (this.collab && this.collab.isConnected) {
+                this.collab.broadcastExecutionComplete(cellId, data, data && data.success);
+            }
             this._autoSave();
         } catch (err) {
             let userMsg = err.message;
@@ -1847,6 +2196,9 @@ class NotebookApp {
             this.displayOutput(cellId, { success: false, error: userMsg });
             if (this.broadcaster && this.broadcaster.isBroadcasting) {
                 this.broadcaster.syncCellOutput(cellId, { success: false, error: userMsg }, 'error');
+            }
+            if (this.collab && this.collab.isConnected) {
+                this.collab.broadcastExecutionComplete(cellId, { success: false, error: userMsg }, false);
             }
         } finally {
             if (runBtn) {
@@ -1925,6 +2277,9 @@ class NotebookApp {
                 if (this.broadcaster && this.broadcaster.isBroadcasting) {
                     this.broadcaster.streamTerminalChunk(cellId, data);
                 }
+                if (this.collab && this.collab.isConnected) {
+                    this.collab.broadcastLogChunk(cellId, data);
+                }
                 if (termInput && !isFinished) termInput.focus();
             },
 
@@ -1933,6 +2288,9 @@ class NotebookApp {
                 collectedLogs.push(`STDERR: ${data}`);
                 if (this.broadcaster && this.broadcaster.isBroadcasting) {
                     this.broadcaster.streamTerminalChunk(cellId, `[STDERR] ${data}`);
+                }
+                if (this.collab && this.collab.isConnected) {
+                    this.collab.broadcastLogChunk(cellId, `\n[STDERR] ${data}`);
                 }
             },
 
@@ -1974,6 +2332,9 @@ class NotebookApp {
                         stderr: exitCode !== 0 ? `Process exited with code ${exitCode}` : ''
                     }, exitCode === 0 ? 'idle' : 'error');
                 }
+                if (this.collab && this.collab.isConnected) {
+                    this.collab.broadcastExecutionComplete(cellId, cell ? cell.output : null, exitCode === 0);
+                }
 
                 // Reset run button
                 if (runBtn) {
@@ -2002,6 +2363,10 @@ class NotebookApp {
                 if (cell) {
                     cell.output = { success: false, logs: [], error: errMsg, interactive: true };
                     this._autoSave();
+                }
+
+                if (this.collab && this.collab.isConnected) {
+                    this.collab.broadcastExecutionComplete(cellId, { success: false, error: errMsg }, false);
                 }
 
                 if (runBtn) {
@@ -2260,6 +2625,9 @@ class NotebookApp {
                 this._autoSave();
                 if (this.broadcaster && this.broadcaster.isBroadcasting) {
                     this.broadcaster.syncNotebookStructure(this.notebook.cells);
+                }
+                if (this.collab && this.collab.isConnected) {
+                    this.collab.broadcastCellDeleted(cell.id);
                 }
             } catch (err) {
                 console.error('Delete cell failed', err);

@@ -14,9 +14,20 @@ const noteSchema = new mongoose.Schema({
         status: { type: String, enum: ['pending', 'accepted'], default: 'pending' },
         joinedAt: { type: Date, default: Date.now }
     }],
+    shareCode: { type: String, unique: true, sparse: true, index: true },
+    authorName: { type: String, default: '' },
     updatedAt: { type: Date, default: Date.now },
     trashedAt: { type: Date }, // Date when the note was moved to trash
     _version: { type: Number, default: 1 } // Monotonic version vector for multi-device sync
 }, { collection: 'notes' });
+
+// Auto-generate unique shareCode if missing
+noteSchema.pre('save', function (next) {
+    if (!this.shareCode) {
+        const crypto = require('crypto');
+        this.shareCode = 'collab-' + crypto.randomBytes(6).toString('hex');
+    }
+    next();
+});
 
 module.exports = mongoose.model('Note', noteSchema);

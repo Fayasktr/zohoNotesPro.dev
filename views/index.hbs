@@ -159,6 +159,21 @@
                     id="notebook-list">
                     <!-- Dynamic notebooks here -->
                 </div>
+
+                <!-- Live Shared Notes Section -->
+                <div class="shared-tree-section mb-4">
+                    <div id="toggle-shared-section" class="shared-section-header">
+                        <span class="flex items-center gap-1.5">
+                            <i data-lucide="users-2" style="width: 13px; height: 13px; color: #00d2ff;"></i>
+                            <span>Shared with Me</span>
+                        </span>
+                        <span id="shared-notes-count" style="font-size: 10px; background: rgba(0, 210, 255, 0.15); color: #00d2ff; padding: 1px 6px; border-radius: 10px; font-weight: 700;">0</span>
+                    </div>
+                    <div id="shared-notes-list" class="space-y-1 mt-1 pl-1">
+                        <!-- Injected shared notes -->
+                    </div>
+                </div>
+
                 <div class="flex p-3 rounded-xl mb-2 cursor-pointer transition-all text-[var(--text-dim)] items-center gap-3 hover:bg-[var(--card-bg)] hover:text-[var(--text-main)]"
                     id="nav-starred-cells">
                     <i data-lucide="star" class="fill-[#ffcc00] text-[#ffcc00]"></i> Starred Notes
@@ -246,6 +261,27 @@
                         </button>
                     </div>
                 </header>
+
+                <!-- Top Real-Time Collaboration & Active Users Bar -->
+                <div id="collab-top-bar" class="collab-top-bar">
+                    <div class="collab-presence-pill">
+                        <div class="collab-count-badge">
+                            <span style="width: 6px; height: 6px; border-radius: 50%; background: #30ff6a; box-shadow: 0 0 6px #30ff6a;"></span>
+                            <span id="collab-user-count">1</span> Online
+                        </div>
+                        <div id="collab-avatars" class="collab-avatars-group">
+                            <!-- Injected user avatar chips -->
+                        </div>
+                        <span id="collab-author-info" style="font-size: 11px; color: var(--text-dim); margin-left: 6px;"></span>
+                    </div>
+
+                    <div class="collab-actions">
+                        <button id="btn-copy-collab-link" class="btn-collab-share" title="Copy Live Collaborative Link for Live Coding">
+                            <i data-lucide="share-2" style="width: 13px; height: 13px;"></i>
+                            <span id="collab-share-btn-text">Share Live Link</span>
+                        </button>
+                    </div>
+                </div>
 
                 <div id="cells-list">
                     <!-- Cells will be dynamiclly injected here -->
@@ -513,6 +549,12 @@
             window.USER_SETTINGS = {
                 defaultLanguage: '{{defaultLanguage}}'
             };
+            window.CURRENT_USER = {
+                id: '{{userId}}',
+                username: '{{username}}',
+                email: '{{userEmail}}'
+            };
+            window.INITIAL_NOTE_ID = '{{initialNoteId}}';
             window.FIREBASE_CONFIG = {{{json firebaseConfig}}};
         </script>
         <!-- Dexie IndexedDB Engine -->
@@ -542,8 +584,10 @@
             }
         </script>
         <script src="/js/broadcast_engine.js?v=5"></script>
+        <!-- Real-Time Collaboration Engine -->
+        <script src="/js/collab_engine.js?v=1"></script>
         <!-- Core Notebook UI Application -->
-        <script src="/js/notebook.js?v=20"></script>
+        <script src="/js/notebook.js?v=21"></script>
         <!-- Progressive Web App Handler -->
         <script src="/js/pwa.js?v=16"></script>
         <script>

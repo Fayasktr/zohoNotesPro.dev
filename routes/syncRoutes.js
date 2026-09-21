@@ -76,6 +76,11 @@ function resolvePushItem(existing, incoming, options = {}) {
     const clientVersion = typeof note._version === 'number' ? note._version : 1;
     const nextVersion = Math.max(serverVersion, clientVersion) + 1;
 
+    const crypto = require('crypto');
+    const existingShareCode = existing ? existing.shareCode : null;
+    const incomingShareCode = note.shareCode || null;
+    const shareCode = incomingShareCode || existingShareCode || ('collab-' + crypto.randomBytes(6).toString('hex'));
+
     return {
         outcome: 'applied',
         updateDoc: {
@@ -86,6 +91,8 @@ function resolvePushItem(existing, incoming, options = {}) {
             isTrashed: !!note.isTrashed,
             trashedAt: note.trashedAt ? new Date(sanitizeTimestamp(note.trashedAt) || Date.now()) : null,
             _version: nextVersion,
+            shareCode: shareCode,
+            authorName: (existing && existing.authorName) ? existing.authorName : (note.authorName || ''),
             content: {
                 id: note.id,
                 title: note.title || 'Untitled Notebook',
@@ -112,7 +119,9 @@ function formatServerNote(n) {
         tags: Array.isArray(n.content && n.content.tags) ? n.content.tags : (Array.isArray(n.tags) ? n.tags : []),
         updatedAt: n.updatedAt ? new Date(n.updatedAt).getTime() : Date.now(),
         _version: typeof n._version === 'number' ? n._version : 1,
-        owner: String(n.owner)
+        owner: String(n.owner),
+        shareCode: n.shareCode || '',
+        authorName: n.authorName || ''
     };
 }
 
@@ -144,7 +153,9 @@ router.get('/hydrate', async (req, res) => {
             tags: Array.isArray(n.content?.tags) ? n.content.tags : (Array.isArray(n.tags) ? n.tags : []),
             updatedAt: n.updatedAt ? new Date(n.updatedAt).getTime() : Date.now(),
             _version: typeof n._version === 'number' ? n._version : 1,
-            owner: String(n.owner)
+            owner: String(n.owner),
+            shareCode: n.shareCode || '',
+            authorName: n.authorName || ''
         }));
 
         res.json({
@@ -174,7 +185,7 @@ router.get('/manifest', async (req, res) => {
                 { owner: userId },
                 { 'collaborators': { $elemMatch: { user: userId, status: 'accepted' } } }
             ]
-        }, 'id title folder isStarred isTrashed trashedAt updatedAt _version owner').sort({ updatedAt: -1 }).lean();
+        }, 'id title folder isStarred isTrashed trashedAt updatedAt _version owner shareCode authorName').sort({ updatedAt: -1 }).lean();
 
         const manifest = notes.map(n => ({
             id: n.id,
@@ -185,7 +196,9 @@ router.get('/manifest', async (req, res) => {
             trashedAt: n.trashedAt ? new Date(n.trashedAt).getTime() : null,
             updatedAt: n.updatedAt ? new Date(n.updatedAt).getTime() : Date.now(),
             _version: typeof n._version === 'number' ? n._version : 1,
-            owner: String(n.owner)
+            owner: String(n.owner),
+            shareCode: n.shareCode || '',
+            authorName: n.authorName || ''
         }));
 
         res.json(manifest);
