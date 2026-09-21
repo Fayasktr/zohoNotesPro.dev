@@ -445,6 +445,37 @@ class NotebookApp {
             this.closeAllModals(true);
         });
 
+        // Global Modal Keyboard Navigation: Enter to submit, Escape to close
+        window.addEventListener('keydown', (e) => {
+            const overlay = document.getElementById('modal-overlay');
+            if (!overlay || overlay.classList.contains('hidden')) return;
+
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                this.closeAllModals();
+                return;
+            }
+
+            if (e.key === 'Enter') {
+                // If user is editing in a textarea inside a modal, don't submit on plain Enter
+                if (e.target && e.target.tagName === 'TEXTAREA' && !e.ctrlKey && !e.metaKey) {
+                    return;
+                }
+
+                const visibleModal = overlay.querySelector('.modal-content:not(.hidden)');
+                if (!visibleModal) return;
+
+                const primaryBtn = visibleModal.querySelector(
+                    '#btn-modal-alert-confirm, #btn-modal-input-confirm, #btn-confirm-folder, #btn-confirm-file, .btn-primary:not(.modal-close)'
+                );
+
+                if (primaryBtn && !primaryBtn.disabled) {
+                    e.preventDefault();
+                    primaryBtn.click();
+                }
+            }
+        });
+
         document.getElementById('btn-confirm-folder').addEventListener('click', () => this.handleFolderCreate());
         document.getElementById('btn-confirm-file').addEventListener('click', () => this.handleFileCreate());
 
@@ -468,20 +499,21 @@ class NotebookApp {
 
         document.getElementById('btn-send-feedback').addEventListener('click', () => this.sendFeedback());
 
-
         // Generic Modal Action Listeners
-        document.getElementById('btn-modal-input-confirm').addEventListener('click', () => {
+        document.getElementById('btn-modal-input-confirm')?.addEventListener('click', () => {
             if (this.currentInputCallback) {
-                const val = document.getElementById('modal-input-field').value;
-                this.currentInputCallback(val);
+                const val = document.getElementById('modal-input-field')?.value || '';
+                const cb = this.currentInputCallback;
                 this.closeAllModals();
+                cb(val);
             }
         });
 
-        document.getElementById('btn-modal-alert-confirm').addEventListener('click', () => {
+        document.getElementById('btn-modal-alert-confirm')?.addEventListener('click', () => {
             if (this.currentConfirmCallback) {
-                this.currentConfirmCallback();
+                const cb = this.currentConfirmCallback;
                 this.closeAllModals();
+                cb();
             }
         });
 
@@ -590,7 +622,7 @@ class NotebookApp {
                     setTimeout(() => { msg.style.display = 'none'; }, 2500);
                 }
             } catch (err) {
-                alert('Invalid JSON: ' + err.message);
+                this.showToast('Invalid JSON: ' + err.message, 'error');
             }
         });
     }
@@ -1186,93 +1218,96 @@ class NotebookApp {
         const id = noteId || this.notebook?.id;
         if (!id) return;
 
-        const ok = confirm('Delete this live link?\n\nCollaborators will immediately lose access and live editing will be disabled. The note will be kept as a private note.');
-        if (!ok) return;
+        this.confirmAction(
+            'Delete Live Link?',
+            'Collaborators will immediately lose access and live editing will be disabled. The note will be kept as a private note.',
+            async () => {
+                try {
+                    const res = await this.safeFetch(`/api/notes/${id}/revoke-share`, { method: 'POST' });
+                    if (res.ok) {
+                        if (this.notebook && this.notebook.id === id) {
+                            this.notebook.isLive = false;
+                            this.notebook.shareCode = null;
+                            this.notebook.shareUrl = null;
+                            if (this.collab) await this.collab.disconnect();
+                            const topBar = document.getElementById('collab-top-bar');
+                            if (topBar) topBar.classList.add('hidden');
+                            const headerBtn = document.getElementById('btn-live-share-header');
+                            if (headerBtn) headerBtn.classList.add('hidden');
+                        }
 
-        try {
-            const res = await this.safeFetch(`/api/notes/${id}/revoke-share`, { method: 'POST' });
-            if (res.ok) {
-                if (this.notebook && this.notebook.id === id) {
-                    this.notebook.isLive = false;
-                    this.notebook.shareCode = null;
-                    this.notebook.shareUrl = null;
-                    if (this.collab) await this.collab.disconnect();
-                    const topBar = document.getElementById('collab-top-bar');
-                    if (topBar) topBar.classList.add('hidden');
-                    const headerBtn = document.getElementById('btn-live-share-header');
-                    if (headerBtn) headerBtn.classList.add('hidden');
-                }
+                        if (this.db) {
+                            const localNote = await this.db.getNote(id);
+                            if (localNote) {
+                                localNote.isLive = false;
+                                localNote.shareCode = null;
+                                localNote.shareUrl = null;
+                                await this.db.putNote(localNote);
+                            }
+                        }
 
-                if (this.db) {
-                    const localNote = await this.db.getNote(id);
-                    if (localNote) {
-                        localNote.isLive = false;
-                        localNote.shareCode = null;
-                        localNote.shareUrl = null;
-                        await this.db.putNote(localNote);
+                        this.closeModal('modal-live-share');
+                        await this.fetchAndRenderLiveNotes();
+                        await this.refreshNotebookList();
+                        this.showToast('Live link deleted and live session ended.');
+                    } else {
+                        const errData = await res.json().catch(() => ({}));
+                        this.showToast(errData.error || 'Failed to revoke live link', 'error');
                     }
+                } catch (e) {
+                    console.error('Revoke live link failed:', e);
+                    this.showToast('Failed to revoke live link', 'error');
                 }
-
-                this.closeModal('modal-live-share');
-                await this.loadLiveNotes();
-                await this.refreshNotebookList();
-                this.showToast('Live link deleted and live session ended.');
-            } else {
-                const errData = await res.json().catch(() => ({}));
-                alert(errData.error || 'Failed to revoke live link');
             }
-        } catch (e) {
-            console.error('Revoke live link failed:', e);
-            alert('Failed to revoke live link');
-        }
+        );
     }
 
     async deleteLiveNote(id, title = null, isOwner = true) {
         const noteTitle = title || (this.notebook?.id === id ? this.notebook.title : 'Live Session');
 
-        const message = isOwner
-            ? `Delete live note "${noteTitle}"?\n\nThis will permanently delete this note and its live share link for all collaborators.`
+        const modalTitle = isOwner ? 'Delete Live Note?' : 'Leave Live Session?';
+        const modalDesc = isOwner
+            ? `Permanently delete "${noteTitle}" and revoke its live share link for all collaborators?`
             : `Remove "${noteTitle}" from your joined live notes?`;
 
-        const ok = confirm(message);
-        if (!ok) return;
-
-        try {
-            const res = await this.safeFetch(`/api/notes/live/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                if (this.db) {
-                    await this.db.permanentlyDeleteNote(id);
-                }
-
-                const isActive = this.notebook && this.notebook.id === id;
-                if (isActive) {
-                    if (this.collab) await this.collab.disconnect();
-                    const topBar = document.getElementById('collab-top-bar');
-                    if (topBar) topBar.classList.add('hidden');
-                    const headerBtn = document.getElementById('btn-live-share-header');
-                    if (headerBtn) headerBtn.classList.add('hidden');
-
-                    const savedId = localStorage.getItem('zoho-notebook-current-id');
-                    if (savedId === id) {
-                        localStorage.removeItem('zoho-notebook-current-id');
+        this.confirmAction(modalTitle, modalDesc, async () => {
+            try {
+                const res = await this.safeFetch(`/api/notes/live/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    if (this.db) {
+                        await this.db.permanentlyDeleteNote(id);
                     }
-                    this.closeModal('modal-live-share');
-                    await this.init();
-                } else {
-                    this.closeModal('modal-live-share');
-                    await this.loadLiveNotes();
-                    await this.refreshNotebookList();
-                }
 
-                this.showToast(isOwner ? 'Live note and link deleted.' : 'Removed from joined live notes.');
-            } else {
-                const errData = await res.json().catch(() => ({}));
-                alert(errData.error || 'Failed to delete live note');
+                    const isActive = this.notebook && this.notebook.id === id;
+                    if (isActive) {
+                        if (this.collab) await this.collab.disconnect();
+                        const topBar = document.getElementById('collab-top-bar');
+                        if (topBar) topBar.classList.add('hidden');
+                        const headerBtn = document.getElementById('btn-live-share-header');
+                        if (headerBtn) headerBtn.classList.add('hidden');
+
+                        const savedId = localStorage.getItem('zoho-notebook-current-id');
+                        if (savedId === id) {
+                            localStorage.removeItem('zoho-notebook-current-id');
+                        }
+                        this.closeModal('modal-live-share');
+                        await this.init();
+                    } else {
+                        this.closeModal('modal-live-share');
+                        await this.fetchAndRenderLiveNotes();
+                        await this.refreshNotebookList();
+                    }
+
+                    this.showToast(isOwner ? 'Live note and link deleted.' : 'Removed from joined live notes.');
+                } else {
+                    const errData = await res.json().catch(() => ({}));
+                    this.showToast(errData.error || 'Failed to delete live note', 'error');
+                }
+            } catch (e) {
+                console.error('Delete live note failed:', e);
+                this.showToast('Failed to delete live note', 'error');
             }
-        } catch (e) {
-            console.error('Delete live note failed:', e);
-            alert('Failed to delete live note');
-        }
+        });
     }
 
     showToast(message, type = 'info') {
@@ -1335,9 +1370,9 @@ class NotebookApp {
             if (err.message === 'MISSING_CONFIG') {
                 const drawer = document.getElementById('firebase-setup-drawer');
                 if (drawer) drawer.classList.remove('hidden');
-                alert('Firebase configuration not found. Please paste your Firebase web config JSON in the configuration drawer below, or set FIREBASE_* environment variables in .env');
+                this.showToast('Firebase configuration not found. Check setup drawer below or .env', 'warning');
             } else {
-                alert('Could not start live broadcast: ' + err.message);
+                this.showToast('Could not start live broadcast: ' + err.message, 'error');
             }
         } finally {
             if (btn) {
@@ -1537,14 +1572,25 @@ class NotebookApp {
     }
 
     openModal(modalId) {
-        document.getElementById('modal-overlay').classList.remove('hidden');
+        const overlay = document.getElementById('modal-overlay');
+        if (overlay) overlay.classList.remove('hidden');
         document.querySelectorAll('.modal-content').forEach(m => m.classList.add('hidden'));
-        document.getElementById(modalId).classList.remove('hidden');
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        modal.classList.remove('hidden');
 
-        const input = document.getElementById(modalId).querySelector('input');
+        // Auto-focus input if available, else auto-focus primary action button
+        const input = modal.querySelector('input:not([type="hidden"]), select, textarea');
         if (input) {
-            input.focus();
-            input.select();
+            setTimeout(() => {
+                input.focus();
+                if (input.select) input.select();
+            }, 50);
+        } else {
+            const primaryBtn = modal.querySelector('#btn-modal-alert-confirm, #btn-modal-input-confirm, .btn-primary:not(.modal-close)');
+            if (primaryBtn) {
+                setTimeout(() => primaryBtn.focus(), 50);
+            }
         }
 
         // Push state for browser back-button to close modals
@@ -1554,8 +1600,22 @@ class NotebookApp {
         }
     }
 
+    closeModal(modalId) {
+        if (modalId) {
+            const el = document.getElementById(modalId);
+            if (el) el.classList.add('hidden');
+            const anyVisible = document.querySelector('#modal-overlay .modal-content:not(.hidden)');
+            if (!anyVisible) {
+                this.closeAllModals();
+            }
+        } else {
+            this.closeAllModals();
+        }
+    }
+
     closeAllModals(fromPopState = false) {
-        document.getElementById('modal-overlay').classList.add('hidden');
+        const overlay = document.getElementById('modal-overlay');
+        if (overlay) overlay.classList.add('hidden');
         document.querySelectorAll('.modal-content').forEach(m => m.classList.add('hidden'));
         this.currentConfirmCallback = null;
         this.currentInputCallback = null;
@@ -1567,6 +1627,10 @@ class NotebookApp {
         } else {
             this.modalHistoryPushed = false;
         }
+    }
+
+    async loadLiveNotes() {
+        return this.fetchAndRenderLiveNotes();
     }
 
     async safeFetch(url, options = {}) {
@@ -1951,15 +2015,23 @@ class NotebookApp {
     }
 
     async createLiveNotebook(title = null) {
-        try {
-            const noteTitle = title || prompt('Enter title for Live Note:', 'Live Coding Session');
-            if (noteTitle === null) return; // User cancelled
+        if (!title) {
+            this.inputAction('Create Live Note', 'Enter a title for this live collaborative session:', 'Live Coding Session', async (chosenTitle) => {
+                await this._doCreateLiveNotebook(chosenTitle);
+            });
+            return;
+        }
+        return this._doCreateLiveNotebook(title);
+    }
 
+    async _doCreateLiveNotebook(noteTitle) {
+        try {
+            const finalTitle = (noteTitle && noteTitle.trim()) ? noteTitle.trim() : 'Live Coding Session';
             const res = await this.safeFetch('/api/notes/live', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    title: noteTitle.trim() || 'Live Coding Session',
+                    title: finalTitle,
                     cells: [{
                         id: 'cell-' + Date.now(),
                         type: 'code',
@@ -1978,15 +2050,16 @@ class NotebookApp {
                 }
                 await this.fetchAndRenderLiveNotes();
                 await this.loadNotebook(newLiveNote.id);
+                this.showToast(`Live session "${finalTitle}" created!`);
                 // Immediately display the live link share modal
                 await this.openLiveShareModal(newLiveNote);
             } else {
-                const err = await res.json();
-                alert('Failed to create live note: ' + (err.error || 'Server error'));
+                const err = await res.json().catch(() => ({}));
+                this.showToast('Failed to create live note: ' + (err.error || 'Server error'), 'error');
             }
         } catch (e) {
             console.error('Failed to create live notebook:', e);
-            alert('Could not create live note: ' + e.message);
+            this.showToast('Could not create live note: ' + e.message, 'error');
         }
     }
 
@@ -2389,7 +2462,7 @@ class NotebookApp {
 
     addCell(type, content = '') {
         if (this.notebook && this.notebook.isLive && this.collab && !this.collab.isHost && !this.collab.hostOnline) {
-            alert('Host is currently offline. Adding cells is paused until host reconnects.');
+            this.showToast('Host is currently offline. Adding cells is paused until host reconnects.', 'warning');
             return;
         }
 
@@ -2817,7 +2890,7 @@ class NotebookApp {
 
     async runCell(cellId) {
         if (this.notebook && this.notebook.isLive && this.collab && !this.collab.isHost && !this.collab.hostOnline) {
-            alert('Host is currently offline. Code execution is paused until host reconnects.');
+            this.showToast('Host is currently offline. Code execution is paused until host reconnects.', 'warning');
             return;
         }
 
@@ -3291,11 +3364,11 @@ class NotebookApp {
 
     async deleteCell(cellId) {
         if (this.notebook && this.notebook.isLive && this.collab && !this.collab.isHost && !this.collab.hostOnline) {
-            alert('Host is currently offline. Deleting cells is paused until host reconnects.');
+            this.showToast('Host is currently offline. Deleting cells is paused until host reconnects.', 'warning');
             return;
         }
 
-        this.confirmAction('Delete Note?', 'Are you sure you want to remove this cell?', async () => {
+        this.confirmAction('Delete Cell?', 'Are you sure you want to remove this cell?', async () => {
             const cellIndex = this.notebook.cells.findIndex(c => c.id === cellId);
             if (cellIndex === -1) return;
 
@@ -3328,6 +3401,18 @@ class NotebookApp {
                     delete this.editors[cellId];
                 }
 
+                // If notebook is now empty, create a fresh cell
+                if (this.notebook.cells.length === 0) {
+                    this.notebook.cells.push({
+                        id: 'cell-' + Date.now(),
+                        type: 'code',
+                        lang: this.userSettings?.defaultLanguage || 'javascript',
+                        title: 'Cell 1',
+                        content: '',
+                        output: null
+                    });
+                }
+
                 // Re-render to update sequence numbers
                 this.disposeEditors();
                 document.getElementById('cells-list').innerHTML = '';
@@ -3339,10 +3424,11 @@ class NotebookApp {
                 if (this.collab && this.collab.isConnected) {
                     this.collab.broadcastCellDeleted(cell.id);
                 }
+                this.showToast('Cell deleted');
             } catch (err) {
                 console.error('Delete cell failed', err);
                 this.notebook.cells.splice(cellIndex, 0, cell);
-                alert('Failed to delete note');
+                this.showToast('Failed to delete cell', 'error');
             }
         });
     }
@@ -3353,9 +3439,9 @@ class NotebookApp {
                 if (this.db) {
                     await this.db.trashNote(id);
                     if (this.sync) this.sync.notifyLocalChange(id, 'TRASH');
-                } else {
-                    await this.safeFetch(`/api/notebooks/${id}`, { method: 'DELETE' });
                 }
+                // Also issue remote delete so cloud is synchronized
+                await this.safeFetch(`/api/notebooks/${id}`, { method: 'DELETE' }).catch(() => {});
 
                 const savedId = localStorage.getItem('zoho-notebook-current-id');
                 if (savedId === id) {
@@ -3364,8 +3450,10 @@ class NotebookApp {
                 } else {
                     await this.refreshNotebookList();
                 }
+                this.showToast('Notebook moved to trash');
             } catch (e) {
                 console.error('Move to trash failed', e);
+                this.showToast('Failed to delete notebook', 'error');
             }
         });
     }
@@ -3574,7 +3662,7 @@ class NotebookApp {
                 } else {
                     // Restore cell if move failed
                     this.notebook.cells.splice(cellIndex, 0, cell);
-                    alert('Failed to move note');
+                    this.showToast('Failed to move note', 'error');
                 }
             } catch (err) {
                 console.error('Move cell failed', err);
