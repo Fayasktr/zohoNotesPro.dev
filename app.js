@@ -691,13 +691,13 @@ app.get('/', isAuthenticated, (req, res) => {
         isAdmin: req.session.role === 'admin' || (req.user && req.user.role === 'admin'),
         defaultLanguage: res.locals.currentUser?.settings?.defaultLanguage || 'javascript',
         firebaseConfig: {
-            apiKey: process.env.FIREBASE_API_KEY || 'AIzaSyAwe7_nFB8SCBfIZPum4zd_zW6wrZ9Kt5o',
-            authDomain: process.env.FIREBASE_AUTH_DOMAIN || 'zoho-notes-live.firebaseapp.com',
-            databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://zoho-notes-live-default-rtdb.firebaseio.com',
-            projectId: process.env.FIREBASE_PROJECT_ID || 'zoho-notes-live',
-            storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'zoho-notes-live.firebasestorage.app',
-            messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || '1059658217465',
-            appId: process.env.FIREBASE_APP_ID || '1:1059658217465:web:6f0a7e1052b6566a07af28'
+            apiKey: process.env.FIREBASE_API_KEY || '',
+            authDomain: process.env.FIREBASE_AUTH_DOMAIN || '',
+            databaseURL: process.env.FIREBASE_DATABASE_URL || '',
+            projectId: process.env.FIREBASE_PROJECT_ID || '',
+            storageBucket: process.env.FIREBASE_STORAGE_BUCKET || '',
+            messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || '',
+            appId: process.env.FIREBASE_APP_ID || ''
         }
     });
 });

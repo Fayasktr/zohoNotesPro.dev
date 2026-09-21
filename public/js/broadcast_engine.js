@@ -52,16 +52,8 @@
                 console.warn('[BroadcastEngine] Could not fetch server Firebase config:', e);
             }
 
-            // 4. Default verified fallback
-            return {
-                apiKey: "AIzaSyAwe7_nFB8SCBfIZPum4zd_zW6wrZ9Kt5o",
-                authDomain: "zoho-notes-live.firebaseapp.com",
-                databaseURL: "https://zoho-notes-live-default-rtdb.firebaseio.com",
-                projectId: "zoho-notes-live",
-                storageBucket: "zoho-notes-live.firebasestorage.app",
-                messagingSenderId: "1059658217465",
-                appId: "1:1059658217465:web:6f0a7e1052b6566a07af28"
-            };
+            // 4. No configuration available
+            return null;
         }
 
         /**
