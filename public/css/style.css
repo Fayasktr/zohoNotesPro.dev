@@ -1975,3 +1975,239 @@ body.light-theme #add-folder-sidebar {
     max-width: 360px;
     width: 100%;
 }
+
+/* ==========================================================================
+   Live Review Integrity & Proctor Monitoring Styles
+   ========================================================================== */
+
+.avatar-proctor-dot {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1.5px solid var(--bg-dark, #12131a);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.avatar-proctor-dot.status-dot-active {
+    background: #30ff6a;
+    box-shadow: 0 0 5px #30ff6a;
+}
+
+.avatar-proctor-dot.status-dot-away {
+    background: #f43f5e;
+    box-shadow: 0 0 8px #f43f5e;
+    animation: proctorPulse 1s infinite alternate;
+}
+
+.avatar-proctor-dot.status-dot-split {
+    background: #f59e0b;
+    box-shadow: 0 0 6px #f59e0b;
+}
+
+.collab-avatar-chip.is-away {
+    border-color: #f43f5e !important;
+    box-shadow: 0 0 8px rgba(244, 63, 94, 0.4);
+}
+
+.collab-avatar-chip.is-split {
+    border-color: #f59e0b !important;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+}
+
+@keyframes proctorPulse {
+    0% { transform: scale(0.9); opacity: 0.8; }
+    100% { transform: scale(1.2); opacity: 1; }
+}
+
+.collab-review-badge {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.28);
+    color: #34d399;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+}
+
+.collab-review-badge.hidden {
+    display: none !important;
+}
+
+.btn-collab-proctor {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    color: #fbbf24;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+}
+
+.btn-collab-proctor:hover {
+    background: #d97706;
+    color: #ffffff;
+    border-color: #f59e0b;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.45);
+    transform: translateY(-1px);
+}
+
+.btn-collab-proctor:active {
+    transform: translateY(0);
+}
+
+.btn-collab-proctor.hidden {
+    display: none !important;
+}
+
+.proctor-badge-pill {
+    background: #ef4444;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    min-width: 16px;
+    text-align: center;
+}
+
+.proctor-badge-pill.hidden {
+    display: none !important;
+}
+
+/* Proctor Modal Content & Table */
+.proctor-modal-body {
+    max-height: 440px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.proctor-table-wrap {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.proctor-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    text-align: left;
+}
+
+.proctor-table th {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.proctor-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+}
+
+.proctor-table tr:last-child td {
+    border-bottom: none;
+}
+
+.proctor-badge-active {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(48, 255, 106, 0.15);
+    color: #30ff6a;
+    border: 1px solid rgba(48, 255, 106, 0.3);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.proctor-badge-away {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(244, 63, 94, 0.18);
+    color: #f43f5e;
+    border: 1px solid rgba(244, 63, 94, 0.35);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    animation: proctorPulse 1.2s infinite alternate;
+}
+
+.proctor-badge-split {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(245, 158, 11, 0.18);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.proctor-timeline-container {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px;
+    max-height: 160px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 11px;
+}
+
+.proctor-timeline-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 3px solid var(--accent);
+}
+
+.proctor-timeline-item.item-away {
+    border-left-color: #f43f5e;
+}
+
+.proctor-timeline-item.item-split {
+    border-left-color: #f59e0b;
+}
+
+.proctor-timeline-item.item-active {
+    border-left-color: #30ff6a;
+}
+
+.proctor-timeline-empty {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 14px 0;
+    font-size: 11px;
+    font-style: italic;
+}

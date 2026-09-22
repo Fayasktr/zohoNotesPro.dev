@@ -1848,6 +1848,7 @@ terminalWss.on('connection', (ws) => {
 const collabRooms = new Map();         // noteId -> Map<peerId, { ws, user, joinedAt }>
 const collabCellsCache = new Map();    // noteId -> Map<cellId, string>
 const collabMetadataCache = new Map(); // noteId -> { title?: string, cells?: Map<cellId, { title?: string, lang?: string, isStarred?: boolean }> }
+const collabProctorCache = new Map();  // noteId -> Map<peerId, { peerId, username, status, switchCount, totalAwaySeconds, lastEvent, history }>
 
 function broadcastToCollabRoom(noteId, message, senderWs = null) {
     const room = collabRooms.get(noteId);
@@ -1866,14 +1867,19 @@ function broadcastToCollabRoom(noteId, message, senderWs = null) {
 function getCollabRoomPresence(noteId) {
     const room = collabRooms.get(noteId);
     if (!room) return { users: [], count: 0, isHostOnline: false };
+    const roomProctor = collabProctorCache.get(noteId);
     const users = [];
     for (const [peerId, client] of room.entries()) {
+        const proctor = roomProctor ? roomProctor.get(peerId) : null;
         users.push({
             id: client.user?.id || peerId,
             peerId: peerId,
             username: client.user?.username || 'Collaborator',
             color: client.user?.color || '#6d5dfc',
-            isHost: Boolean(client.user?.isHost)
+            isHost: Boolean(client.user?.isHost),
+            proctorStatus: proctor?.status || 'active',
+            switchCount: proctor?.switchCount || 0,
+            totalAwaySeconds: proctor?.totalAwaySeconds || 0
         });
     }
     const isHostOnline = users.some(u => u.isHost === true);
@@ -1927,13 +1933,27 @@ collabWss.on('connection', (ws) => {
                     };
                 }
 
+                let proctorSummary = null;
+                if (collabProctorCache.has(noteId)) {
+                    proctorSummary = Array.from(collabProctorCache.get(noteId).values()).map(p => ({
+                        peerId: p.peerId,
+                        username: p.username,
+                        status: p.status,
+                        switchCount: p.switchCount,
+                        totalAwaySeconds: p.totalAwaySeconds,
+                        lastEvent: p.lastEvent,
+                        history: p.history ? p.history.slice(0, 10) : []
+                    }));
+                }
+
                 ws.send(JSON.stringify({
                     type: 'joined',
                     noteId,
                     peerId,
                     presence,
                     cachedCells,
-                    cachedMetadata
+                    cachedMetadata,
+                    proctorSummary
                 }));
 
                 broadcastToCollabRoom(noteId, {
@@ -2018,6 +2038,83 @@ collabWss.on('connection', (ws) => {
             case 'exec_done': {
                 if (!currentNoteId) return;
                 broadcastToCollabRoom(currentNoteId, msg, ws);
+                break;
+            }
+
+            case 'student_focus': {
+                if (!currentNoteId) return;
+                const { peerId, username, status, reason, awayDuration, timestamp } = msg;
+
+                if (!collabProctorCache.has(currentNoteId)) {
+                    collabProctorCache.set(currentNoteId, new Map());
+                }
+                const roomProctor = collabProctorCache.get(currentNoteId);
+                const existing = roomProctor.get(peerId) || {
+                    peerId,
+                    username: username || 'Student',
+                    status: 'active',
+                    switchCount: 0,
+                    totalAwaySeconds: 0,
+                    history: []
+                };
+
+                existing.status = status || 'active';
+                if (username) existing.username = username;
+
+                if (status === 'away' || reason === 'tab_switch' || reason === 'app_switch' || reason === 'split_screen') {
+                    if (reason !== 'resumed') {
+                        existing.switchCount = (existing.switchCount || 0) + 1;
+                    }
+                }
+                if (awayDuration && typeof awayDuration === 'number') {
+                    existing.totalAwaySeconds = (existing.totalAwaySeconds || 0) + Math.round(awayDuration);
+                }
+
+                existing.lastEvent = {
+                    status: existing.status,
+                    reason: reason || (existing.status === 'active' ? 'resumed' : 'tab_switch'),
+                    awayDuration: awayDuration ? Math.round(awayDuration) : 0,
+                    timestamp: timestamp || Date.now()
+                };
+
+                if (!existing.history) existing.history = [];
+                existing.history.unshift(existing.lastEvent);
+                if (existing.history.length > 50) existing.history.pop();
+
+                roomProctor.set(peerId, existing);
+
+                const proctorSummary = Array.from(roomProctor.values()).map(p => ({
+                    peerId: p.peerId,
+                    username: p.username,
+                    status: p.status,
+                    switchCount: p.switchCount,
+                    totalAwaySeconds: p.totalAwaySeconds,
+                    lastEvent: p.lastEvent,
+                    history: p.history ? p.history.slice(0, 10) : []
+                }));
+
+                // Broadcast student focus change to everyone in the room
+                broadcastToCollabRoom(currentNoteId, {
+                    type: 'student_focus',
+                    peerId,
+                    username: existing.username,
+                    status: existing.status,
+                    reason: existing.lastEvent.reason,
+                    awayDuration: existing.lastEvent.awayDuration,
+                    switchCount: existing.switchCount,
+                    totalAwaySeconds: existing.totalAwaySeconds,
+                    timestamp: existing.lastEvent.timestamp,
+                    proctorSummary
+                });
+
+                // Also broadcast updated presence so avatars reflect new status dot
+                const presence = getCollabRoomPresence(currentNoteId);
+                broadcastToCollabRoom(currentNoteId, {
+                    type: 'presence',
+                    users: presence.users,
+                    count: presence.count,
+                    isHostOnline: presence.isHostOnline
+                });
                 break;
             }
 

@@ -9,7 +9,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css?v=34">
+    <link rel="stylesheet" href="/css/style.css?v=35">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/split.js/1.6.5/split.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -293,6 +293,17 @@
                     </div>
 
                     <div class="collab-actions">
+                        <!-- Student review badge: shows "Review Mode Active" when student is connected -->
+                        <div id="collab-review-badge" class="collab-review-badge hidden" title="Real-time focus and integrity monitoring is active">
+                            <span class="proctor-shield-icon">🛡️</span>
+                            <span>Review Mode</span>
+                        </div>
+                        <!-- Host Proctor Alerts Button -->
+                        <button id="btn-collab-proctor-log" class="btn-collab-proctor hidden" title="View Review Integrity & Focus Activity Log">
+                            <i data-lucide="shield-alert" style="width: 13px; height: 13px;"></i>
+                            <span>Focus Log</span>
+                            <span id="collab-proctor-alert-count" class="proctor-badge-pill hidden">0</span>
+                        </button>
                         <button id="btn-copy-collab-link" class="btn-collab-share" title="Copy Live Collaborative Link">
                             <i data-lucide="link-2" class="collab-share-icon" style="width: 13px; height: 13px;"></i>
                             <span id="collab-share-btn-text">Copy Live Link</span>
@@ -647,6 +658,62 @@
             </div>
         </div>
 
+        <!-- Proctor & Focus Integrity Review Modal (Host Only) -->
+        <div id="modal-proctor-log" class="modal-content hidden" style="max-width: 680px; width: 100%;">
+            <button class="modal-btn-x modal-close">&times;</button>
+            <div class="modal-icon text-amber-500 bg-amber-500/10 w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center border border-amber-500/20 shadow-lg shadow-amber-500/10">
+                <i data-lucide="shield-alert" class="w-7 h-7 text-amber-400"></i>
+            </div>
+            <h2 class="text-lg font-bold text-[var(--text-main)] mb-1">Live Review Focus Log</h2>
+            <p class="text-xs text-[var(--text-dim)] mb-4">
+                Real-time integrity monitor: tracks student tab switches, app changes, and split-screen usage during reviews.
+            </p>
+
+            <!-- Student Summary Cards / Table -->
+            <div class="proctor-modal-body text-left">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[11px] font-bold text-[var(--text-dim)] uppercase tracking-wider">Active Students & Status</span>
+                    <span id="proctor-total-alerts" class="text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">0 Incidents</span>
+                </div>
+
+                <div class="proctor-table-wrap mb-4">
+                    <table class="proctor-table">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Status</th>
+                                <th>Switch Count</th>
+                                <th>Total Away</th>
+                                <th>Last Activity</th>
+                            </tr>
+                        </thead>
+                        <tbody id="proctor-students-tbody">
+                            <tr>
+                                <td colspan="5" class="text-center text-xs text-[var(--text-dim)] py-4">No student activity recorded yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Event Timeline Stream -->
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[11px] font-bold text-[var(--text-dim)] uppercase tracking-wider">Live Activity Timeline</span>
+                    <button id="btn-clear-proctor-timeline" class="text-[10px] text-[var(--text-dim)] hover:text-white underline cursor-pointer">Clear Timeline</button>
+                </div>
+                <div id="proctor-timeline-list" class="proctor-timeline-container">
+                    <div class="proctor-timeline-empty">Monitoring active session events...</div>
+                </div>
+            </div>
+
+            <div class="modal-footer flex items-center justify-between gap-3 pt-3 mt-4 border-t border-[var(--border-color)]">
+                <span class="text-[11px] text-[var(--text-dim)]">Real-time focus tracking active</span>
+                <button class="px-6 py-2 bg-[#ffffff15] hover:bg-[#ffffff25] text-[var(--text-main)] text-xs font-bold rounded-xl transition-all modal-close">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
         <script>
             window.USER_SETTINGS = {
                 defaultLanguage: '{{defaultLanguage}}'
@@ -687,9 +754,9 @@
         </script>
         <script src="/js/broadcast_engine.js?v=25"></script>
         <!-- Real-Time Collaboration Engine -->
-        <script src="/js/collab_engine.js?v=34"></script>
+        <script src="/js/collab_engine.js?v=35"></script>
         <!-- Core Notebook UI Application -->
-        <script src="/js/notebook.js?v=34"></script>
+        <script src="/js/notebook.js?v=35"></script>
         <!-- Progressive Web App Handler -->
         <script src="/js/pwa.js?v=25"></script>
         <script>

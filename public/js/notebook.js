@@ -671,8 +671,23 @@ class NotebookApp {
                     const chip = document.createElement('div');
                     chip.className = 'collab-avatar-chip';
                     chip.style.backgroundColor = u.color || '#6d5dfc';
-                    chip.title = `${u.username || 'User'}${u.peerId === this.collab.peerId ? ' (You)' : ''}`;
-                    chip.innerText = (u.username || 'U').charAt(0).toUpperCase();
+
+                    const isSelf = u.peerId === this.collab.peerId;
+                    const status = u.proctorStatus || 'active';
+                    let statusTitle = '';
+                    let statusDotClass = 'status-dot-active';
+                    if (status === 'away') {
+                        statusTitle = ' [⚠️ Away / Switched Tab]';
+                        statusDotClass = 'status-dot-away';
+                        chip.classList.add('is-away');
+                    } else if (status === 'split_screen') {
+                        statusTitle = ' [⚠️ Split Screen / Resized]';
+                        statusDotClass = 'status-dot-split';
+                        chip.classList.add('is-split');
+                    }
+
+                    chip.title = `${u.username || 'User'}${isSelf ? ' (You)' : ''}${statusTitle}`;
+                    chip.innerHTML = `<span>${(u.username || 'U').charAt(0).toUpperCase()}</span><span class="avatar-proctor-dot ${statusDotClass}"></span>`;
                     avatarsContainer.appendChild(chip);
                 });
             }
@@ -1064,6 +1079,52 @@ class NotebookApp {
                 overlay.classList.remove('hidden');
             }
         };
+
+        // 9. Student Focus & Anti-Cheating Monitoring (Live Reviews)
+        this.proctorEvents = [];
+        this.collab.onRemoteStudentFocus = (msg) => {
+            if (!this.collab.isHost) return; // Only host receives & acts on focus alerts
+
+            this.proctorEvents.unshift(msg);
+            if (this.proctorEvents.length > 100) this.proctorEvents.pop();
+
+            // Real-time toast alert to host
+            if (msg.status === 'away') {
+                if (msg.reason === 'tab_switch') {
+                    this.showToast(`⚠️ Review Alert: @${msg.username} switched tab / window! (Incident #${msg.switchCount})`, 'warning');
+                } else if (msg.reason === 'app_switch') {
+                    this.showToast(`⚠️ Review Alert: @${msg.username} clicked out / switched app! (Incident #${msg.switchCount})`, 'warning');
+                } else {
+                    this.showToast(`⚠️ Review Alert: @${msg.username} is not focused on the review!`, 'warning');
+                }
+            } else if (msg.status === 'split_screen') {
+                this.showToast(`⚠️ Review Alert: @${msg.username} resized window or opened split-screen!`, 'warning');
+            } else if (msg.status === 'active' && msg.awayDuration > 0) {
+                this.showToast(`ℹ️ @${msg.username} returned after ${msg.awayDuration}s away.`, 'info');
+            }
+
+            // Update badge count
+            this.updateProctorAlertBadge();
+
+            // Re-render modal if open
+            const proctorModal = document.getElementById('modal-proctor-log');
+            if (proctorModal && !proctorModal.classList.contains('hidden')) {
+                this.renderProctorLogUI();
+            }
+        };
+
+        // Wire Review Proctor Log button (Host only)
+        document.getElementById('btn-collab-proctor-log')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.openProctorLogModal();
+        });
+
+        // Wire Clear Timeline button in Proctor Modal
+        document.getElementById('btn-clear-proctor-timeline')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.proctorEvents = [];
+            this.renderProctorLogUI();
+        });
 
         // Wire Copy Live Share Link button (direct 1-click clipboard copy)
         document.getElementById('btn-copy-collab-link')?.addEventListener('click', async (e) => {
@@ -1499,18 +1560,169 @@ class NotebookApp {
     updateCollabTopBar() {
         const topBar = document.getElementById('collab-top-bar');
         const authorEl = document.getElementById('collab-author-info');
+        const proctorBtn = document.getElementById('btn-collab-proctor-log');
+        const reviewBadge = document.getElementById('collab-review-badge');
+
         if (!this.notebook || !this.notebook.id || !this.notebook.isLive) {
             if (topBar) topBar.classList.add('hidden');
+            if (proctorBtn) proctorBtn.classList.add('hidden');
+            if (reviewBadge) reviewBadge.classList.add('hidden');
             return;
         }
 
         if (topBar) topBar.classList.remove('hidden');
 
+        const isHost = this.collab ? this.collab.isHost : false;
+        if (isHost) {
+            if (proctorBtn) proctorBtn.classList.remove('hidden');
+            if (reviewBadge) reviewBadge.classList.add('hidden');
+            this.updateProctorAlertBadge();
+        } else {
+            if (proctorBtn) proctorBtn.classList.add('hidden');
+            if (reviewBadge) reviewBadge.classList.remove('hidden');
+        }
+
         if (authorEl) {
             const ownerId = this.notebook.owner?._id ? String(this.notebook.owner._id) : String(this.notebook.owner || '');
-            const isHost = Boolean(ownerId && window.CURRENT_USER?.id && (ownerId === String(window.CURRENT_USER.id)));
-            const author = this.notebook.authorName || (isHost ? `${window.CURRENT_USER?.username || 'You'} (Host)` : 'Host');
+            const isHostUser = Boolean(ownerId && window.CURRENT_USER?.id && (ownerId === String(window.CURRENT_USER.id)));
+            const author = this.notebook.authorName || (isHostUser ? `${window.CURRENT_USER?.username || 'You'} (Host)` : 'Host');
             authorEl.innerText = `Host: @${author}`;
+        }
+    }
+
+    updateProctorAlertBadge() {
+        const badgePill = document.getElementById('collab-proctor-alert-count');
+        if (!badgePill) return;
+
+        let incidents = 0;
+        if (this.collab && Array.isArray(this.collab.usersList)) {
+            this.collab.usersList.forEach(u => {
+                if (u.peerId !== this.collab.peerId) {
+                    incidents += (u.switchCount || 0);
+                }
+            });
+        }
+
+        if (this.proctorEvents && this.proctorEvents.length > 0) {
+            const recordedAway = this.proctorEvents.filter(e => e.status === 'away' || e.status === 'split_screen').length;
+            incidents = Math.max(incidents, recordedAway);
+        }
+
+        if (incidents > 0) {
+            badgePill.innerText = incidents > 99 ? '99+' : incidents;
+            badgePill.classList.remove('hidden');
+        } else {
+            badgePill.classList.add('hidden');
+        }
+    }
+
+    openProctorLogModal() {
+        this.openModal('modal-proctor-log');
+        this.renderProctorLogUI();
+    }
+
+    renderProctorLogUI() {
+        const tbody = document.getElementById('proctor-students-tbody');
+        const totalAlertsEl = document.getElementById('proctor-total-alerts');
+        const timelineList = document.getElementById('proctor-timeline-list');
+        if (!tbody) return;
+
+        const users = (this.collab?.usersList || []).filter(u => u.peerId !== this.collab?.peerId);
+        let totalIncidents = 0;
+
+        if (users.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-xs text-[var(--text-dim)] py-4">No students currently connected to this session.</td></tr>`;
+        } else {
+            tbody.innerHTML = users.map(u => {
+                const status = u.proctorStatus || 'active';
+                const switches = u.switchCount || 0;
+                const awaySec = u.totalAwaySeconds || 0;
+                totalIncidents += switches;
+
+                let statusBadge = `<span class="proctor-badge-active"><span class="w-1.5 h-1.5 rounded-full bg-[#30ff6a] inline-block"></span> Active</span>`;
+                if (status === 'away') {
+                    statusBadge = `<span class="proctor-badge-away"><span class="w-1.5 h-1.5 rounded-full bg-[#f43f5e] inline-block animate-pulse"></span> Away (Switched)</span>`;
+                } else if (status === 'split_screen') {
+                    statusBadge = `<span class="proctor-badge-split"><span class="w-1.5 h-1.5 rounded-full bg-[#f59e0b] inline-block"></span> Split Screen</span>`;
+                }
+
+                const formattedAway = awaySec > 60 ? `${Math.floor(awaySec / 60)}m ${awaySec % 60}s` : `${awaySec}s`;
+
+                const lastEv = (this.proctorEvents || []).find(e => e.peerId === u.peerId);
+                let lastEventStr = 'Active in session';
+                if (lastEv) {
+                    const timeAgo = Math.max(0, Math.round((Date.now() - (lastEv.timestamp || Date.now())) / 1000));
+                    const agoText = timeAgo < 60 ? `${timeAgo}s ago` : `${Math.floor(timeAgo / 60)}m ago`;
+                    if (lastEv.status === 'away') lastEventStr = `<span class="text-rose-400 font-semibold">Switched away (${agoText})</span>`;
+                    else if (lastEv.status === 'split_screen') lastEventStr = `<span class="text-amber-400 font-semibold">Resized window (${agoText})</span>`;
+                    else lastEventStr = `<span class="text-emerald-400">Returned (${agoText})</span>`;
+                }
+
+                return `
+                    <tr>
+                        <td class="font-medium">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full" style="background: ${u.color || '#6d5dfc'};"></span>
+                                <span>${u.username || 'Student'}</span>
+                            </div>
+                        </td>
+                        <td>${statusBadge}</td>
+                        <td class="font-mono ${switches > 0 ? 'text-amber-400 font-bold' : ''}">${switches}</td>
+                        <td class="font-mono text-xs">${formattedAway}</td>
+                        <td class="text-xs">${lastEventStr}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        if (totalAlertsEl) {
+            totalAlertsEl.innerText = `${totalIncidents} Incident${totalIncidents === 1 ? '' : 's'}`;
+            if (totalIncidents > 0) {
+                totalAlertsEl.classList.remove('border-emerald-500/20', 'text-emerald-400', 'bg-emerald-500/10');
+                totalAlertsEl.classList.add('border-amber-500/20', 'text-amber-400', 'bg-amber-500/10');
+            } else {
+                totalAlertsEl.classList.remove('border-amber-500/20', 'text-amber-400', 'bg-amber-500/10');
+                totalAlertsEl.classList.add('border-emerald-500/20', 'text-emerald-400', 'bg-emerald-500/10');
+            }
+        }
+
+        if (timelineList) {
+            if (!this.proctorEvents || this.proctorEvents.length === 0) {
+                timelineList.innerHTML = `<div class="proctor-timeline-empty">Monitoring active session events...</div>`;
+            } else {
+                timelineList.innerHTML = this.proctorEvents.map(e => {
+                    const d = new Date(e.timestamp || Date.now());
+                    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    let itemClass = 'item-active';
+                    let icon = '🟢';
+                    let desc = '';
+
+                    if (e.status === 'away') {
+                        itemClass = 'item-away';
+                        icon = '🔴';
+                        desc = e.reason === 'tab_switch' ? 'Switched tab or minimized browser' : 'Switched away to another application';
+                    } else if (e.status === 'split_screen') {
+                        itemClass = 'item-split';
+                        icon = '🟡';
+                        desc = 'Browser resized to split-screen / dual window layout';
+                    } else {
+                        itemClass = 'item-active';
+                        icon = '🟢';
+                        desc = e.awayDuration ? `Returned to review window (was away for ${e.awayDuration}s)` : 'Returned to review window';
+                    }
+
+                    return `
+                        <div class="proctor-timeline-item ${itemClass}">
+                            <div class="flex items-center gap-2">
+                                <span>${icon}</span>
+                                <strong class="text-white font-semibold">@${e.username || 'Student'}</strong>
+                                <span class="text-[var(--text-dim)]">${desc}</span>
+                            </div>
+                            <span class="text-[10px] font-mono text-[var(--text-dim)] flex-shrink-0 ml-2">${timeStr}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
         }
     }
 

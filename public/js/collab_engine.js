@@ -68,6 +68,13 @@
             this.onRemoteLogChunk = null; // (cellId, chunk) => {}
             this.onRemoteInitSync = null; // (cachedCells) => {}
             this.onRemoteTyping = null; // ({ peerId, username, cellId }) => {}
+            this.onRemoteStudentFocus = null; // (data) => {}
+
+            this.proctorSummary = [];
+            this._focusListenersAttached = false;
+            this._awayStart = null;
+            this._blurStart = null;
+            this._currentFocusStatus = 'active';
 
             this.cursorDebounce = null;
             this.suppressLocalEdits = false;
@@ -166,6 +173,12 @@
                             }
                             if (Array.isArray(msg.cachedCells) && typeof this.onRemoteInitSync === 'function') {
                                 this.onRemoteInitSync(msg.cachedCells, msg.cachedMetadata || null);
+                            }
+                            if (Array.isArray(msg.proctorSummary)) {
+                                this.proctorSummary = msg.proctorSummary;
+                                if (typeof this.onRemoteStudentFocus === 'function') {
+                                    this.onRemoteStudentFocus({ type: 'summary_init', proctorSummary: msg.proctorSummary });
+                                }
                             }
                             break;
                         }
@@ -341,6 +354,16 @@
                             }
                             break;
                         }
+
+                        case 'student_focus': {
+                            if (msg.proctorSummary) {
+                                this.proctorSummary = msg.proctorSummary;
+                            }
+                            if (typeof this.onRemoteStudentFocus === 'function') {
+                                this.onRemoteStudentFocus(msg);
+                            }
+                            break;
+                        }
                     }
                 };
 
@@ -451,6 +474,13 @@
                 console.warn('[CollabEngine] Firebase fallback not active (using WebSocket):', fbErr.message);
             }
 
+            // If collaborator/student, start focus monitoring to prevent tab switching
+            if (!this.isHost) {
+                this.startFocusMonitoring();
+            } else {
+                this.stopFocusMonitoring();
+            }
+
             console.log(`[CollabEngine] Active on note ${this.noteId} as ${this.currentUser.username} (Host: ${this.isHost}, Peer: ${this.peerId})`);
         }
 
@@ -459,6 +489,8 @@
          */
         async disconnect() {
             if (!this.isConnected) return;
+
+            this.stopFocusMonitoring();
 
             if (this.pingTimer) clearInterval(this.pingTimer);
             if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
@@ -614,6 +646,105 @@
                     });
                 } catch (_) { }
             }
+        }
+
+        /**
+         * Real-time student proctoring & focus monitoring
+         * Detects tab switching, app switching (blur), and split-screen resizing
+         */
+        startFocusMonitoring() {
+            if (this._focusListenersAttached) return;
+            this._focusListenersAttached = true;
+            this._awayStart = null;
+            this._blurStart = null;
+            this._currentFocusStatus = 'active';
+
+            this._handleVisibilityChange = () => {
+                if (!this.isConnected || this.isHost) return;
+                if (document.visibilityState === 'hidden') {
+                    this._awayStart = Date.now();
+                    this._currentFocusStatus = 'away';
+                    this.broadcastFocusChange('away', 'tab_switch', 0);
+                } else if (document.visibilityState === 'visible') {
+                    let duration = 0;
+                    if (this._awayStart) {
+                        duration = Math.max(0, (Date.now() - this._awayStart) / 1000);
+                        this._awayStart = null;
+                    }
+                    this._currentFocusStatus = 'active';
+                    this.broadcastFocusChange('active', 'resumed', duration);
+                }
+            };
+
+            this._handleWindowBlur = () => {
+                if (!this.isConnected || this.isHost) return;
+                if (document.visibilityState === 'hidden') return;
+                setTimeout(() => {
+                    if (!document.hasFocus() && document.visibilityState === 'visible') {
+                        this._blurStart = Date.now();
+                        this._currentFocusStatus = 'away';
+                        this.broadcastFocusChange('away', 'app_switch', 0);
+                    }
+                }, 150);
+            };
+
+            this._handleWindowFocus = () => {
+                if (!this.isConnected || this.isHost) return;
+                if (this._blurStart) {
+                    const duration = Math.max(0, (Date.now() - this._blurStart) / 1000);
+                    this._blurStart = null;
+                    this._currentFocusStatus = 'active';
+                    this.broadcastFocusChange('active', 'resumed', duration);
+                }
+            };
+
+            this._handleWindowResize = () => {
+                if (!this.isConnected || this.isHost) return;
+                if (this._resizeTimer) clearTimeout(this._resizeTimer);
+                this._resizeTimer = setTimeout(() => {
+                    const availWidth = window.screen.availWidth || window.screen.width || 1200;
+                    const ratio = window.innerWidth / availWidth;
+                    // If window is split screen (< 65% of screen width)
+                    if (ratio < 0.65) {
+                        if (this._currentFocusStatus !== 'split_screen') {
+                            this._currentFocusStatus = 'split_screen';
+                            this.broadcastFocusChange('split_screen', 'split_screen', 0);
+                        }
+                    } else if (this._currentFocusStatus === 'split_screen') {
+                        this._currentFocusStatus = 'active';
+                        this.broadcastFocusChange('active', 'resumed', 0);
+                    }
+                }, 500);
+            };
+
+            document.addEventListener('visibilitychange', this._handleVisibilityChange);
+            window.addEventListener('blur', this._handleWindowBlur);
+            window.addEventListener('focus', this._handleWindowFocus);
+            window.addEventListener('resize', this._handleWindowResize);
+        }
+
+        stopFocusMonitoring() {
+            if (!this._focusListenersAttached) return;
+            if (this._handleVisibilityChange) document.removeEventListener('visibilitychange', this._handleVisibilityChange);
+            if (this._handleWindowBlur) window.removeEventListener('blur', this._handleWindowBlur);
+            if (this._handleWindowFocus) window.removeEventListener('focus', this._handleWindowFocus);
+            if (this._handleWindowResize) window.removeEventListener('resize', this._handleWindowResize);
+            if (this._resizeTimer) clearTimeout(this._resizeTimer);
+            this._focusListenersAttached = false;
+        }
+
+        broadcastFocusChange(status, reason, awayDuration = 0) {
+            if (!this.isConnected) return;
+            this.sendWsMessage({
+                type: 'student_focus',
+                noteId: this.noteId,
+                peerId: this.peerId,
+                username: this.currentUser.username || 'Student',
+                status,
+                reason,
+                awayDuration: Math.round(awayDuration),
+                timestamp: Date.now()
+            });
         }
 
         /**
