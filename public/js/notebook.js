@@ -2258,6 +2258,16 @@ class NotebookApp {
     }
 
 
+    isLiveNote(n) {
+        if (!n) return false;
+        if (n.isLive === true || n.isLive === 'true') return true;
+        if (n.content && (n.content.isLive === true || n.content.isLive === 'true')) return true;
+        if (typeof n.id === 'string' && (n.id.startsWith('live-') || n.id.includes('-collab-'))) return true;
+        if (typeof n.shareCode === 'string' && n.shareCode.startsWith('collab-')) return true;
+        if (n.content && typeof n.content.shareCode === 'string' && n.content.shareCode.startsWith('collab-')) return true;
+        return false;
+    }
+
     async refreshNotebookList(fetchRemote = false) {
         try {
             let list = [];
@@ -2287,7 +2297,7 @@ class NotebookApp {
                 }
             }
 
-            const normalNotes = (list || []).filter(n => !n.isLive && !(n.id && typeof n.id === 'string' && n.id.startsWith('live-')));
+            const normalNotes = (list || []).filter(n => !this.isLiveNote(n));
             this.allNotebooks = normalNotes;
             this.filteredNotebooks = normalNotes;
             this.renderNotebookList(this.allNotebooks);
@@ -2300,7 +2310,7 @@ class NotebookApp {
                 try {
                     const fallback = await this.db.getAllNotes();
                     if (fallback && fallback.length > 0) {
-                        const normalFallback = fallback.filter(n => !n.isLive && !(n.id && typeof n.id === 'string' && n.id.startsWith('live-')));
+                        const normalFallback = fallback.filter(n => !this.isLiveNote(n));
                         this.allNotebooks = normalFallback;
                         this.filteredNotebooks = normalFallback;
                         this.renderNotebookList(normalFallback);
@@ -2319,7 +2329,7 @@ class NotebookApp {
             const res = await this.safeFetch('/api/notes/shared');
             if (res.ok) {
                 const sharedNotes = await res.json();
-                this.sharedNotebooks = sharedNotes || [];
+                this.sharedNotebooks = (sharedNotes || []).filter(n => !this.isLiveNote(n));
                 this.renderSharedNotesList(this.sharedNotebooks);
             }
         } catch (e) {
@@ -2370,12 +2380,39 @@ class NotebookApp {
 
     async fetchAndRenderLiveNotes() {
         try {
-            const res = await this.safeFetch('/api/notes/live');
-            if (res.ok) {
-                const data = await res.json();
-                this.liveNotebooks = data || { hosted: [], joined: [] };
-                this.renderLiveNotesList(this.liveNotebooks);
+            let hosted = [];
+            let joined = [];
+            let localLive = [];
+            if (this.db && typeof this.db.getLiveNotes === 'function') {
+                try {
+                    localLive = await this.db.getLiveNotes();
+                } catch (dbErr) {
+                    console.warn('[NotebookApp] Failed to get local live notes:', dbErr);
+                }
             }
+
+            try {
+                const res = await this.safeFetch('/api/notes/live');
+                if (res.ok) {
+                    const data = await res.json();
+                    hosted = (data && data.hosted) || [];
+                    joined = (data && data.joined) || [];
+                }
+            } catch (netErr) {
+                console.warn('[NotebookApp] Failed to load remote live notes:', netErr);
+            }
+
+            // Merge local live notes into hosted if not already present in hosted or joined
+            const existingIds = new Set([...hosted.map(n => n.id), ...joined.map(n => n.id)]);
+            (localLive || []).forEach(localNote => {
+                if (localNote && localNote.id && !existingIds.has(localNote.id)) {
+                    hosted.push(localNote);
+                    existingIds.add(localNote.id);
+                }
+            });
+
+            this.liveNotebooks = { hosted, joined };
+            this.renderLiveNotesList(this.liveNotebooks);
         } catch (e) {
             console.warn('[NotebookApp] Failed to load live notes:', e);
         }
@@ -2440,7 +2477,7 @@ class NotebookApp {
                 if (this.db) {
                     const allNotes = await this.db.getAllNotes({ includeLive: true });
                     for (const n of allNotes) {
-                        if (n.isLive || (n.id && typeof n.id === 'string' && n.id.startsWith('live-'))) {
+                        if (this.isLiveNote(n)) {
                             if (n.folder === oldPath) {
                                 n.folder = newPath;
                                 await this.db.putNote(n);
@@ -2462,7 +2499,7 @@ class NotebookApp {
                     console.warn('[NotebookApp] Remote folder rename deferred:', remoteErr);
                 }
 
-                if (this.notebook && (this.notebook.isLive || (this.notebook.id && this.notebook.id.startsWith('live-')))) {
+                if (this.notebook && this.isLiveNote(this.notebook)) {
                     if (this.notebook.folder === oldPath) {
                         this.notebook.folder = newPath;
                     } else if (this.notebook.folder && this.notebook.folder.startsWith(oldPath + '/')) {
@@ -2673,7 +2710,7 @@ class NotebookApp {
             // Render Folders First (Alphabetical)
             Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name)).forEach(child => {
                 const folderId = `live-folder-${Math.random().toString(36).substr(2, 9)}`;
-                const currentNoteFolder = (this.notebook && (this.notebook.isLive || (this.notebook.id && typeof this.notebook.id === 'string' && this.notebook.id.startsWith('live-')))) ? this.notebook.folder : null;
+                const currentNoteFolder = (this.notebook && this.isLiveNote(this.notebook)) ? this.notebook.folder : null;
                 const isCurrentNoteAncestor = currentNoteFolder && (currentNoteFolder === child.fullPath || currentNoteFolder.startsWith(child.fullPath + '/'));
                 const isExpanded = this.expandedLiveFolders.has(child.fullPath) || isCurrentNoteAncestor;
 
@@ -2869,7 +2906,11 @@ class NotebookApp {
 
     renderNotebookList(notebooks) {
         const listContainer = document.getElementById('notebook-list');
+        if (!listContainer) return;
         listContainer.innerHTML = '';
+
+        // Strictly exclude any live note from normal notebook tree
+        const safeNotebooks = (notebooks || []).filter(nb => !this.isLiveNote(nb));
 
         // 1. Build Tree Structure from Paths
         const tree = { name: 'root', type: 'folder', children: {}, files: [] };
@@ -2897,7 +2938,7 @@ class NotebookApp {
             });
         }
 
-        notebooks.forEach(nb => {
+        safeNotebooks.forEach(nb => {
             let path = nb.folder && nb.folder !== 'root' ? nb.folder.split('/') : [];
             let currentLevel = tree;
             let currentPath = '';
@@ -2969,15 +3010,15 @@ class NotebookApp {
             });
 
             // Render Files (Alphabetical)
-            node.files.sort((a, b) => a.title.localeCompare(b.title)).forEach(file => {
-                const isActive = file.id === this.notebook.id;
+            node.files.sort((a, b) => (a.title || '').localeCompare(b.title || '')).forEach(file => {
+                const isActive = this.notebook ? file.id === this.notebook.id : false;
                 const fileItem = document.createElement('div');
                 fileItem.className = `tree-item is-file ${isActive ? 'active' : ''} notebook-item`; // notebook-item class kept for event delegation
                 fileItem.setAttribute('data-id', file.id);
                 fileItem.innerHTML = `
                     <div class="tree-arrow invisible"></div> <!-- Spacer -->
                     <i data-lucide="${file.isShared ? 'users' : 'file-code'}" class="tree-icon" style="${file.isShared ? 'color: #ffcc00;' : ''}"></i>
-                    <span class="tree-label" title="${file.title}">${file.title}</span>
+                    <span class="tree-label" title="${file.title || 'Untitled'}">${file.title || 'Untitled'}</span>
                     ${!file.isShared ? `
                     <div class="tree-actions">
                         <button class="tree-action-btn move-notebook-btn" title="Move to Folder"><i data-lucide="folder-input" style="width:12px;"></i></button>
@@ -2996,7 +3037,7 @@ class NotebookApp {
         renderTreeLevel(tree, rootContainer);
         listContainer.appendChild(rootContainer);
 
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
     }
 
 
@@ -3038,9 +3079,9 @@ class NotebookApp {
             this.disposeEditors();
             this.notebook = data;
 
-            // Bulletproof guarantee: any note starting with 'live-' IS a live note
+            // Bulletproof guarantee: accurate live note determination
             if (this.notebook) {
-                const isLiveNote = Boolean(this.notebook.isLive || (id && typeof id === 'string' && id.startsWith('live-')));
+                const isLiveNote = this.isLiveNote(this.notebook);
                 this.notebook.isLive = isLiveNote;
             }
 
@@ -3133,11 +3174,20 @@ class NotebookApp {
                 activeEl = el;
             }
         });
+        document.querySelectorAll('.live-note-item').forEach(el => {
+            el.classList.remove('active');
+            if (el.getAttribute('data-id') === id) {
+                el.classList.add('active');
+                activeEl = el;
+            }
+        });
 
         if (activeEl) {
+            const isLive = activeEl.classList.contains('is-live-file') || activeEl.classList.contains('live-note-item');
             // Expand all ancestor parent folders up the tree
             let parent = activeEl.parentElement;
-            let hasExpandedAny = false;
+            let hasExpandedNormal = false;
+            let hasExpandedLive = false;
             while (parent && !parent.classList.contains('tree-root')) {
                 if (parent.classList.contains('tree-children')) {
                     parent.classList.remove('collapsed');
@@ -3147,23 +3197,38 @@ class NotebookApp {
                         if (arrow) arrow.classList.add('rotated');
                         const pPath = folderItem.getAttribute('data-full-path');
                         if (pPath) {
-                            this.expandedFolders.add(pPath);
-                            hasExpandedAny = true;
+                            if (isLive || folderItem.classList.contains('is-live-folder')) {
+                                this.expandedLiveFolders.add(pPath);
+                                hasExpandedLive = true;
+                            } else {
+                                this.expandedFolders.add(pPath);
+                                hasExpandedNormal = true;
+                            }
                         }
                     }
                 }
                 parent = parent.parentElement;
             }
-            if (hasExpandedAny) {
+            if (hasExpandedNormal) {
                 localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
             }
+            if (hasExpandedLive) {
+                localStorage.setItem('zoho-expanded-live-folders', JSON.stringify([...this.expandedLiveFolders]));
+            }
 
-            // Expand notebook list if collapsed
-            const list = document.getElementById('notebook-list');
-            if (list && list.classList.contains('collapsed')) {
-                list.classList.remove('collapsed');
-                const chevron = document.getElementById('chevron-notebooks');
-                if (chevron) chevron.classList.remove('collapsed-chevron');
+            // Expand notebook list or live notes list if collapsed
+            if (isLive) {
+                const liveList = document.getElementById('live-notes-list');
+                if (liveList && liveList.classList.contains('collapsed')) {
+                    liveList.classList.remove('collapsed');
+                }
+            } else {
+                const list = document.getElementById('notebook-list');
+                if (list && list.classList.contains('collapsed')) {
+                    list.classList.remove('collapsed');
+                    const chevron = document.getElementById('chevron-notebooks');
+                    if (chevron) chevron.classList.remove('collapsed-chevron');
+                }
             }
 
             // Use a slight delay to ensure the DOM is ready for scrolling
@@ -3171,7 +3236,7 @@ class NotebookApp {
                 activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 100);
         }
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
     }
 
     disposeEditors() {

@@ -24,12 +24,23 @@ const noteSchema = new mongoose.Schema({
 
 // Auto-generate unique shareCode if note is marked live and shareCode is missing
 noteSchema.pre('save', function (next) {
-    if (this.isLive && !this.shareCode) {
-        const crypto = require('crypto');
-        this.shareCode = 'collab-' + crypto.randomBytes(6).toString('hex');
-    }
-    if (!this.isLive && (this.shareCode === null || this.shareCode === '')) {
-        this.shareCode = undefined;
+    const isLive = Boolean(
+        this.isLive === true ||
+        (this.id && (this.id.startsWith('live-') || this.id.includes('-collab-'))) ||
+        (this.shareCode && this.shareCode.startsWith('collab-')) ||
+        (this.content && (this.content.isLive === true || this.content.isLive === 'true'))
+    );
+    if (isLive) {
+        this.isLive = true;
+        if (!this.shareCode) {
+            const crypto = require('crypto');
+            this.shareCode = 'collab-' + crypto.randomBytes(6).toString('hex');
+        }
+    } else {
+        this.isLive = false;
+        if (this.shareCode === null || this.shareCode === '') {
+            this.shareCode = undefined;
+        }
     }
     next();
 });

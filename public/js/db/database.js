@@ -316,6 +316,16 @@
             }
         }
 
+        _isLiveNote(n) {
+            if (!n) return false;
+            if (n.isLive === true || n.isLive === 'true') return true;
+            if (n.content && (n.content.isLive === true || n.content.isLive === 'true')) return true;
+            if (typeof n.id === 'string' && (n.id.startsWith('live-') || n.id.includes('-collab-'))) return true;
+            if (typeof n.shareCode === 'string' && n.shareCode.startsWith('collab-')) return true;
+            if (n.content && typeof n.content.shareCode === 'string' && n.content.shareCode.startsWith('collab-')) return true;
+            return false;
+        }
+
         /**
          * Get list of all non-trashed normal notes (for sidebar and search).
          * Live notes are excluded by default to keep the main notebook list clean.
@@ -326,7 +336,7 @@
             if (this.isDexie) {
                 let collection = this.db.notes.filter(n => {
                     if (n.isTrashed) return false;
-                    if (options.includeLive !== true && (n.isLive || (n.id && typeof n.id === 'string' && n.id.startsWith('live-')))) {
+                    if (options.includeLive !== true && this._isLiveNote(n)) {
                         return false;
                     }
                     return true;
@@ -345,7 +355,7 @@
                     req.onsuccess = () => {
                         let notes = (req.result || []).filter(n => {
                             if (n.isTrashed) return false;
-                            if (options.includeLive !== true && (n.isLive || (n.id && typeof n.id === 'string' && n.id.startsWith('live-')))) {
+                            if (options.includeLive !== true && this._isLiveNote(n)) {
                                 return false;
                             }
                             return true;
@@ -370,7 +380,7 @@
             if (this.isDexie) {
                 let collection = this.db.notes.filter(n => {
                     if (n.isTrashed) return false;
-                    return Boolean(n.isLive || (n.id && typeof n.id === 'string' && n.id.startsWith('live-')));
+                    return this._isLiveNote(n);
                 });
                 if (options.folder && options.folder !== 'all') {
                     collection = collection.filter(n => n.folder === options.folder);
@@ -386,7 +396,7 @@
                     req.onsuccess = () => {
                         let notes = (req.result || []).filter(n => {
                             if (n.isTrashed) return false;
-                            return Boolean(n.isLive || (n.id && typeof n.id === 'string' && n.id.startsWith('live-')));
+                            return this._isLiveNote(n);
                         });
                         if (options.folder && options.folder !== 'all') {
                             notes = notes.filter(n => n.folder === options.folder);

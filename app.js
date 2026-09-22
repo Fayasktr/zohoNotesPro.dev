@@ -762,12 +762,23 @@ app.get('/api/notes/live', isAuthenticated, async (req, res) => {
         const userObjId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
 
         const liveNotes = await Note.find({
-            isLive: true,
-            isTrashed: { $ne: true },
             $or: [
-                { owner: userObjId },
-                { owner: String(userId) },
-                { 'collaborators.user': userObjId, 'collaborators.status': 'accepted' }
+                { isLive: true },
+                { id: /^live-/ },
+                { id: /-collab-/ },
+                { shareCode: /^collab-/ },
+                { 'content.isLive': true }
+            ],
+            isTrashed: { $ne: true },
+            $and: [
+                {
+                    $or: [
+                        { owner: userObjId },
+                        { owner: String(userId) },
+                        { 'collaborators.user': userObjId, 'collaborators.status': 'accepted' },
+                        { 'collaborators.user': String(userId), 'collaborators.status': 'accepted' }
+                    ]
+                }
             ]
         }).populate('owner', 'username email').sort({ updatedAt: -1 }).lean();
 
@@ -946,7 +957,12 @@ app.get('/api/notes/shared', isAuthenticated, async (req, res) => {
 
         const sharedNotes = await Note.find({
             'collaborators.user': { $in: [currentUserId, userObjId] },
-            'collaborators.status': 'accepted'
+            'collaborators.status': 'accepted',
+            isTrashed: { $ne: true },
+            isLive: { $ne: true },
+            id: { $not: /^live-/ },
+            shareCode: { $not: /^collab-/ },
+            'content.isLive': { $ne: true }
         }).populate('owner', 'username email').sort({ updatedAt: -1 }).lean();
 
         const formatted = sharedNotes.map(n => ({
@@ -1153,19 +1169,26 @@ app.get('/api/notebooks', isAuthenticated, async (req, res) => {
         const mongoose = require('mongoose');
         const userObjId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
 
+        const liveFilter = {
+            isLive: { $ne: true },
+            id: { $not: /^live-/ },
+            shareCode: { $not: /^collab-/ },
+            'content.isLive': { $ne: true }
+        };
+
         // Find notebooks owned by the user (only normal notes)
         const ownedNotes = await Note.find({
             owner: { $in: [userId, userObjId] },
-            isLive: { $ne: true },
-            isTrashed: { $ne: true }
+            isTrashed: { $ne: true },
+            ...liveFilter
         }, 'id title folder isStarred updatedAt isLive').sort({ updatedAt: -1 }).lean();
 
         // Find notebooks shared with the user (only normal notes)
         const sharedNotes = await Note.find({
             'collaborators.user': { $in: [userId, userObjId] },
             'collaborators.status': 'accepted',
-            isLive: { $ne: true },
-            isTrashed: { $ne: true }
+            isTrashed: { $ne: true },
+            ...liveFilter
         }, 'id title folder isStarred updatedAt owner isLive').populate('owner', 'username').lean();
 
         // Combine and mark shared ones
