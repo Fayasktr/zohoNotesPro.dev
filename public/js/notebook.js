@@ -2275,11 +2275,13 @@ class NotebookApp {
 
     isLiveNote(n) {
         if (!n) return false;
+        // Normal notes starting with ntbk- or normal- are strictly normal notes
+        if (typeof n.id === 'string' && (n.id.startsWith('ntbk-') || n.id.startsWith('normal-'))) {
+            return false;
+        }
         if (n.isLive === true || n.isLive === 'true') return true;
         if (n.content && (n.content.isLive === true || n.content.isLive === 'true')) return true;
-        if (typeof n.id === 'string' && (n.id.startsWith('live-') || n.id.includes('-collab-'))) return true;
-        if (typeof n.shareCode === 'string' && n.shareCode.startsWith('collab-')) return true;
-        if (n.content && typeof n.content.shareCode === 'string' && n.content.shareCode.startsWith('collab-')) return true;
+        if (typeof n.id === 'string' && n.id.startsWith('live-')) return true;
         return false;
     }
 
@@ -2417,10 +2419,14 @@ class NotebookApp {
                 console.warn('[NotebookApp] Failed to load remote live notes:', netErr);
             }
 
+            // Strictly filter hosted and joined to valid live notes
+            hosted = (hosted || []).filter(n => this.isLiveNote(n));
+            joined = (joined || []).filter(n => this.isLiveNote(n));
+
             // Merge local live notes into hosted if not already present in hosted or joined
             const existingIds = new Set([...hosted.map(n => n.id), ...joined.map(n => n.id)]);
             (localLive || []).forEach(localNote => {
-                if (localNote && localNote.id && !existingIds.has(localNote.id)) {
+                if (localNote && localNote.id && this.isLiveNote(localNote) && !existingIds.has(localNote.id)) {
                     hosted.push(localNote);
                     existingIds.add(localNote.id);
                 }
@@ -2663,9 +2669,33 @@ class NotebookApp {
         if (!listEl) return;
         listEl.innerHTML = '';
 
-        const hosted = ((data && data.hosted) || []).map(n => ({ ...n, isHosted: true }));
-        const joined = ((data && data.joined) || []).map(n => ({ ...n, isHosted: false }));
+        const hosted = ((data && data.hosted) || []).filter(n => this.isLiveNote(n)).map(n => ({ ...n, isHosted: true }));
+        const joined = ((data && data.joined) || []).filter(n => this.isLiveNote(n)).map(n => ({ ...n, isHosted: false }));
         const allLive = [...hosted, ...joined];
+
+        // Sanitize persisted live folders to prune empty folders that belong to normal notes
+        if (this.persistedLiveFolders) {
+            const liveFolderPathsInUse = new Set();
+            allLive.forEach(nb => {
+                if (nb.folder && nb.folder !== 'root') {
+                    const parts = nb.folder.split('/');
+                    let cur = '';
+                    parts.forEach(p => {
+                        cur = cur ? `${cur}/${p}` : p;
+                        liveFolderPathsInUse.add(cur);
+                    });
+                }
+            });
+            const normalFolders = new Set(JSON.parse(localStorage.getItem('zoho-persisted-folders') || '[]'));
+            let modified = false;
+            for (const folder of this.persistedLiveFolders) {
+                if (normalFolders.has(folder) && !liveFolderPathsInUse.has(folder)) {
+                    this.persistedLiveFolders.delete(folder);
+                    modified = true;
+                }
+            }
+            if (modified) this.savePersistedLiveFolders();
+        }
 
         if (allLive.length === 0 && (!this.persistedLiveFolders || this.persistedLiveFolders.size === 0)) {
             listEl.innerHTML = `

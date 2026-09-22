@@ -76,10 +76,12 @@ function resolvePushItem(existing, incoming, options = {}) {
     const clientVersion = typeof note._version === 'number' ? note._version : 1;
     const nextVersion = Math.max(serverVersion, clientVersion) + 1;
 
-    const crypto = require('crypto');
-    const existingShareCode = existing ? existing.shareCode : null;
-    const incomingShareCode = note.shareCode || null;
-    const shareCode = incomingShareCode || existingShareCode || ('collab-' + crypto.randomBytes(6).toString('hex'));
+    const isLive = Boolean(note.isLive || (note.id && typeof note.id === 'string' && note.id.startsWith('live-')) || (existing && existing.isLive));
+    let shareCode = note.shareCode || (existing ? existing.shareCode : undefined);
+    if (isLive && !shareCode) {
+        const crypto = require('crypto');
+        shareCode = 'collab-' + crypto.randomBytes(6).toString('hex');
+    }
 
     return {
         outcome: 'applied',
@@ -91,15 +93,15 @@ function resolvePushItem(existing, incoming, options = {}) {
             isTrashed: !!note.isTrashed,
             trashedAt: note.trashedAt ? new Date(sanitizeTimestamp(note.trashedAt) || Date.now()) : null,
             _version: nextVersion,
-            shareCode: shareCode,
+            shareCode: shareCode || undefined,
             authorName: (existing && existing.authorName) ? existing.authorName : (note.authorName || ''),
-            isLive: !!(note.isLive || (existing && existing.isLive)),
+            isLive: isLive,
             content: {
                 id: note.id,
                 title: note.title || 'Untitled Notebook',
                 folder: note.folder || 'root',
                 isStarred: !!note.isStarred,
-                isLive: !!(note.isLive || (existing && existing.isLive)),
+                isLive: isLive,
                 cells: clientCells,
                 tags: Array.isArray(note.tags) ? note.tags : (note.content && Array.isArray(note.content.tags) ? note.content.tags : [])
             },

@@ -89,10 +89,18 @@
                     noteVersions: 'id, noteId, version, timestamp, source'
                 });
 
-                db.open().then(() => {
+                db.open().then(async () => {
                     this.db = db;
                     this.isDexie = true;
                     this.isReady = true;
+                    try {
+                        const misflagged = await this.db.notes.filter(n => typeof n.id === 'string' && (n.id.startsWith('ntbk-') || n.id.startsWith('normal-')) && (n.isLive === true || n.isLive === 'true')).toArray();
+                        for (const item of misflagged) {
+                            item.isLive = false;
+                            if (item.content) item.content.isLive = false;
+                            await this.db.notes.put(item);
+                        }
+                    } catch (_) {}
                     console.log('[ZohoLocalDB] Dexie/IndexedDB initialized successfully');
                     resolve(this);
                 }).catch(err => {
@@ -318,11 +326,13 @@
 
         _isLiveNote(n) {
             if (!n) return false;
+            // Normal notes starting with ntbk- or normal- are strictly normal notes
+            if (typeof n.id === 'string' && (n.id.startsWith('ntbk-') || n.id.startsWith('normal-'))) {
+                return false;
+            }
             if (n.isLive === true || n.isLive === 'true') return true;
             if (n.content && (n.content.isLive === true || n.content.isLive === 'true')) return true;
-            if (typeof n.id === 'string' && (n.id.startsWith('live-') || n.id.includes('-collab-'))) return true;
-            if (typeof n.shareCode === 'string' && n.shareCode.startsWith('collab-')) return true;
-            if (n.content && typeof n.content.shareCode === 'string' && n.content.shareCode.startsWith('collab-')) return true;
+            if (typeof n.id === 'string' && n.id.startsWith('live-')) return true;
             return false;
         }
 

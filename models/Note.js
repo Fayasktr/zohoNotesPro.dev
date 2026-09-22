@@ -26,8 +26,7 @@ const noteSchema = new mongoose.Schema({
 noteSchema.pre('save', function (next) {
     const isLive = Boolean(
         this.isLive === true ||
-        (this.id && (this.id.startsWith('live-') || this.id.includes('-collab-'))) ||
-        (this.shareCode && this.shareCode.startsWith('collab-')) ||
+        (this.id && this.id.startsWith('live-')) ||
         (this.content && (this.content.isLive === true || this.content.isLive === 'true'))
     );
     if (isLive) {

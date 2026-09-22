@@ -765,8 +765,6 @@ app.get('/api/notes/live', isAuthenticated, async (req, res) => {
             $or: [
                 { isLive: true },
                 { id: /^live-/ },
-                { id: /-collab-/ },
-                { shareCode: /^collab-/ },
                 { 'content.isLive': true }
             ],
             isTrashed: { $ne: true },
@@ -963,7 +961,6 @@ app.get('/api/notes/shared', isAuthenticated, async (req, res) => {
             isTrashed: { $ne: true },
             isLive: { $ne: true },
             id: { $not: /^live-/ },
-            shareCode: { $not: /^collab-/ },
             'content.isLive': { $ne: true }
         }).populate('owner', 'username email').sort({ updatedAt: -1 }).lean();
 
@@ -1174,7 +1171,6 @@ app.get('/api/notebooks', isAuthenticated, async (req, res) => {
         const liveFilter = {
             isLive: { $ne: true },
             id: { $not: /^live-/ },
-            shareCode: { $not: /^collab-/ },
             'content.isLive': { $ne: true }
         };
 
