@@ -216,8 +216,37 @@ body.light-theme .nav-item.active {
 }
 
 .notebook-item.drag-over {
-    background: rgba(109, 93, 252, 0.2);
-    border: 1px dashed var(--accent);
+    background: rgba(109, 93, 252, 0.2) !important;
+    border: 1px dashed var(--accent) !important;
+}
+
+.live-note-item.drag-over {
+    background: rgba(244, 63, 94, 0.2) !important;
+    border: 1px dashed #f43f5e !important;
+}
+
+.tree-item.is-folder.drag-over-folder {
+    background: rgba(109, 93, 252, 0.25) !important;
+    border-radius: 6px;
+    outline: 2px dashed var(--accent) !important;
+}
+
+.tree-item.is-live-folder.drag-over-folder {
+    background: rgba(244, 63, 94, 0.25) !important;
+    border-radius: 6px;
+    outline: 2px dashed #f43f5e !important;
+}
+
+.notebook-item.dragging-sidebar-note,
+.live-note-item.dragging-sidebar-note {
+    opacity: 0.45;
+    transform: scale(0.98);
+}
+
+.tree-root.drag-over-root {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
 }
 
 .cell-header {

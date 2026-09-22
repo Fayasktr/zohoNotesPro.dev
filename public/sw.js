@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zoho-notes-v17-live-folder-fix';
+const CACHE_NAME = 'zoho-notes-v18-drag-drop';
 const OFFLINE_URL = '/offline.html';
 
 // Static Shell & Local-First Engine Assets to Pre-cache

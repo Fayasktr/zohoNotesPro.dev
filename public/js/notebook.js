@@ -515,17 +515,32 @@ class NotebookApp {
 
         // Drag and Drop for Reordering Cells
         const cellsList = document.getElementById('cells-list');
-        cellsList.addEventListener('dragstart', (e) => this.handleCellDragStart(e));
-        cellsList.addEventListener('dragover', (e) => this.handleCellDragOver(e));
-        cellsList.addEventListener('dragleave', (e) => this.handleCellDragLeave(e));
-        cellsList.addEventListener('dragend', (e) => this.handleCellDragEnd(e));
-        cellsList.addEventListener('drop', (e) => this.handleCellDrop(e));
+        if (cellsList) {
+            cellsList.addEventListener('dragstart', (e) => this.handleCellDragStart(e));
+            cellsList.addEventListener('dragover', (e) => this.handleCellDragOver(e));
+            cellsList.addEventListener('dragleave', (e) => this.handleCellDragLeave(e));
+            cellsList.addEventListener('dragend', (e) => this.handleCellDragEnd(e));
+            cellsList.addEventListener('drop', (e) => this.handleCellDrop(e));
+        }
 
-        // Drag and Drop for Moving Notes to other Notebooks
+        // Drag and Drop for Sidebar (Folders, Normal Notebooks & Live Notes)
         const notebookList = document.getElementById('notebook-list');
-        notebookList.addEventListener('dragover', (e) => this.handleNotebookDragOver(e));
-        notebookList.addEventListener('dragleave', (e) => this.handleNotebookDragLeave(e));
-        notebookList.addEventListener('drop', (e) => this.handleNotebookDrop(e));
+        if (notebookList) {
+            notebookList.addEventListener('dragstart', (e) => this.handleSidebarDragStart(e));
+            notebookList.addEventListener('dragend', (e) => this.handleSidebarDragEnd(e));
+            notebookList.addEventListener('dragover', (e) => this.handleNotebookListDragOver(e));
+            notebookList.addEventListener('dragleave', (e) => this.handleNotebookListDragLeave(e));
+            notebookList.addEventListener('drop', (e) => this.handleNotebookListDrop(e));
+        }
+
+        const liveNotesList = document.getElementById('live-notes-list');
+        if (liveNotesList) {
+            liveNotesList.addEventListener('dragstart', (e) => this.handleSidebarDragStart(e));
+            liveNotesList.addEventListener('dragend', (e) => this.handleSidebarDragEnd(e));
+            liveNotesList.addEventListener('dragover', (e) => this.handleLiveNotesListDragOver(e));
+            liveNotesList.addEventListener('dragleave', (e) => this.handleLiveNotesListDragLeave(e));
+            liveNotesList.addEventListener('drop', (e) => this.handleLiveNotesListDrop(e));
+        }
 
         document.getElementById('cells-list').addEventListener('input', (e) => {
             if (e.target.classList.contains('cell-title-input')) {
@@ -2578,6 +2593,49 @@ class NotebookApp {
         });
     }
 
+    async moveLiveNotebookToFolder(noteId, targetFolder) {
+        const cleanTarget = targetFolder ? targetFolder.trim() : 'root';
+        const folderVal = (!cleanTarget || cleanTarget === 'root') ? 'root' : cleanTarget;
+
+        try {
+            if (folderVal !== 'root') {
+                this.addPersistedLiveFolder(folderVal);
+                if (this.expandedLiveFolders) {
+                    this.expandedLiveFolders.add(folderVal);
+                    localStorage.setItem('zoho-expanded-live-folders', JSON.stringify([...this.expandedLiveFolders]));
+                }
+            }
+
+            if (this.db) {
+                const targetNote = await this.db.getNote(noteId);
+                if (targetNote) {
+                    targetNote.folder = folderVal;
+                    await this.db.putNote(targetNote);
+                }
+            }
+
+            if (this.notebook && this.notebook.id === noteId) {
+                this.notebook.folder = folderVal;
+            }
+
+            try {
+                await this.safeFetch('/api/notebooks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: noteId, folder: folderVal })
+                });
+            } catch (remoteErr) {
+                console.warn('[NotebookApp] Remote live folder move deferred:', remoteErr);
+            }
+
+            await this.fetchAndRenderLiveNotes();
+            this.showToast(`Live note moved to "${folderVal === 'root' ? 'Live Notes' : folderVal}"`);
+        } catch (err) {
+            console.error('Failed to move live note to folder', err);
+            this.showToast('Failed to move live note to folder', 'error');
+        }
+    }
+
     async moveLiveNotebookToFolderPrompt(noteId) {
         let note = null;
         if (this.liveNotebooks) {
@@ -2596,44 +2654,7 @@ class NotebookApp {
             const cleanTarget = targetFolder ? targetFolder.trim() : 'root';
             const folderVal = (!cleanTarget || cleanTarget === 'root') ? 'root' : cleanTarget;
             if (folderVal === currentFolder) return;
-
-            try {
-                if (folderVal !== 'root') {
-                    this.addPersistedLiveFolder(folderVal);
-                    if (this.expandedLiveFolders) {
-                        this.expandedLiveFolders.add(folderVal);
-                        localStorage.setItem('zoho-expanded-live-folders', JSON.stringify([...this.expandedLiveFolders]));
-                    }
-                }
-
-                if (this.db) {
-                    const targetNote = await this.db.getNote(noteId);
-                    if (targetNote) {
-                        targetNote.folder = folderVal;
-                        await this.db.putNote(targetNote);
-                    }
-                }
-
-                if (this.notebook && this.notebook.id === noteId) {
-                    this.notebook.folder = folderVal;
-                }
-
-                try {
-                    await this.safeFetch('/api/notebooks', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: noteId, folder: folderVal })
-                    });
-                } catch (remoteErr) {
-                    console.warn('[NotebookApp] Remote live folder move deferred:', remoteErr);
-                }
-
-                await this.fetchAndRenderLiveNotes();
-                this.showToast(`Live note moved to "${folderVal}"`);
-            } catch (err) {
-                console.error('Failed to move live note to folder', err);
-                this.showToast('Failed to move live note to folder', 'error');
-            }
+            await this.moveLiveNotebookToFolder(noteId, folderVal);
         });
     }
 
@@ -2755,6 +2776,9 @@ class NotebookApp {
                 const fileItem = document.createElement('div');
                 fileItem.className = `tree-item is-live-file ${isActive ? 'active' : ''} live-note-item group flex items-center justify-between gap-1`;
                 fileItem.setAttribute('data-id', file.id);
+                fileItem.setAttribute('draggable', 'true');
+                fileItem.setAttribute('data-is-live', 'true');
+                fileItem.setAttribute('data-folder', file.folder || 'root');
 
                 fileItem.innerHTML = `
                     <div class="flex items-center gap-2 overflow-hidden flex-1 cursor-pointer">
@@ -3015,6 +3039,9 @@ class NotebookApp {
                 const fileItem = document.createElement('div');
                 fileItem.className = `tree-item is-file ${isActive ? 'active' : ''} notebook-item`; // notebook-item class kept for event delegation
                 fileItem.setAttribute('data-id', file.id);
+                fileItem.setAttribute('draggable', 'true');
+                fileItem.setAttribute('data-is-live', 'false');
+                fileItem.setAttribute('data-folder', file.folder || 'root');
                 fileItem.innerHTML = `
                     <div class="tree-arrow invisible"></div> <!-- Spacer -->
                     <i data-lucide="${file.isShared ? 'users' : 'file-code'}" class="tree-icon" style="${file.isShared ? 'color: #ffcc00;' : ''}"></i>
@@ -4355,6 +4382,50 @@ class NotebookApp {
             }
         });
     }
+    async moveNotebookToFolder(noteId, targetFolder) {
+        const cleanTarget = targetFolder ? targetFolder.trim() : 'root';
+        const folderVal = (!cleanTarget || cleanTarget === 'root') ? 'root' : cleanTarget;
+
+        try {
+            if (folderVal !== 'root') {
+                this.addPersistedFolder(folderVal);
+                if (this.expandedFolders) {
+                    this.expandedFolders.add(folderVal);
+                    localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
+                }
+            }
+
+            if (this.db) {
+                const targetNote = await this.db.getNote(noteId);
+                if (targetNote) {
+                    targetNote.folder = folderVal;
+                    await this.db.putNote(targetNote);
+                    if (this.sync) this.sync.notifyLocalChange(noteId, 'UPDATE');
+                }
+            }
+
+            if (this.notebook && this.notebook.id === noteId) {
+                this.notebook.folder = folderVal;
+            }
+
+            // Always update remote server as well
+            try {
+                await this.safeFetch('/api/notebooks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: noteId, folder: folderVal })
+                });
+            } catch (remoteErr) {
+                console.warn('[NotebookApp] Remote folder move deferred:', remoteErr);
+            }
+
+            await this.refreshNotebookList();
+            this.showToast(`Notebook moved to "${folderVal === 'root' ? 'My Notebooks' : folderVal}"`);
+        } catch (err) {
+            console.error('Failed to move notebook', err);
+            this.showToast('Failed to move notebook', 'error');
+        }
+    }
 
     async moveNotebookToFolderPrompt(noteId) {
         let note = null;
@@ -4370,54 +4441,23 @@ class NotebookApp {
             const cleanTarget = targetFolder ? targetFolder.trim() : 'root';
             const folderVal = (!cleanTarget || cleanTarget === 'root') ? 'root' : cleanTarget;
             if (folderVal === currentFolder) return;
-
-            try {
-                if (folderVal !== 'root') {
-                    this.addPersistedFolder(folderVal);
-                    if (this.expandedFolders) {
-                        this.expandedFolders.add(folderVal);
-                        localStorage.setItem('zoho-expanded-folders', JSON.stringify([...this.expandedFolders]));
-                    }
-                }
-
-                if (this.db) {
-                    const targetNote = await this.db.getNote(noteId);
-                    if (targetNote) {
-                        targetNote.folder = folderVal;
-                        await this.db.putNote(targetNote);
-                        if (this.sync) this.sync.notifyLocalChange(noteId, 'UPDATE');
-                    }
-                }
-
-                if (this.notebook && this.notebook.id === noteId) {
-                    this.notebook.folder = folderVal;
-                }
-
-                // Always update remote server as well
-                try {
-                    await this.safeFetch('/api/notebooks', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: noteId, folder: folderVal })
-                    });
-                } catch (remoteErr) {
-                    console.warn('[NotebookApp] Remote folder move deferred:', remoteErr);
-                }
-
-                await this.refreshNotebookList();
-            } catch (err) {
-                console.error('Failed to move notebook', err);
-            }
+            await this.moveNotebookToFolder(noteId, folderVal);
         });
     }
 
     // --- Drag and Drop Handlers ---
 
     handleCellDragStart(e) {
+        if (e.target.closest('input, select, button, textarea') || e.target.closest('.monaco-editor')) {
+            e.preventDefault();
+            return;
+        }
         const cell = e.target.closest('.cell');
         if (!cell) return;
         this.draggedCellId = cell.id.replace('container-', '');
         cell.classList.add('dragging');
+        e.dataTransfer.setData('application/zoho-item-type', 'cell');
+        e.dataTransfer.setData('application/zoho-cell-id', this.draggedCellId);
         e.dataTransfer.setData('text/plain', this.draggedCellId);
         e.dataTransfer.effectAllowed = 'move';
     }
@@ -4480,29 +4520,8 @@ class NotebookApp {
         }
     }
 
-    handleNotebookDragOver(e) {
-        e.preventDefault();
-        const item = e.target.closest('.notebook-item');
-        if (item && item.getAttribute('data-id') !== this.notebook.id) {
-            item.classList.add('drag-over');
-            e.dataTransfer.dropEffect = 'move';
-        }
-    }
-
-    handleNotebookDragLeave(e) {
-        const item = e.target.closest('.notebook-item');
-        if (item) item.classList.remove('drag-over');
-    }
-
-    async handleNotebookDrop(e) {
-        e.preventDefault();
-        const item = e.target.closest('.notebook-item');
-        if (!item) return;
-
-        item.classList.remove('drag-over');
-        const targetNotebookId = item.getAttribute('data-id');
-        const cellId = e.dataTransfer.getData('text/plain');
-
+    async moveCellToNotebook(cellId, targetNotebookId) {
+        if (!this.notebook || !this.notebook.cells) return;
         if (targetNotebookId === this.notebook.id) return;
 
         this.confirmAction('Move Note?', 'Move this note to another notebook?', async () => {
@@ -4525,10 +4544,16 @@ class NotebookApp {
                 if (res.ok) {
                     this.disposeEditors();
                     document.getElementById('cells-list').innerHTML = '';
-                    this.notebook.cells.forEach((cell, idx) => this.renderCell(cell, idx + 1));
+                    this.notebook.cells.forEach((c, idx) => this.renderCell(c, idx + 1));
                     this._autoSave();
+                    if (this.broadcaster && this.broadcaster.isBroadcasting) {
+                        this.broadcaster.syncNotebookStructure(this.notebook.cells);
+                    }
+                    if (this.collab && this.collab.isConnected) {
+                        this.collab.broadcastCellDeleted(cell.id);
+                    }
+                    this.showToast('Note moved successfully');
                 } else {
-                    // Restore cell if move failed
                     this.notebook.cells.splice(cellIndex, 0, cell);
                     this.showToast('Failed to move note', 'error');
                 }
@@ -4536,6 +4561,180 @@ class NotebookApp {
                 console.error('Move cell failed', err);
             }
         });
+    }
+
+    handleSidebarDragStart(e) {
+        if (e.target.closest('button') || e.target.closest('.tree-actions')) {
+            e.preventDefault();
+            return;
+        }
+
+        const noteItem = e.target.closest('.notebook-item, .live-note-item');
+        if (!noteItem) return;
+
+        const noteId = noteItem.getAttribute('data-id');
+        const isLive = noteItem.classList.contains('live-note-item') || noteItem.classList.contains('is-live-file');
+        this.draggedSidebarNote = {
+            id: noteId,
+            isLive: isLive,
+            element: noteItem
+        };
+
+        noteItem.classList.add('dragging-sidebar-note');
+        e.dataTransfer.setData('application/zoho-item-type', isLive ? 'live-note' : 'normal-note');
+        e.dataTransfer.setData('application/zoho-note-id', noteId);
+        e.dataTransfer.setData('text/plain', noteId);
+        e.dataTransfer.effectAllowed = 'move';
+    }
+
+    handleSidebarDragEnd(e) {
+        if (this.draggedSidebarNote && this.draggedSidebarNote.element) {
+            this.draggedSidebarNote.element.classList.remove('dragging-sidebar-note');
+        }
+        this.draggedSidebarNote = null;
+        document.querySelectorAll('.drag-over, .drag-over-folder, .drag-over-root').forEach(el => {
+            el.classList.remove('drag-over', 'drag-over-folder', 'drag-over-root');
+        });
+    }
+
+    handleNotebookListDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        // 1. If dragging a sidebar note
+        if (this.draggedSidebarNote) {
+            if (this.draggedSidebarNote.isLive) return;
+
+            const folderItem = e.target.closest('.tree-item.is-folder');
+            if (folderItem) {
+                document.querySelectorAll('#notebook-list .drag-over-folder').forEach(el => {
+                    if (el !== folderItem) el.classList.remove('drag-over-folder');
+                });
+                folderItem.classList.add('drag-over-folder');
+                return;
+            }
+
+            const root = e.target.closest('.tree-root') || document.getElementById('notebook-list');
+            if (root) {
+                root.classList.add('drag-over-root');
+            }
+            return;
+        }
+
+        // 2. If dragging a cell from editor
+        const item = e.target.closest('.notebook-item');
+        if (item && (!this.notebook || item.getAttribute('data-id') !== this.notebook.id)) {
+            item.classList.add('drag-over');
+        }
+    }
+
+    handleNotebookListDragLeave(e) {
+        const item = e.target.closest('.notebook-item');
+        if (item) item.classList.remove('drag-over');
+        const folder = e.target.closest('.tree-item.is-folder');
+        if (folder) folder.classList.remove('drag-over-folder');
+        const root = e.target.closest('.tree-root');
+        if (root && !root.contains(e.relatedTarget)) root.classList.remove('drag-over-root');
+    }
+
+    async handleNotebookListDrop(e) {
+        e.preventDefault();
+        document.querySelectorAll('#notebook-list .drag-over, #notebook-list .drag-over-folder, #notebook-list .drag-over-root').forEach(el => {
+            el.classList.remove('drag-over', 'drag-over-folder', 'drag-over-root');
+        });
+
+        // Case A: Dropping a normal sidebar note into a folder or root
+        if (this.draggedSidebarNote) {
+            if (this.draggedSidebarNote.isLive) {
+                this.showToast('Cannot drop live note into regular notebooks', 'warning');
+                return;
+            }
+            const noteId = this.draggedSidebarNote.id;
+            const folderItem = e.target.closest('.tree-item.is-folder');
+            const targetFolder = folderItem ? (folderItem.getAttribute('data-full-path') || 'root') : 'root';
+            await this.moveNotebookToFolder(noteId, targetFolder);
+            return;
+        }
+
+        // Case B: Dropping a cell into a normal notebook
+        const item = e.target.closest('.notebook-item');
+        if (item) {
+            const targetNotebookId = item.getAttribute('data-id');
+            const cellId = e.dataTransfer.getData('application/zoho-cell-id') || e.dataTransfer.getData('text/plain');
+            if (cellId && targetNotebookId && (!this.notebook || targetNotebookId !== this.notebook.id)) {
+                await this.moveCellToNotebook(cellId, targetNotebookId);
+            }
+        }
+    }
+
+    handleLiveNotesListDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        // 1. If dragging a sidebar note
+        if (this.draggedSidebarNote) {
+            if (!this.draggedSidebarNote.isLive) return;
+
+            const folderItem = e.target.closest('.tree-item.is-live-folder');
+            if (folderItem) {
+                document.querySelectorAll('#live-notes-list .drag-over-folder').forEach(el => {
+                    if (el !== folderItem) el.classList.remove('drag-over-folder');
+                });
+                folderItem.classList.add('drag-over-folder');
+                return;
+            }
+
+            const root = e.target.closest('.tree-root') || document.getElementById('live-notes-list');
+            if (root) {
+                root.classList.add('drag-over-root');
+            }
+            return;
+        }
+
+        // 2. If dragging a cell from editor into a live note
+        const item = e.target.closest('.live-note-item');
+        if (item && (!this.notebook || item.getAttribute('data-id') !== this.notebook.id)) {
+            item.classList.add('drag-over');
+        }
+    }
+
+    handleLiveNotesListDragLeave(e) {
+        const item = e.target.closest('.live-note-item');
+        if (item) item.classList.remove('drag-over');
+        const folder = e.target.closest('.tree-item.is-live-folder');
+        if (folder) folder.classList.remove('drag-over-folder');
+        const root = e.target.closest('.tree-root');
+        if (root && !root.contains(e.relatedTarget)) root.classList.remove('drag-over-root');
+    }
+
+    async handleLiveNotesListDrop(e) {
+        e.preventDefault();
+        document.querySelectorAll('#live-notes-list .drag-over, #live-notes-list .drag-over-folder, #live-notes-list .drag-over-root').forEach(el => {
+            el.classList.remove('drag-over', 'drag-over-folder', 'drag-over-root');
+        });
+
+        // Case A: Dropping a live sidebar note into a live folder or live root
+        if (this.draggedSidebarNote) {
+            if (!this.draggedSidebarNote.isLive) {
+                this.showToast('Cannot drop regular notebook into live sessions', 'warning');
+                return;
+            }
+            const noteId = this.draggedSidebarNote.id;
+            const folderItem = e.target.closest('.tree-item.is-live-folder');
+            const targetFolder = folderItem ? (folderItem.getAttribute('data-full-path') || 'root') : 'root';
+            await this.moveLiveNotebookToFolder(noteId, targetFolder);
+            return;
+        }
+
+        // Case B: Dropping a cell into a live note
+        const item = e.target.closest('.live-note-item');
+        if (item) {
+            const targetNotebookId = item.getAttribute('data-id');
+            const cellId = e.dataTransfer.getData('application/zoho-cell-id') || e.dataTransfer.getData('text/plain');
+            if (cellId && targetNotebookId && (!this.notebook || targetNotebookId !== this.notebook.id)) {
+                await this.moveCellToNotebook(cellId, targetNotebookId);
+            }
+        }
     }
 
     async renameFolder(oldPath) {

@@ -826,17 +826,19 @@ app.post('/api/notes/live', isAuthenticated, async (req, res) => {
         const crypto = require('crypto');
         const shareCode = 'collab-' + crypto.randomBytes(6).toString('hex');
 
-        const initialCells = [
-            {
-                id: 'cell-' + Math.random().toString(36).substring(2, 9),
-                type: 'code',
-                lang: defaultLang,
-                title: 'Live Workspace',
-                isStarred: false,
-                content: defaultLang === 'python' ? 'print("Welcome to Live Coding!")' : 'console.log("Welcome to Live Coding!");',
-                output: null
-            }
-        ];
+        const initialCells = (Array.isArray(req.body.cells) && req.body.cells.length > 0)
+            ? req.body.cells
+            : [
+                {
+                    id: 'cell-' + Math.random().toString(36).substring(2, 9),
+                    type: 'code',
+                    lang: defaultLang,
+                    title: 'Live Workspace',
+                    isStarred: false,
+                    content: defaultLang === 'python' ? 'print("Welcome to Live Coding!")' : 'console.log("Welcome to Live Coding!");',
+                    output: null
+                }
+            ];
 
         const note = await Note.create({
             id: noteId,
@@ -1460,15 +1462,15 @@ app.post('/api/notebooks/move-cell', isAuthenticated, async (req, res) => {
     const { sourceNotebookId, targetNotebookId, cell } = req.body;
     try {
         const userId = req.session.userId || (req.user ? req.user._id : null);
-        // 1. Remove from source
+        // 1. Remove from source (owner or collaborator)
         await Note.updateOne(
-            { id: sourceNotebookId, owner: userId },
+            { id: sourceNotebookId, $or: [{ owner: userId }, { 'collaborators.userId': userId }] },
             { $pull: { 'content.cells': { id: cell.id } } }
         );
 
-        // 2. Add to target
+        // 2. Add to target (owner or collaborator)
         await Note.updateOne(
-            { id: targetNotebookId, owner: userId },
+            { id: targetNotebookId, $or: [{ owner: userId }, { 'collaborators.userId': userId }] },
             { $push: { 'content.cells': cell } }
         );
 
