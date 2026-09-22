@@ -779,6 +779,7 @@ app.get('/api/notes/live', isAuthenticated, async (req, res) => {
             const item = {
                 id: n.id,
                 title: n.title || 'Live Coding Session',
+                folder: n.folder || (n.content && n.content.folder) || 'root',
                 isLive: true,
                 shareCode: n.shareCode || '',
                 shareUrl: `${req.protocol}://${req.get('host')}/note/join/${n.shareCode}`,
@@ -807,6 +808,7 @@ app.post('/api/notes/live', isAuthenticated, async (req, res) => {
         const userId = req.session.userId || (req.user ? req.user._id : null);
         const userDoc = await User.findById(userId);
         const title = (req.body.title || '').trim() || 'Live Coding Session';
+        const folder = (req.body.folder || 'root').trim() || 'root';
         const defaultLang = userDoc?.settings?.defaultLanguage || 'javascript';
 
         const noteId = 'live-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
@@ -828,7 +830,7 @@ app.post('/api/notes/live', isAuthenticated, async (req, res) => {
         const note = await Note.create({
             id: noteId,
             title: title,
-            folder: 'root',
+            folder: folder,
             owner: userId,
             authorName: userDoc ? userDoc.username : 'Host',
             isLive: true,
@@ -836,7 +838,7 @@ app.post('/api/notes/live', isAuthenticated, async (req, res) => {
             content: {
                 id: noteId,
                 title: title,
-                folder: 'root',
+                folder: folder,
                 isLive: true,
                 cells: initialCells,
                 tags: []
@@ -848,6 +850,7 @@ app.post('/api/notes/live', isAuthenticated, async (req, res) => {
         res.json({
             id: note.id,
             title: note.title,
+            folder: note.folder,
             isLive: true,
             shareCode: note.shareCode,
             shareUrl: shareUrl,
@@ -1241,17 +1244,6 @@ app.post('/api/notebooks', isAuthenticated, async (req, res) => {
         const mongoose = require('mongoose');
         const userObjId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
 
-        const updateData = {
-            id: notebookData.id,
-            title: notebookData.title || 'Untitled',
-            isStarred: !!notebookData.isStarred,
-            content: notebookData,
-            folder: notebookData.folder || 'root',
-            updatedAt: new Date()
-        };
-        if (notebookData.isLive !== undefined) updateData.isLive = !!notebookData.isLive;
-        if (notebookData.shareCode !== undefined) updateData.shareCode = notebookData.shareCode;
-
         const query = {
             id: notebookData.id,
             $or: [
@@ -1259,6 +1251,31 @@ app.post('/api/notebooks', isAuthenticated, async (req, res) => {
                 { 'collaborators.user': { $in: [userId, userObjId] }, 'collaborators.status': 'accepted' }
             ]
         };
+
+        const existingNote = await Note.findOne(query);
+
+        const updateData = {
+            id: notebookData.id,
+            title: notebookData.title !== undefined ? notebookData.title : (existingNote ? existingNote.title : 'Untitled'),
+            isStarred: notebookData.isStarred !== undefined ? !!notebookData.isStarred : (existingNote ? existingNote.isStarred : false),
+            folder: notebookData.folder !== undefined ? notebookData.folder : (existingNote ? existingNote.folder : 'root'),
+            updatedAt: new Date()
+        };
+        if (notebookData.isLive !== undefined) updateData.isLive = !!notebookData.isLive;
+        if (notebookData.shareCode !== undefined) updateData.shareCode = notebookData.shareCode;
+
+        if (notebookData.cells !== undefined) {
+            updateData.content = notebookData;
+        } else if (existingNote && existingNote.content) {
+            updateData.content = {
+                ...existingNote.content,
+                id: notebookData.id,
+                title: updateData.title,
+                folder: updateData.folder
+            };
+        } else {
+            updateData.content = notebookData;
+        }
 
         const note = await Note.findOneAndUpdate(
             query,

@@ -39,6 +39,8 @@ class NotebookApp {
 
         this.expandedFolders = new Set(JSON.parse(localStorage.getItem('zoho-expanded-folders') || '[]'));
         this.persistedFolders = this.getPersistedFolders();
+        this.expandedLiveFolders = new Set(JSON.parse(localStorage.getItem('zoho-expanded-live-folders') || '[]'));
+        this.persistedLiveFolders = this.getPersistedLiveFolders();
         this.currentPendingFolder = 'root';
         this.modalHistoryPushed = false;
         this.setupTheme();
@@ -262,16 +264,124 @@ class NotebookApp {
 
         // Wire Live Notes Section
         document.getElementById('toggle-live-notes')?.addEventListener('click', (e) => {
-            if (e.target.closest('#btn-create-live-note')) return;
+            if (e.target.closest('#btn-create-live-note') || e.target.closest('#add-live-folder-sidebar')) return;
             const list = document.getElementById('live-notes-list');
             const chevron = document.getElementById('chevron-live-notes');
             if (list) list.classList.toggle('hidden');
             if (chevron) chevron.classList.toggle('rotate-180');
         });
 
+        document.getElementById('add-live-folder-sidebar')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.createLiveFolder();
+        });
+
         document.getElementById('btn-create-live-note')?.addEventListener('click', (e) => {
             e.stopPropagation();
             this.createLiveNotebook();
+        });
+
+        // Event Delegation for Live Notes Section
+        document.getElementById('live-notes-list')?.addEventListener('click', (e) => {
+            // 1. Live Folder Actions
+            const addLiveFileBtn = e.target.closest('.btn-add-live-file');
+            if (addLiveFileBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const folder = addLiveFileBtn.getAttribute('data-folder');
+                this.createLiveNotebook(folder);
+                return;
+            }
+
+            const deleteLiveFolderBtn = e.target.closest('.btn-delete-live-folder');
+            if (deleteLiveFolderBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const path = deleteLiveFolderBtn.getAttribute('data-full-path');
+                this.deleteLiveFolder(path);
+                return;
+            }
+
+            const renameLiveFolderBtn = e.target.closest('.btn-rename-live-folder');
+            if (renameLiveFolderBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const path = renameLiveFolderBtn.getAttribute('data-full-path');
+                this.renameLiveFolder(path);
+                return;
+            }
+
+            // 2. Live Note Actions
+            const shareBtn = e.target.closest('.btn-share-live-item');
+            if (shareBtn) {
+                e.stopPropagation();
+                const noteId = shareBtn.getAttribute('data-id');
+                const all = [...((this.liveNotebooks && this.liveNotebooks.hosted) || []), ...((this.liveNotebooks && this.liveNotebooks.joined) || [])];
+                const note = all.find(n => n.id === noteId);
+                if (note) this.openLiveShareModal(note);
+                return;
+            }
+
+            const deleteNoteBtn = e.target.closest('.btn-delete-live-item');
+            if (deleteNoteBtn) {
+                e.stopPropagation();
+                const noteId = deleteNoteBtn.getAttribute('data-id');
+                const hosted = (this.liveNotebooks && this.liveNotebooks.hosted) || [];
+                const joined = (this.liveNotebooks && this.liveNotebooks.joined) || [];
+                const isHost = hosted.some(n => n.id === noteId);
+                const note = [...hosted, ...joined].find(n => n.id === noteId);
+                const title = note ? note.title : 'Live Session';
+                this.deleteLiveNote(noteId, title, isHost);
+                return;
+            }
+
+            const renameNoteBtn = e.target.closest('.rename-live-notebook-btn');
+            if (renameNoteBtn) {
+                e.stopPropagation();
+                const noteId = renameNoteBtn.getAttribute('data-id');
+                const all = [...((this.liveNotebooks && this.liveNotebooks.hosted) || []), ...((this.liveNotebooks && this.liveNotebooks.joined) || [])];
+                const note = all.find(n => n.id === noteId);
+                const oldTitle = note ? (note.title || 'Untitled Live') : 'Untitled Live';
+                this.renameNotebook(noteId, oldTitle);
+                return;
+            }
+
+            const moveNoteBtn = e.target.closest('.move-live-notebook-btn');
+            if (moveNoteBtn) {
+                e.stopPropagation();
+                const noteId = moveNoteBtn.getAttribute('data-id');
+                this.moveLiveNotebookToFolderPrompt(noteId);
+                return;
+            }
+
+            // 3. Live Tree Navigation (Expand/Collapse Folder)
+            const folderItem = e.target.closest('.tree-item.is-live-folder');
+            if (folderItem) {
+                const children = folderItem.nextElementSibling;
+                const arrow = folderItem.querySelector('.tree-arrow');
+                const path = folderItem.getAttribute('data-full-path') || folderItem.getAttribute('data-path');
+                if (children && children.classList.contains('tree-children')) {
+                    const isCollapsed = children.classList.toggle('collapsed');
+                    if (arrow) arrow.classList.toggle('rotated', !isCollapsed);
+                    if (path) {
+                        if (isCollapsed) {
+                            this.expandedLiveFolders.delete(path);
+                        } else {
+                            this.expandedLiveFolders.add(path);
+                        }
+                        localStorage.setItem('zoho-expanded-live-folders', JSON.stringify([...this.expandedLiveFolders]));
+                    }
+                }
+                return;
+            }
+
+            // 4. Live Note Selection
+            const fileItem = e.target.closest('.is-live-file');
+            if (fileItem) {
+                const id = fileItem.getAttribute('data-id');
+                this.loadNotebook(id);
+                return;
+            }
         });
 
         const titleInput = document.getElementById('notebook-title');
@@ -631,26 +741,15 @@ class NotebookApp {
     setupCollabEngine() {
         if (!this.collab) return;
 
-        // 0. Host presence status changed: gate guest collaboration when host is offline
+        // 0. Host presence status changed: guest collaboration is unrestricted even if host is offline
         this.collab.onHostStatusChanged = (isOnline, hostInfo) => {
             const overlay = document.getElementById('collab-host-offline-overlay');
+            if (overlay) overlay.classList.add('hidden');
             const hostNameEl = document.getElementById('collab-offline-host-name');
             if (hostNameEl && hostInfo && hostInfo.username) {
                 hostNameEl.innerText = '@' + hostInfo.username;
             }
-
-            if (this.collab.isHost) {
-                if (overlay) overlay.classList.add('hidden');
-                this.setEditorsReadOnly(false);
-            } else {
-                if (isOnline) {
-                    if (overlay) overlay.classList.add('hidden');
-                    this.setEditorsReadOnly(false);
-                } else {
-                    if (overlay) overlay.classList.remove('hidden');
-                    this.setEditorsReadOnly(true);
-                }
-            }
+            this.setEditorsReadOnly(false);
         };
 
         // 1. Presence changed: update top collaboration bar with active users count and avatars
@@ -2188,8 +2287,9 @@ class NotebookApp {
                 }
             }
 
-            this.allNotebooks = list || [];
-            this.filteredNotebooks = list || [];
+            const normalNotes = (list || []).filter(n => !n.isLive && !(n.id && typeof n.id === 'string' && n.id.startsWith('live-')));
+            this.allNotebooks = normalNotes;
+            this.filteredNotebooks = normalNotes;
             this.renderNotebookList(this.allNotebooks);
             this.fetchAndRenderSharedNotes();
             this.fetchAndRenderLiveNotes();
@@ -2200,12 +2300,13 @@ class NotebookApp {
                 try {
                     const fallback = await this.db.getAllNotes();
                     if (fallback && fallback.length > 0) {
-                        this.allNotebooks = fallback;
-                        this.filteredNotebooks = fallback;
-                        this.renderNotebookList(fallback);
+                        const normalFallback = fallback.filter(n => !n.isLive && !(n.id && typeof n.id === 'string' && n.id.startsWith('live-')));
+                        this.allNotebooks = normalFallback;
+                        this.filteredNotebooks = normalFallback;
+                        this.renderNotebookList(normalFallback);
                         this.fetchAndRenderSharedNotes();
                         this.fetchAndRenderLiveNotes();
-                        return fallback;
+                        return normalFallback;
                     }
                 } catch (err) { }
             }
@@ -2280,15 +2381,235 @@ class NotebookApp {
         }
     }
 
+    getPersistedLiveFolders() {
+        try {
+            return new Set(JSON.parse(localStorage.getItem('zoho-persisted-live-folders') || '[]'));
+        } catch (e) {
+            return new Set();
+        }
+    }
+
+    savePersistedLiveFolders() {
+        try {
+            localStorage.setItem('zoho-persisted-live-folders', JSON.stringify([...this.persistedLiveFolders]));
+        } catch (e) {
+            console.error('Failed to save persisted live folders', e);
+        }
+    }
+
+    addPersistedLiveFolder(folderPath) {
+        if (!folderPath || folderPath === 'root') return;
+        if (!this.persistedLiveFolders) this.persistedLiveFolders = new Set();
+        const parts = folderPath.split('/');
+        let current = '';
+        parts.forEach(part => {
+            current = current ? `${current}/${part}` : part;
+            this.persistedLiveFolders.add(current);
+        });
+        this.savePersistedLiveFolders();
+    }
+
+    async createLiveFolder() {
+        this.inputAction('New Live Folder', 'Enter a name for the new live folder:', 'My Live Sessions', async (folderName) => {
+            const clean = (folderName || '').trim();
+            if (!clean) return;
+            this.addPersistedLiveFolder(clean);
+            if (this.expandedLiveFolders) {
+                this.expandedLiveFolders.add(clean);
+                localStorage.setItem('zoho-expanded-live-folders', JSON.stringify([...this.expandedLiveFolders]));
+            }
+            if (this.liveNotebooks) {
+                this.renderLiveNotesList(this.liveNotebooks);
+            } else {
+                await this.fetchAndRenderLiveNotes();
+            }
+        });
+    }
+
+    async renameLiveFolder(oldPath) {
+        const pathParts = oldPath.split('/');
+        const oldBaseName = pathParts[pathParts.length - 1];
+        const parentPath = pathParts.slice(0, -1).join('/');
+
+        this.inputAction('Rename Live Folder', `Enter a new name for "${oldBaseName}":`, oldBaseName, async (newBaseName) => {
+            if (!newBaseName || newBaseName.trim() === oldBaseName) return;
+            const cleanNew = newBaseName.trim();
+            const newPath = parentPath ? `${parentPath}/${cleanNew}` : cleanNew;
+
+            try {
+                if (this.db) {
+                    const allNotes = await this.db.getAllNotes({ includeLive: true });
+                    for (const n of allNotes) {
+                        if (n.isLive || (n.id && typeof n.id === 'string' && n.id.startsWith('live-'))) {
+                            if (n.folder === oldPath) {
+                                n.folder = newPath;
+                                await this.db.putNote(n);
+                            } else if (n.folder && n.folder.startsWith(oldPath + '/')) {
+                                n.folder = newPath + n.folder.slice(oldPath.length);
+                                await this.db.putNote(n);
+                            }
+                        }
+                    }
+                }
+
+                try {
+                    await this.safeFetch('/api/folders/rename', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ oldName: oldPath, newName: newPath })
+                    });
+                } catch (remoteErr) {
+                    console.warn('[NotebookApp] Remote folder rename deferred:', remoteErr);
+                }
+
+                if (this.notebook && (this.notebook.isLive || (this.notebook.id && this.notebook.id.startsWith('live-')))) {
+                    if (this.notebook.folder === oldPath) {
+                        this.notebook.folder = newPath;
+                    } else if (this.notebook.folder && this.notebook.folder.startsWith(oldPath + '/')) {
+                        this.notebook.folder = newPath + this.notebook.folder.slice(oldPath.length);
+                    }
+                }
+
+                const updatedExpanded = new Set();
+                for (const path of this.expandedLiveFolders) {
+                    if (path === oldPath) {
+                        updatedExpanded.add(newPath);
+                    } else if (path.startsWith(oldPath + '/')) {
+                        updatedExpanded.add(newPath + path.slice(oldPath.length));
+                    } else {
+                        updatedExpanded.add(path);
+                    }
+                }
+                this.expandedLiveFolders = updatedExpanded;
+                localStorage.setItem('zoho-expanded-live-folders', JSON.stringify([...this.expandedLiveFolders]));
+
+                if (this.persistedLiveFolders) {
+                    const updatedPersisted = new Set();
+                    for (const path of this.persistedLiveFolders) {
+                        if (path === oldPath) {
+                            updatedPersisted.add(newPath);
+                        } else if (path.startsWith(oldPath + '/')) {
+                            updatedPersisted.add(newPath + path.slice(oldPath.length));
+                        } else {
+                            updatedPersisted.add(path);
+                        }
+                    }
+                    this.persistedLiveFolders = updatedPersisted;
+                    this.savePersistedLiveFolders();
+                }
+
+                await this.fetchAndRenderLiveNotes();
+            } catch (e) {
+                console.error('Live folder rename failed', e);
+            }
+        });
+    }
+
+    async deleteLiveFolder(folderName) {
+        this.confirmAction('Delete Live Folder?', `Move all live notes in "${folderName}" to trash?`, async () => {
+            try {
+                const allLive = [
+                    ...((this.liveNotebooks && this.liveNotebooks.hosted) || []),
+                    ...((this.liveNotebooks && this.liveNotebooks.joined) || [])
+                ];
+                for (const n of allLive) {
+                    if (n.folder === folderName || (n.folder && n.folder.startsWith(folderName + '/'))) {
+                        await this.deleteLiveNote(n.id, n.title, n.isHosted !== false);
+                    }
+                }
+
+                for (const path of [...this.expandedLiveFolders]) {
+                    if (path === folderName || path.startsWith(folderName + '/')) {
+                        this.expandedLiveFolders.delete(path);
+                    }
+                }
+                localStorage.setItem('zoho-expanded-live-folders', JSON.stringify([...this.expandedLiveFolders]));
+
+                if (this.persistedLiveFolders) {
+                    for (const path of [...this.persistedLiveFolders]) {
+                        if (path === folderName || path.startsWith(folderName + '/')) {
+                            this.persistedLiveFolders.delete(path);
+                        }
+                    }
+                    this.savePersistedLiveFolders();
+                }
+
+                await this.fetchAndRenderLiveNotes();
+            } catch (e) {
+                console.error('Live folder delete failed', e);
+            }
+        });
+    }
+
+    async moveLiveNotebookToFolderPrompt(noteId) {
+        let note = null;
+        if (this.liveNotebooks) {
+            const all = [...(this.liveNotebooks.hosted || []), ...(this.liveNotebooks.joined || [])];
+            note = all.find(n => n.id === noteId);
+        }
+        if (!note && this.db) {
+            note = await this.db.getNote(noteId);
+        }
+        if (!note && this.notebook && this.notebook.id === noteId) {
+            note = this.notebook;
+        }
+
+        const currentFolder = note ? (note.folder || 'root') : 'root';
+        this.inputAction('Move Live Note to Folder', 'Enter target folder name (or "root"):', currentFolder, async (targetFolder) => {
+            const cleanTarget = targetFolder ? targetFolder.trim() : 'root';
+            const folderVal = (!cleanTarget || cleanTarget === 'root') ? 'root' : cleanTarget;
+            if (folderVal === currentFolder) return;
+
+            try {
+                if (folderVal !== 'root') {
+                    this.addPersistedLiveFolder(folderVal);
+                    if (this.expandedLiveFolders) {
+                        this.expandedLiveFolders.add(folderVal);
+                        localStorage.setItem('zoho-expanded-live-folders', JSON.stringify([...this.expandedLiveFolders]));
+                    }
+                }
+
+                if (this.db) {
+                    const targetNote = await this.db.getNote(noteId);
+                    if (targetNote) {
+                        targetNote.folder = folderVal;
+                        await this.db.putNote(targetNote);
+                    }
+                }
+
+                if (this.notebook && this.notebook.id === noteId) {
+                    this.notebook.folder = folderVal;
+                }
+
+                try {
+                    await this.safeFetch('/api/notebooks', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: noteId, folder: folderVal })
+                    });
+                } catch (remoteErr) {
+                    console.warn('[NotebookApp] Remote live folder move deferred:', remoteErr);
+                }
+
+                await this.fetchAndRenderLiveNotes();
+                this.showToast(`Live note moved to "${folderVal}"`);
+            } catch (err) {
+                console.error('Failed to move live note to folder', err);
+                this.showToast('Failed to move live note to folder', 'error');
+            }
+        });
+    }
+
     renderLiveNotesList(data) {
         const listEl = document.getElementById('live-notes-list');
         if (!listEl) return;
         listEl.innerHTML = '';
 
-        const hosted = (data && data.hosted) || [];
-        const joined = (data && data.joined) || [];
+        const hosted = ((data && data.hosted) || []).map(n => ({ ...n, isHosted: true }));
+        const joined = ((data && data.joined) || []).map(n => ({ ...n, isHosted: false }));
+        const allLive = [...hosted, ...joined];
 
-        if (hosted.length === 0 && joined.length === 0) {
+        if (allLive.length === 0 && (!this.persistedLiveFolders || this.persistedLiveFolders.size === 0)) {
             listEl.innerHTML = `
                 <div style="font-size: 11px; color: var(--text-dim); padding: 6px 10px; font-style: italic;">
                     No live notes yet. Click "+ New Live" to create one!
@@ -2297,119 +2618,155 @@ class NotebookApp {
             return;
         }
 
-        // Render Hosted live notes
-        hosted.forEach(note => {
-            const item = document.createElement('div');
-            item.className = 'live-note-item group flex items-center justify-between gap-1';
-            const isActive = this.notebook && this.notebook.id === note.id;
-            if (isActive) item.classList.add('active');
+        // Build Tree Structure
+        const tree = { name: 'root', type: 'folder', children: {}, files: [] };
 
-            item.innerHTML = `
-                <div class="flex items-center gap-2 overflow-hidden flex-1 cursor-pointer">
-                    <span class="relative flex h-2 w-2 flex-shrink-0">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-                    </span>
-                    <span class="truncate text-xs text-[var(--text-main)]" title="${note.title || 'Live Session'}">${note.title || 'Untitled Live'}</span>
-                </div>
-                <div class="flex items-center gap-1 flex-shrink-0">
-                    <button class="btn-share-live-item opacity-75 hover:opacity-100 text-rose-400 hover:text-white hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Share & Copy Live Link">
-                        <i data-lucide="share-2" style="width: 12px; height: 12px;"></i>
-                    </button>
-                    <button class="btn-delete-live-item opacity-75 hover:opacity-100 text-[#a0a0a5] hover:text-rose-400 hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Delete Live Note & Invalidate Link">
-                        <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
-                    </button>
-                    <span class="live-badge-host">Host</span>
-                </div>
-            `;
+        if (this.persistedLiveFolders) {
+            this.persistedLiveFolders.forEach(folderPath => {
+                if (!folderPath || folderPath === 'root') return;
+                const pathParts = folderPath.split('/');
+                let currentLevel = tree;
+                let currentPath = '';
+                pathParts.forEach(part => {
+                    currentPath = currentPath ? `${currentPath}/${part}` : part;
+                    if (!currentLevel.children[part]) {
+                        currentLevel.children[part] = {
+                            name: part,
+                            fullPath: currentPath,
+                            type: 'folder',
+                            children: {},
+                            files: []
+                        };
+                    }
+                    currentLevel = currentLevel.children[part];
+                });
+            });
+        }
 
-            const shareBtn = item.querySelector('.btn-share-live-item');
-            if (shareBtn) {
-                shareBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    this.openLiveShareModal(note);
-                };
+        allLive.forEach(nb => {
+            let path = nb.folder && nb.folder !== 'root' ? nb.folder.split('/') : [];
+            let currentLevel = tree;
+            let currentPath = '';
+
+            if (nb.folder && nb.folder !== 'root') {
+                this.addPersistedLiveFolder(nb.folder);
             }
 
-            const deleteBtn = item.querySelector('.btn-delete-live-item');
-            if (deleteBtn) {
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    this.deleteLiveNote(note.id, note.title, true);
-                };
-            }
+            path.forEach(part => {
+                currentPath = currentPath ? `${currentPath}/${part}` : part;
+                if (!currentLevel.children[part]) {
+                    currentLevel.children[part] = {
+                        name: part,
+                        fullPath: currentPath,
+                        type: 'folder',
+                        children: {},
+                        files: []
+                    };
+                }
+                currentLevel = currentLevel.children[part];
+            });
 
-            item.onclick = () => {
-                this.loadNotebook(note.id);
-            };
-
-            listEl.appendChild(item);
+            currentLevel.files.push(nb);
         });
 
-        // Render Joined live notes
-        joined.forEach(note => {
-            const item = document.createElement('div');
-            item.className = 'live-note-item group flex items-center justify-between gap-1';
-            const isActive = this.notebook && this.notebook.id === note.id;
-            if (isActive) item.classList.add('active');
+        const renderLiveTreeLevel = (node, container, level = 0) => {
+            // Render Folders First (Alphabetical)
+            Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name)).forEach(child => {
+                const folderId = `live-folder-${Math.random().toString(36).substr(2, 9)}`;
+                const currentNoteFolder = (this.notebook && (this.notebook.isLive || (this.notebook.id && typeof this.notebook.id === 'string' && this.notebook.id.startsWith('live-')))) ? this.notebook.folder : null;
+                const isCurrentNoteAncestor = currentNoteFolder && (currentNoteFolder === child.fullPath || currentNoteFolder.startsWith(child.fullPath + '/'));
+                const isExpanded = this.expandedLiveFolders.has(child.fullPath) || isCurrentNoteAncestor;
 
-            item.innerHTML = `
-                <div class="flex items-center gap-2 overflow-hidden flex-1 cursor-pointer">
-                    <span class="relative flex h-2 w-2 flex-shrink-0">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-                    </span>
-                    <span class="truncate text-xs text-[var(--text-main)]" title="${note.title || 'Live Session'}">${note.title || 'Untitled Live'}</span>
-                </div>
-                <div class="flex items-center gap-1 flex-shrink-0">
-                    <button class="btn-share-live-item opacity-75 hover:opacity-100 text-rose-400 hover:text-white hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Share & Copy Live Link">
-                        <i data-lucide="share-2" style="width: 12px; height: 12px;"></i>
-                    </button>
-                    <button class="btn-delete-live-item opacity-75 hover:opacity-100 text-[#a0a0a5] hover:text-rose-400 hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Remove from Joined Notes">
-                        <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
-                    </button>
-                    <span class="live-badge-guest">@${note.authorName || 'Host'}</span>
-                </div>
-            `;
+                const item = document.createElement('div');
+                item.className = 'tree-branch';
+                item.innerHTML = `
+                    <div class="tree-item is-live-folder is-folder" data-path="${child.name}" data-full-path="${child.fullPath}">
+                        <i data-lucide="chevron-right" class="tree-arrow ${isExpanded ? 'rotated' : ''}"></i>
+                        <i data-lucide="folder" class="tree-icon" style="color: #fb7185;"></i>
+                        <span class="tree-label" title="${child.fullPath}">${child.name}</span>
+                        <div class="tree-actions">
+                            <button class="tree-action-btn btn-add-live-file" title="Create Live Note in Folder" data-folder="${child.fullPath}">
+                                <i data-lucide="plus-square" style="width:12px;"></i>
+                            </button>
+                            <button class="tree-action-btn btn-rename-live-folder" title="Rename Live Folder" data-full-path="${child.fullPath}">
+                                <i data-lucide="edit-2" style="width:12px;"></i>
+                            </button>
+                            <button class="tree-action-btn danger btn-delete-live-folder" title="Delete Live Folder" data-full-path="${child.fullPath}">
+                                <i data-lucide="trash-2" style="width:12px;"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="tree-children ${isExpanded ? '' : 'collapsed'}" id="${folderId}"></div>
+                `;
+                container.appendChild(item);
 
-            const shareBtn = item.querySelector('.btn-share-live-item');
-            if (shareBtn) {
-                shareBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    this.openLiveShareModal(note);
-                };
-            }
+                const childrenContainer = item.querySelector('.tree-children');
+                renderLiveTreeLevel(child, childrenContainer, level + 1);
 
-            const deleteBtn = item.querySelector('.btn-delete-live-item');
-            if (deleteBtn) {
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    this.deleteLiveNote(note.id, note.title, false);
-                };
-            }
+                if (child.files.length === 0 && Object.keys(child.children).length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.className = 'tree-item text-[11px] text-zinc-500 italic pl-6 py-1 select-none pointer-events-none';
+                    emptyMsg.textContent = '(Empty folder)';
+                    childrenContainer.appendChild(emptyMsg);
+                }
+            });
 
-            item.onclick = () => {
-                note.isShared = true;
-                this.loadNotebook(note.id);
-            };
+            // Render Files (Alphabetical)
+            node.files.sort((a, b) => (a.title || '').localeCompare(b.title || '')).forEach(file => {
+                const isActive = this.notebook && this.notebook.id === file.id;
+                const isHost = file.isHosted;
+                const fileItem = document.createElement('div');
+                fileItem.className = `tree-item is-live-file ${isActive ? 'active' : ''} live-note-item group flex items-center justify-between gap-1`;
+                fileItem.setAttribute('data-id', file.id);
 
-            listEl.appendChild(item);
-        });
+                fileItem.innerHTML = `
+                    <div class="flex items-center gap-2 overflow-hidden flex-1 cursor-pointer">
+                        <span class="relative flex h-2 w-2 flex-shrink-0">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                        </span>
+                        <span class="tree-label truncate text-xs text-[var(--text-main)]" title="${file.title || 'Live Session'}">${file.title || 'Untitled Live'}</span>
+                    </div>
+                    <div class="tree-actions flex items-center gap-1 flex-shrink-0">
+                        <button class="tree-action-btn move-live-notebook-btn text-[#a0a0a5] hover:text-rose-400 hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Move to Folder" data-id="${file.id}">
+                            <i data-lucide="folder-input" style="width: 12px; height: 12px;"></i>
+                        </button>
+                        <button class="tree-action-btn rename-live-notebook-btn text-[#a0a0a5] hover:text-rose-400 hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Rename Live Note" data-id="${file.id}">
+                            <i data-lucide="edit-2" style="width: 12px; height: 12px;"></i>
+                        </button>
+                        <button class="tree-action-btn btn-share-live-item opacity-75 hover:opacity-100 text-rose-400 hover:text-white hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="Share & Copy Live Link" data-id="${file.id}">
+                            <i data-lucide="share-2" style="width: 12px; height: 12px;"></i>
+                        </button>
+                        <button class="tree-action-btn danger btn-delete-live-item opacity-75 hover:opacity-100 text-[#a0a0a5] hover:text-rose-400 hover:bg-rose-500/20 p-1 rounded transition-all cursor-pointer" title="${isHost ? 'Delete Live Note & Invalidate Link' : 'Remove from Joined Notes'}" data-id="${file.id}">
+                            <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+                        </button>
+                        ${isHost ? '<span class="live-badge-host">Host</span>' : `<span class="live-badge-guest">@${file.authorName || 'Guest'}</span>`}
+                    </div>
+                `;
+                container.appendChild(fileItem);
+            });
+        };
+
+        const rootContainer = document.createElement('div');
+        rootContainer.className = 'tree-root';
+        renderLiveTreeLevel(tree, rootContainer);
+        listEl.appendChild(rootContainer);
 
         if (window.lucide) lucide.createIcons();
     }
 
-    async createLiveNotebook(title = null) {
+    async createLiveNotebook(folder = 'root', title = null) {
+        if (typeof folder !== 'string') folder = 'root';
         if (!title) {
             this.inputAction('Create Live Note', 'Enter a title for this live collaborative session:', 'Live Coding Session', async (chosenTitle) => {
-                await this._doCreateLiveNotebook(chosenTitle);
+                await this._doCreateLiveNotebook(chosenTitle, folder);
             });
             return;
         }
-        return this._doCreateLiveNotebook(title);
+        return this._doCreateLiveNotebook(title, folder);
     }
 
-    async _doCreateLiveNotebook(noteTitle) {
+    async _doCreateLiveNotebook(noteTitle, folder = 'root') {
         try {
             const finalTitle = (noteTitle && noteTitle.trim()) ? noteTitle.trim() : 'Live Coding Session';
             const res = await this.safeFetch('/api/notes/live', {
@@ -2417,6 +2774,7 @@ class NotebookApp {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title: finalTitle,
+                    folder: folder || 'root',
                     cells: [{
                         id: 'cell-' + Date.now(),
                         type: 'code',
@@ -2430,13 +2788,19 @@ class NotebookApp {
 
             if (res.ok) {
                 const newLiveNote = await res.json();
+                if (folder && folder !== 'root') {
+                    this.addPersistedLiveFolder(folder);
+                    if (this.expandedLiveFolders) {
+                        this.expandedLiveFolders.add(folder);
+                        localStorage.setItem('zoho-expanded-live-folders', JSON.stringify([...this.expandedLiveFolders]));
+                    }
+                }
                 if (this.db) {
                     await this.db.putNote(newLiveNote, { hasFullContent: true });
                 }
                 await this.fetchAndRenderLiveNotes();
                 await this.loadNotebook(newLiveNote.id);
                 this.showToast(`Live session "${finalTitle}" created!`);
-                // Immediately display the live link share modal
                 await this.openLiveShareModal(newLiveNote);
             } else {
                 const err = await res.json().catch(() => ({}));
@@ -2859,11 +3223,6 @@ class NotebookApp {
 
 
     addCell(type, content = '') {
-        if (this.notebook && this.notebook.isLive && this.collab && !this.collab.isHost && !this.collab.hostOnline) {
-            this.showToast('Host is currently offline. Adding cells is paused until host reconnects.', 'warning');
-            return;
-        }
-
         const cellId = 'cell-' + Math.random().toString(36).substr(2, 9);
         const lang = type === 'code' ? (this.userSettings.defaultLanguage || 'javascript') : 'markdown';
 
@@ -3076,7 +3435,7 @@ class NotebookApp {
                 theme: 'vs-dark-plus',
                 automaticLayout: true,
                 minimap: { enabled: false },
-                readOnly: !!(this.notebook && this.notebook.isLive && this.collab && !this.collab.isHost && !this.collab.hostOnline),
+                readOnly: false,
                 scrollBeyondLastLine: false,
                 fontSize: 14,
                 lineNumbers: isMark ? 'off' : 'on',
@@ -3298,11 +3657,6 @@ class NotebookApp {
     }
 
     async runCell(cellId) {
-        if (this.notebook && this.notebook.isLive && this.collab && !this.collab.isHost && !this.collab.hostOnline) {
-            this.showToast('Host is currently offline. Code execution is paused until host reconnects.', 'warning');
-            return;
-        }
-
         const cell = this.notebook.cells.find(c => c.id === cellId);
         if (!cell || cell.type !== 'code') return;
         const editor = this.editors[cellId];
@@ -3812,11 +4166,6 @@ class NotebookApp {
     }
 
     async deleteCell(cellId) {
-        if (this.notebook && this.notebook.isLive && this.collab && !this.collab.isHost && !this.collab.hostOnline) {
-            this.showToast('Host is currently offline. Deleting cells is paused until host reconnects.', 'warning');
-            return;
-        }
-
         this.confirmAction('Delete Cell?', 'Are you sure you want to remove this cell?', async () => {
             const cellIndex = this.notebook.cells.findIndex(c => c.id === cellId);
             if (cellIndex === -1) return;

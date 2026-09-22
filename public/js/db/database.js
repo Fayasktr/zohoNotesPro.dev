@@ -317,13 +317,20 @@
         }
 
         /**
-         * Get list of all non-trashed notes (for sidebar and search).
+         * Get list of all non-trashed normal notes (for sidebar and search).
+         * Live notes are excluded by default to keep the main notebook list clean.
          */
         async getAllNotes(options = {}) {
             await this.init();
 
             if (this.isDexie) {
-                let collection = this.db.notes.filter(n => !n.isTrashed);
+                let collection = this.db.notes.filter(n => {
+                    if (n.isTrashed) return false;
+                    if (options.includeLive !== true && (n.isLive || (n.id && typeof n.id === 'string' && n.id.startsWith('live-')))) {
+                        return false;
+                    }
+                    return true;
+                });
                 if (options.folder && options.folder !== 'all') {
                     collection = collection.filter(n => n.folder === options.folder);
                 }
@@ -336,7 +343,51 @@
                     const store = tx.objectStore('notes');
                     const req = store.getAll();
                     req.onsuccess = () => {
-                        let notes = (req.result || []).filter(n => !n.isTrashed);
+                        let notes = (req.result || []).filter(n => {
+                            if (n.isTrashed) return false;
+                            if (options.includeLive !== true && (n.isLive || (n.id && typeof n.id === 'string' && n.id.startsWith('live-')))) {
+                                return false;
+                            }
+                            return true;
+                        });
+                        if (options.folder && options.folder !== 'all') {
+                            notes = notes.filter(n => n.folder === options.folder);
+                        }
+                        notes.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                        resolve(notes);
+                    };
+                    req.onerror = () => reject(req.error);
+                });
+            }
+        }
+
+        /**
+         * Get list of all non-trashed live notes (for live section tree).
+         */
+        async getLiveNotes(options = {}) {
+            await this.init();
+
+            if (this.isDexie) {
+                let collection = this.db.notes.filter(n => {
+                    if (n.isTrashed) return false;
+                    return Boolean(n.isLive || (n.id && typeof n.id === 'string' && n.id.startsWith('live-')));
+                });
+                if (options.folder && options.folder !== 'all') {
+                    collection = collection.filter(n => n.folder === options.folder);
+                }
+                const notes = await collection.toArray();
+                notes.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                return notes;
+            } else {
+                return await new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(['notes'], 'readonly');
+                    const store = tx.objectStore('notes');
+                    const req = store.getAll();
+                    req.onsuccess = () => {
+                        let notes = (req.result || []).filter(n => {
+                            if (n.isTrashed) return false;
+                            return Boolean(n.isLive || (n.id && typeof n.id === 'string' && n.id.startsWith('live-')));
+                        });
                         if (options.folder && options.folder !== 'all') {
                             notes = notes.filter(n => n.folder === options.folder);
                         }

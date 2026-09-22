@@ -208,7 +208,6 @@
 
                         case 'edit': {
                             if (msg.senderPeerId === this.peerId) return;
-                            if (!this.isHost && !this.hostOnline) return;
 
                             if (typeof this.onRemoteEdit === 'function') {
                                 this.onRemoteEdit(msg.cellId, msg.changes, msg.senderPeerId);
@@ -225,7 +224,6 @@
 
                         case 'typing': {
                             if (msg.senderPeerId === this.peerId) return;
-                            if (!this.isHost && !this.hostOnline) return;
 
                             if (typeof this.onRemoteTyping === 'function') {
                                 this.onRemoteTyping({
@@ -239,7 +237,6 @@
 
                         case 'cell_title': {
                             if (msg.senderPeerId === this.peerId) return;
-                            if (!this.isHost && !this.hostOnline) return;
 
                             if (typeof this.onRemoteCellTitle === 'function') {
                                 this.onRemoteCellTitle(msg.cellId, msg.title);
@@ -249,7 +246,6 @@
 
                         case 'notebook_title': {
                             if (msg.senderPeerId === this.peerId) return;
-                            if (!this.isHost && !this.hostOnline) return;
 
                             if (typeof this.onRemoteNotebookTitle === 'function') {
                                 this.onRemoteNotebookTitle(msg.title);
@@ -259,7 +255,6 @@
 
                         case 'cell_lang': {
                             if (msg.senderPeerId === this.peerId) return;
-                            if (!this.isHost && !this.hostOnline) return;
 
                             if (typeof this.onRemoteCellLang === 'function') {
                                 this.onRemoteCellLang(msg.cellId, msg.lang);
@@ -269,7 +264,6 @@
 
                         case 'cell_star': {
                             if (msg.senderPeerId === this.peerId) return;
-                            if (!this.isHost && !this.hostOnline) return;
 
                             if (typeof this.onRemoteCellStar === 'function') {
                                 this.onRemoteCellStar(msg.cellId, msg.isStarred);
@@ -279,7 +273,6 @@
 
                         case 'cell_reorder': {
                             if (msg.senderPeerId === this.peerId) return;
-                            if (!this.isHost && !this.hostOnline) return;
 
                             if (typeof this.onRemoteCellReorder === 'function') {
                                 this.onRemoteCellReorder(msg.cellIdsOrder);
@@ -305,7 +298,6 @@
 
                         case 'cell_add': {
                             if (msg.senderPeerId === this.peerId) return;
-                            if (!this.isHost && !this.hostOnline) return;
 
                             if (typeof this.onRemoteCellAdded === 'function') {
                                 this.onRemoteCellAdded(msg.cell);
@@ -315,7 +307,6 @@
 
                         case 'cell_delete': {
                             if (msg.senderPeerId === this.peerId) return;
-                            if (!this.isHost && !this.hostOnline) return;
 
                             if (typeof this.onRemoteCellDeleted === 'function') {
                                 this.onRemoteCellDeleted(msg.cellId);
@@ -533,7 +524,6 @@
          */
         broadcastCursor(cellId, position, selection = null) {
             if (!this.isConnected) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             if (this.cursorDebounce) clearTimeout(this.cursorDebounce);
             this.cursorDebounce = setTimeout(() => {
@@ -575,7 +565,6 @@
          */
         broadcastEdit(cellId, changes, fullContent = null) {
             if (!this.isConnected || this.suppressLocalEdits || !changes || !changes.length) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             const serialized = changes.map(c => ({
                 range: {
@@ -619,7 +608,6 @@
          */
         broadcastTyping(cellId) {
             if (!this.isConnected || !cellId) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             if (!this._lastTypingBroadcastMap) this._lastTypingBroadcastMap = new Map();
             const now = Date.now();
@@ -752,7 +740,6 @@
          */
         broadcastCellAdded(cell) {
             if (!this.isConnected || !cell) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             const cellPayload = {
                 id: cell.id,
@@ -787,7 +774,6 @@
          */
         broadcastCellDeleted(cellId) {
             if (!this.isConnected || !cellId) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             this.sendWsMessage({
                 type: 'cell_delete',
@@ -813,7 +799,6 @@
          */
         broadcastExecutionStart(cellId, runnerName = null) {
             if (!this.isConnected || !cellId) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             const finalRunner = runnerName || this.currentUser.username;
 
@@ -844,7 +829,6 @@
          */
         broadcastLogChunk(cellId, text) {
             if (!this.isConnected || !cellId || !text) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             this.sendWsMessage({
                 type: 'exec_log',
@@ -871,7 +855,6 @@
          */
         broadcastExecutionComplete(cellId, output, success = true, runnerName = null) {
             if (!this.isConnected || !cellId) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             const finalRunner = runnerName || this.currentUser.username;
 
@@ -903,7 +886,6 @@
          */
         broadcastCellTitle(cellId, title) {
             if (!this.isConnected || !cellId) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             this.sendWsMessage({
                 type: 'cell_title',
@@ -925,7 +907,6 @@
          */
         broadcastNotebookTitle(title) {
             if (!this.isConnected) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             this.sendWsMessage({
                 type: 'notebook_title',
@@ -946,7 +927,6 @@
          */
         broadcastCellLang(cellId, lang) {
             if (!this.isConnected || !cellId) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             this.sendWsMessage({
                 type: 'cell_lang',
@@ -968,7 +948,6 @@
          */
         broadcastCellStar(cellId, isStarred) {
             if (!this.isConnected || !cellId) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             this.sendWsMessage({
                 type: 'cell_star',
@@ -990,7 +969,6 @@
          */
         broadcastCellReorder(cellIdsOrder) {
             if (!this.isConnected || !Array.isArray(cellIdsOrder)) return;
-            if (!this.isHost && !this.hostOnline) return;
 
             this.sendWsMessage({
                 type: 'cell_reorder',

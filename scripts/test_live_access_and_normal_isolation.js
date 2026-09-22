@@ -134,8 +134,8 @@ async function runTests() {
             }
         }
 
-        // Test 4: Host creates dedicated Live Note via POST /api/notes/live
-        console.log('3. Host creating dedicated Live Note...');
+        // Test 4: Host creates dedicated Live Note in a folder via POST /api/notes/live
+        console.log('3. Host creating dedicated Live Note in folder "Team Sessions/Node"...');
         const createLiveRes = await request('/api/notes/live', {
             method: 'POST',
             headers: {
@@ -144,16 +144,20 @@ async function runTests() {
                 'CSRF-Token': hostAuth.csrfToken
             },
             body: JSON.stringify({
-                title: 'Host Live Coding Room'
+                title: 'Host Live Coding Room',
+                folder: 'Team Sessions/Node'
             })
         });
         if (createLiveRes.status !== 200) {
             throw new Error(`Failed to create live note: ${createLiveRes.status} ${createLiveRes.body}`);
         }
         const liveNote = JSON.parse(createLiveRes.body);
-        console.log('  ✅ Live note created: id =', liveNote.id, ', shareCode =', liveNote.shareCode);
+        console.log('  ✅ Live note created: id =', liveNote.id, ', shareCode =', liveNote.shareCode, ', folder =', liveNote.folder);
         if (!liveNote.isLive || !liveNote.shareCode || !liveNote.shareCode.startsWith('collab-')) {
             throw new Error(`FAILED: Invalid live note response ${JSON.stringify(liveNote)}`);
+        }
+        if (liveNote.folder !== 'Team Sessions/Node') {
+            throw new Error(`FAILED: Expected folder 'Team Sessions/Node', got '${liveNote.folder}'`);
         }
 
         // Test 5: Host Live Notes listing
@@ -165,7 +169,10 @@ async function runTests() {
         if (!hostedItem) {
             throw new Error('FAILED: Created live note not found in host hosted live notes');
         }
-        console.log('  ✅ Live note found in host hosted section');
+        if (hostedItem.folder !== 'Team Sessions/Node') {
+            throw new Error(`FAILED: Expected hostedItem folder 'Team Sessions/Node', got '${hostedItem.folder}'`);
+        }
+        console.log('  ✅ Live note found in host hosted section with folder preserved');
 
         // Test 6: Guest joins live note via /note/join/:shareCode
         console.log('4. Guest joining live note via link /note/join/' + liveNote.shareCode);
@@ -187,9 +194,12 @@ async function runTests() {
         if (!joinedLiveItem) {
             throw new Error('FAILED: Guest did not receive live note in joined array of /api/notes/live');
         }
-        console.log('  ✅ Guest has live note in joined list with authorName =', joinedLiveItem.authorName);
+        console.log('  ✅ Guest has live note in joined list with authorName =', joinedLiveItem.authorName, ', folder =', joinedLiveItem.folder);
         if (joinedLiveItem.authorName !== 'LiveHostUser') {
             throw new Error(`FAILED: Expected authorName 'LiveHostUser', got '${joinedLiveItem.authorName}'`);
+        }
+        if (joinedLiveItem.folder !== 'Team Sessions/Node') {
+            throw new Error(`FAILED: Expected joinedLiveItem folder 'Team Sessions/Node', got '${joinedLiveItem.folder}'`);
         }
 
         // Test 8: Guest fetches full notebook content via /api/notebooks/:id

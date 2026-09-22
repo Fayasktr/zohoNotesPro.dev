@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Live Notes Partition & Host Gating Regression Suite
  * Run: node scripts/test_live_notes_partition.js
  */
@@ -123,9 +123,9 @@ async function run() {
         assert.deepStrictEqual(liveResults.map(n => n.id), ['3']);
     });
 
-    console.log('\n--- 4. Client Engine Offline Host Gating Invariants ---');
+    console.log('\n--- 4. Client Engine Unrestricted Offline Collaboration Invariants ---');
 
-    await test('Client collab_engine suppresses broadcasts when guest and host is offline', () => {
+    await test('Client collab_engine allows broadcasts and executions even when guest and host is offline', () => {
         const mockCollab = {
             isConnected: true,
             isHost: false,
@@ -133,25 +133,47 @@ async function run() {
             sentEdits: [],
             sentExecutions: [],
             broadcastEdit(cellId, changes) {
-                if (!this.isConnected || (!this.isHost && !this.hostOnline)) return;
+                if (!this.isConnected) return;
                 this.sentEdits.push({ cellId, changes });
             },
             broadcastExecutionStart(cellId) {
-                if (!this.isConnected || (!this.isHost && !this.hostOnline)) return;
+                if (!this.isConnected) return;
                 this.sentExecutions.push({ cellId });
             }
         };
 
         mockCollab.broadcastEdit('c1', [{ text: 'console.log(1)' }]);
         mockCollab.broadcastExecutionStart('c1');
-        assert.strictEqual(mockCollab.sentEdits.length, 0, 'Edit broadcast must be blocked when host is offline');
-        assert.strictEqual(mockCollab.sentExecutions.length, 0, 'Exec broadcast must be blocked when host is offline');
+        assert.strictEqual(mockCollab.sentEdits.length, 1, 'Edit broadcast must succeed even when host is offline');
+        assert.strictEqual(mockCollab.sentExecutions.length, 1, 'Exec broadcast must succeed even when host is offline');
+    });
 
-        mockCollab.hostOnline = true;
-        mockCollab.broadcastEdit('c1', [{ text: 'console.log(1)' }]);
-        mockCollab.broadcastExecutionStart('c1');
-        assert.strictEqual(mockCollab.sentEdits.length, 1, 'Edit broadcast must pass when host is online');
-        assert.strictEqual(mockCollab.sentExecutions.length, 1, 'Exec broadcast must pass when host is online');
+    console.log('\n--- 5. Live Note Folder Tree & Partition Invariants ---');
+
+    await test('Live notes can be grouped into folders independently of regular notes', () => {
+        const liveNotes = [
+            { id: 'live-1', title: 'Session A', folder: 'root', isLive: true },
+            { id: 'live-2', title: 'Session B', folder: 'Workshops/NodeJS', isLive: true },
+            { id: 'live-3', title: 'Session C', folder: 'Workshops/NodeJS', isLive: true },
+            { id: 'live-4', title: 'Session D', folder: 'Interviews', isLive: true }
+        ];
+
+        // Ensure folders can be parsed and structured
+        const folderSet = new Set(liveNotes.map(n => n.folder));
+        assert.ok(folderSet.has('Workshops/NodeJS'));
+        assert.ok(folderSet.has('Interviews'));
+
+        // Filtering regular notes strictly ignores live notes
+        const regularNotes = [
+            { id: 'norm-1', title: 'My Daily Log', folder: 'Workshops/NodeJS', isLive: false }
+        ];
+        const combined = [...regularNotes, ...liveNotes];
+        const separatedRegular = combined.filter(n => !n.isLive && !(n.id && n.id.startsWith('live-')));
+        const separatedLive = combined.filter(n => n.isLive || (n.id && n.id.startsWith('live-')));
+
+        assert.strictEqual(separatedRegular.length, 1);
+        assert.strictEqual(separatedRegular[0].id, 'norm-1');
+        assert.strictEqual(separatedLive.length, 4);
     });
 
     console.log(`\n========================================`);
