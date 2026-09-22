@@ -3111,8 +3111,8 @@ class NotebookApp {
                 // Advanced Visuals & UX
                 semanticHighlighting: { enabled: true },
                 'bracketPairColorization.enabled': true,
-                autoClosingBrackets: 'always',
-                autoClosingQuotes: 'always',
+                autoClosingBrackets: 'languageDefined',
+                autoClosingQuotes: 'languageDefined',
                 autoClosingDelete: 'always',
                 formatOnPaste: true,
                 formatOnType: true,

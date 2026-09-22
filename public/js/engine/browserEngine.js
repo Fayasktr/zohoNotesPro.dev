@@ -84,9 +84,19 @@
 
         self.onmessage = async function(e) {
             var code = e.data.code;
+            var rawCode = e.data.rawCode;
             try {
                 var AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-                var fn = new AsyncFunction('console', '"use strict";\\n' + code);
+                var fn;
+                try {
+                    fn = new AsyncFunction('console', '"use strict";\\n' + code);
+                } catch(compileErr) {
+                    if (rawCode && rawCode !== code && (compileErr instanceof SyntaxError)) {
+                        fn = new AsyncFunction('console', '"use strict";\\n' + rawCode);
+                    } else {
+                        throw compileErr;
+                    }
+                }
                 var result = await fn(customConsole);
                 self.postMessage({
                     type: 'done',
@@ -179,7 +189,7 @@
         prepareCodeWithReturn(code) {
             if (!code || typeof code !== 'string') return code || '';
             const trimmed = code.trim();
-            if (!trimmed || /\breturn\b/.test(trimmed)) return code;
+            if (!trimmed) return code;
 
             const lines = trimmed.split('\n');
             let lastIdx = lines.length - 1;
@@ -189,8 +199,14 @@
             let lastLine = lines[lastIdx].trim();
             if (lastLine.endsWith(';')) lastLine = lastLine.slice(0, -1).trim();
 
+            // Skip wrapping if the line ends with or starts with closing delimiters of a block/callback:
+            // e.g. "}", "})", "});", "}, 1000", "}]"
+            if (/\}[\s\)\],;]*$/.test(lastLine) || /^[\}\]\)]/.test(lastLine)) {
+                return code;
+            }
+
             const nonReturnableKeywords = [
-                'const', 'let', 'var', 'function', 'class', 'if', 'else', 'for',
+                'return', 'const', 'let', 'var', 'function', 'class', 'if', 'else', 'for',
                 'while', 'do', 'switch', 'case', 'try', 'catch', 'finally', 'throw',
                 'import', 'export', 'debugger', 'break', 'continue'
             ];
@@ -200,8 +216,36 @@
                 return code;
             }
 
-            lines[lastIdx] = `return (${lastLine});`;
-            return lines.join('\n');
+            // Check bracket balance on lastLine:
+            // If lastLine has more closing brackets/parens/braces than opening ones,
+            // it cannot be wrapped as a standalone expression.
+            let parenBalance = 0, braceBalance = 0, bracketBalance = 0;
+            for (const char of lastLine) {
+                if (char === '(') parenBalance++;
+                else if (char === ')') parenBalance--;
+                else if (char === '{') braceBalance++;
+                else if (char === '}') braceBalance--;
+                else if (char === '[') bracketBalance++;
+                else if (char === ']') bracketBalance--;
+            }
+            if (parenBalance < 0 || braceBalance < 0 || bracketBalance < 0) {
+                return code;
+            }
+
+            // Try wrapping candidate
+            const candidateLines = [...lines];
+            candidateLines[lastIdx] = `return (${lastLine});`;
+            const candidateCode = candidateLines.join('\n');
+
+            // Pre-compile validation: ensure candidate does NOT introduce a SyntaxError
+            try {
+                const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
+                new AsyncFunction('console', '"use strict";\n' + candidateCode);
+                return candidateCode;
+            } catch (syntaxErr) {
+                // Discard candidate if invalid syntax, fallback safely to original code
+                return code;
+            }
         }
 
         async executeJS(code, contextExtension = {}) {
@@ -209,7 +253,7 @@
             // Check if Web Workers are supported
             if (typeof Worker !== 'undefined' && this.getWorkerBlobUrl()) {
                 try {
-                    const res = await this.executeJSInWorker(preparedCode);
+                    const res = await this.executeJSInWorker(preparedCode, code);
                     if (res && res.success) {
                         return res;
                     }
@@ -221,10 +265,10 @@
                 }
             }
             // Fallback for environments without Worker support or where Blob Worker fails (e.g. CSP restrictions)
-            return this.executeJSFallback(preparedCode, contextExtension);
+            return this.executeJSFallback(preparedCode, code, contextExtension);
         }
 
-        executeJSInWorker(code) {
+        executeJSInWorker(code, rawCode = null) {
             return new Promise((resolve) => {
                 const logs = [];
                 let worker = null;
@@ -292,7 +336,7 @@
                         }
                     };
 
-                    worker.postMessage({ code });
+                    worker.postMessage({ code, rawCode });
                 } catch (err) {
                     if (timeoutTimer) clearTimeout(timeoutTimer);
                     if (worker) worker.terminate();
@@ -306,7 +350,12 @@
             });
         }
 
-        async executeJSFallback(code, contextExtension = {}) {
+        async executeJSFallback(code, rawCode = null, contextExtension = {}) {
+            if (typeof rawCode === 'object' && rawCode !== null && (!contextExtension || Object.keys(contextExtension).length === 0)) {
+                contextExtension = rawCode;
+                rawCode = null;
+            }
+
             const logs = [];
             const customConsole = {
                 log: (...args) => logs.push(args.map(a => this.serialize(a)).join(' ')),
@@ -344,7 +393,16 @@
                 const paramValues = Object.values(sandbox);
 
                 const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
-                const userFunc = new AsyncFunction(...paramNames, `"use strict";\n${code}`);
+                let userFunc;
+                try {
+                    userFunc = new AsyncFunction(...paramNames, `"use strict";\n${code}`);
+                } catch (compileErr) {
+                    if (rawCode && rawCode !== code && (compileErr instanceof SyntaxError)) {
+                        userFunc = new AsyncFunction(...paramNames, `"use strict";\n${rawCode}`);
+                    } else {
+                        throw compileErr;
+                    }
+                }
 
                 const execPromise = userFunc(...paramValues);
                 const timeoutPromise = new Promise((_, reject) =>
