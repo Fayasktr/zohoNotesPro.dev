@@ -88,6 +88,7 @@ function createZohoNotesMcpServer(config = {}) {
                         properties: {
                             title: { type: 'string', description: 'Title of the note' },
                             folder: { type: 'string', description: 'Folder name (default: "root")' },
+                            isLive: { type: 'boolean', description: 'If true, create as a live review / collaboration session' },
                             markdown: { type: 'string', description: 'Initial markdown explanation content' },
                             codeCells: {
                                 type: 'array',
@@ -95,10 +96,12 @@ function createZohoNotesMcpServer(config = {}) {
                                 items: {
                                     type: 'object',
                                     properties: {
-                                        language: { type: 'string', enum: ['javascript', 'typescript', 'python', 'c', 'cpp', 'java'] },
+                                        title: { type: 'string', description: 'Title of the cell' },
+                                        type: { type: 'string', enum: ['code', 'markdown'] },
+                                        language: { type: 'string', enum: ['javascript', 'typescript', 'python', 'c', 'cpp', 'java', 'markdown'] },
                                         code: { type: 'string' }
                                     },
-                                    required: ['language', 'code']
+                                    required: ['code']
                                 }
                             }
                         },
@@ -310,14 +313,16 @@ function createZohoNotesMcpServer(config = {}) {
                     const defaultUser = await User.findOne().sort({ createdAt: 1 });
                     const ownerId = defaultUser ? defaultUser._id : new mongoose.Types.ObjectId();
 
-                    const newId = 'ntbk-' + Date.now();
+                    const isLive = Boolean(args.isLive);
+                    const newId = (isLive ? 'live-' : 'ntbk-') + Date.now() + (isLive ? '-' + crypto.randomBytes(2).toString('hex') : '');
+                    const shareCode = isLive ? ('collab-' + crypto.randomBytes(6).toString('hex')) : undefined;
                     const cells = [];
 
                     if (args.markdown) {
                         cells.push({
                             id: 'cell-' + crypto.randomBytes(4).toString('hex'),
                             type: 'markdown',
-                            title: 'Notes',
+                            title: 'Instructions',
                             content: args.markdown,
                             language: 'markdown'
                         });
@@ -327,7 +332,7 @@ function createZohoNotesMcpServer(config = {}) {
                         for (const cell of args.codeCells) {
                             cells.push({
                                 id: 'cell-' + crypto.randomBytes(4).toString('hex'),
-                                type: 'code',
+                                type: cell.type || 'code',
                                 title: cell.title || '',
                                 language: cell.language || 'javascript',
                                 content: cell.code || '',
@@ -341,6 +346,9 @@ function createZohoNotesMcpServer(config = {}) {
                         title: args.title || 'Untitled Note',
                         folder: args.folder || 'root',
                         owner: ownerId,
+                        isLive: isLive,
+                        shareCode: shareCode,
+                        authorName: 'fayas kp',
                         content: {
                             id: newId,
                             title: args.title || 'Untitled Note',
@@ -348,7 +356,7 @@ function createZohoNotesMcpServer(config = {}) {
                             isStarred: false,
                             cells: cells,
                             tags: [],
-                            isLive: false
+                            isLive: isLive
                         },
                         _version: 1,
                         updatedAt: new Date()
