@@ -34,6 +34,7 @@ const SystemConfig = require('./models/SystemConfig');
 const adminRoutes = require('./routes/adminRoutes');
 const gameRoutes = require('./routes/gameRoutes');
 const syncRoutes = require('./routes/syncRoutes');
+const mcpRoutes = require('./routes/mcpRoutes');
 const cronService = require('./services/cronService');
 
 // Start Cron Jobs
@@ -335,6 +336,9 @@ const authLimiter = rateLimit({
 app.use('/login', authLimiter);
 app.use('/signup', authLimiter);
 app.use('/forgot-password', authLimiter);
+
+// Mount Model Context Protocol (MCP) endpoints for remote AI agents (SSE & Messages)
+app.use('/mcp', mcpRoutes);
 
 // Apply CSRF Protection to all routes after session is initialized
 app.use(csrfProtection);

@@ -7,3 +7,5 @@ services:
         sync: false # Tells Render to keep your existing value from the dashboard
       - key: SESSION_SECRET
         sync: false
+      - key: MCP_API_KEY
+        sync: false # Optional secret token to authenticate remote MCP AI clients
