@@ -89,6 +89,7 @@ function createZohoNotesMcpServer(config = {}) {
                             title: { type: 'string', description: 'Title of the note' },
                             folder: { type: 'string', description: 'Folder name (default: "root")' },
                             isLive: { type: 'boolean', description: 'If true, create as a live review / collaboration session' },
+                            ownerEmail: { type: 'string', description: 'Optional owner email (defaults to Fayas KP fayaskpktr@gmail.com)' },
                             markdown: { type: 'string', description: 'Initial markdown explanation content' },
                             codeCells: {
                                 type: 'array',
@@ -169,6 +170,18 @@ function createZohoNotesMcpServer(config = {}) {
                         type: 'object',
                         properties: {}
                     }
+                },
+                {
+                    name: 'reassign_note',
+                    description: 'Reassign a note to Fayas KP (or specified user email).',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            noteId: { type: 'string', description: 'ID of the note to reassign' },
+                            email: { type: 'string', description: 'Target user email (defaults to fayaskpktr@gmail.com)' }
+                        },
+                        required: ['noteId']
+                    }
                 }
             ]
         };
@@ -231,7 +244,7 @@ function createZohoNotesMcpServer(config = {}) {
                 case 'get_note': {
                     const note = await Note.findOne({
                         $or: [{ id: args.noteId }, { shareCode: args.noteId }]
-                    }).lean();
+                    }).populate('owner', 'username email').lean();
 
                     if (!note) {
                         return {
@@ -258,6 +271,11 @@ function createZohoNotesMcpServer(config = {}) {
                                         isTrashed: !!note.isTrashed,
                                         isLive: !!note.isLive,
                                         shareCode: note.shareCode || null,
+                                        owner: note.owner ? {
+                                            id: note.owner._id,
+                                            username: note.owner.username,
+                                            email: note.owner.email
+                                        } : null,
                                         authorName: note.authorName || '',
                                         markdown: note.content?.markdown || note.content?.text || '',
                                         cells: cells,
@@ -309,9 +327,27 @@ function createZohoNotesMcpServer(config = {}) {
                 }
 
                 case 'create_note': {
-                    // Find default user/owner if exists
-                    const defaultUser = await User.findOne().sort({ createdAt: 1 });
-                    const ownerId = defaultUser ? defaultUser._id : new mongoose.Types.ObjectId();
+                    // Find owner: prioritize args.ownerEmail, then Fayas KP, then defaultUser
+                    let targetUser = null;
+                    if (args.ownerEmail) {
+                        targetUser = await User.findOne({ email: args.ownerEmail });
+                    }
+                    if (!targetUser) {
+                        targetUser = await User.findOne({
+                            $or: [
+                                { email: 'fayaskpktr@gmail.com' },
+                                { username: 'fayas kp' },
+                                { username: 'fayas' },
+                                { email: /fayas/i },
+                                { username: /fayas/i }
+                            ]
+                        });
+                    }
+                    if (!targetUser) {
+                        targetUser = await User.findOne().sort({ createdAt: 1 });
+                    }
+                    const ownerId = targetUser ? targetUser._id : new mongoose.Types.ObjectId();
+                    const authorName = targetUser ? (targetUser.username || targetUser.name || 'fayas kp') : 'fayas kp';
 
                     const isLive = Boolean(args.isLive);
                     const newId = (isLive ? 'live-' : 'ntbk-') + Date.now() + (isLive ? '-' + crypto.randomBytes(2).toString('hex') : '');
@@ -348,7 +384,7 @@ function createZohoNotesMcpServer(config = {}) {
                         owner: ownerId,
                         isLive: isLive,
                         shareCode: shareCode,
-                        authorName: 'fayas kp',
+                        authorName: authorName,
                         content: {
                             id: newId,
                             title: args.title || 'Untitled Note',
@@ -488,6 +524,12 @@ function createZohoNotesMcpServer(config = {}) {
 
                 case 'get_system_stats': {
                     const totalUsers = await User.countDocuments();
+                    const fayasUsers = await User.find({
+                        $or: [
+                            { email: /fayas/i },
+                            { username: /fayas/i }
+                        ]
+                    }, '_id username email').lean();
                     const totalNotes = await Note.countDocuments({ isTrashed: false });
                     const trashedNotes = await Note.countDocuments({ isTrashed: true });
                     const starredNotes = await Note.countDocuments({ isStarred: true, isTrashed: false });
@@ -504,10 +546,75 @@ function createZohoNotesMcpServer(config = {}) {
                                         supportedLanguages: ['javascript', 'typescript', 'python', 'c', 'cpp', 'java'],
                                         database: {
                                             totalUsers: totalUsers,
+                                            fayasUsers: fayasUsers,
                                             activeNotes: totalNotes,
                                             starredNotes: starredNotes,
                                             trashedNotes: trashedNotes,
                                             folders: folders
+                                        }
+                                    },
+                                    null,
+                                    2
+                                )
+                            }
+                        ]
+                    };
+                }
+
+                case 'reassign_note': {
+                    const note = await Note.findOne({
+                        $or: [{ id: args.noteId }, { shareCode: args.noteId }]
+                    });
+                    if (!note) {
+                        return {
+                            content: [{ type: 'text', text: `Note not found for ID: ${args.noteId}` }],
+                            isError: true
+                        };
+                    }
+
+                    let targetUser = null;
+                    if (args.email) {
+                        targetUser = await User.findOne({ email: args.email });
+                    }
+                    if (!targetUser) {
+                        targetUser = await User.findOne({
+                            $or: [
+                                { email: 'fayaskpktr@gmail.com' },
+                                { username: 'fayas kp' },
+                                { username: 'fayas' },
+                                { email: /fayas/i },
+                                { username: /fayas/i }
+                            ]
+                        });
+                    }
+                    if (!targetUser) {
+                        return {
+                            content: [{ type: 'text', text: 'Target user (Fayas KP) not found in database' }],
+                            isError: true
+                        };
+                    }
+
+                    note.owner = targetUser._id;
+                    note.authorName = targetUser.username || targetUser.name || 'fayas kp';
+                    if (note.content) {
+                        note.content.owner = targetUser._id;
+                    }
+                    note.markModified('content');
+                    await note.save();
+
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: JSON.stringify(
+                                    {
+                                        success: true,
+                                        message: `Note "${note.title}" reassigned to ${targetUser.username} (${targetUser.email})`,
+                                        noteId: note.id,
+                                        owner: {
+                                            id: targetUser._id,
+                                            username: targetUser.username,
+                                            email: targetUser.email
                                         }
                                     },
                                     null,
