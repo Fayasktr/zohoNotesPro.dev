@@ -82,22 +82,96 @@
 
         self.console = customConsole;
 
+        var activeTimers = new Set();
+        var activeIntervals = new Set();
+        var originalSetTimeout = self.setTimeout.bind(self);
+        var originalClearTimeout = self.clearTimeout.bind(self);
+        var originalSetInterval = self.setInterval.bind(self);
+        var originalClearInterval = self.clearInterval.bind(self);
+
+        var wrappedSetTimeout = function(fn, delay) {
+            var args = Array.prototype.slice.call(arguments, 2);
+            var id;
+            id = originalSetTimeout(function() {
+                activeTimers.delete(id);
+                try {
+                    if (typeof fn === 'function') {
+                        fn.apply(null, args);
+                    }
+                } catch(err) {
+                    customConsole.error('Async Error (setTimeout): ' + (err.message || String(err)));
+                }
+            }, delay);
+            activeTimers.add(id);
+            return id;
+        };
+
+        var wrappedClearTimeout = function(id) {
+            if (id !== undefined && id !== null) {
+                activeTimers.delete(id);
+            }
+            return originalClearTimeout(id);
+        };
+
+        var wrappedSetInterval = function(fn, delay) {
+            var args = Array.prototype.slice.call(arguments, 2);
+            var id;
+            id = originalSetInterval(function() {
+                try {
+                    if (typeof fn === 'function') {
+                        fn.apply(null, args);
+                    }
+                } catch(err) {
+                    customConsole.error('Async Error (setInterval): ' + (err.message || String(err)));
+                }
+            }, delay);
+            activeIntervals.add(id);
+            return id;
+        };
+
+        var wrappedClearInterval = function(id) {
+            if (id !== undefined && id !== null) {
+                activeIntervals.delete(id);
+            }
+            return originalClearInterval(id);
+        };
+
+        self.setTimeout = wrappedSetTimeout;
+        self.clearTimeout = wrappedClearTimeout;
+        self.setInterval = wrappedSetInterval;
+        self.clearInterval = wrappedClearInterval;
+
         self.onmessage = async function(e) {
             var code = e.data.code;
             var rawCode = e.data.rawCode;
+            var timeoutMs = e.data.timeoutMs || 5000;
             try {
                 var AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
                 var fn;
                 try {
-                    fn = new AsyncFunction('console', '"use strict";\\n' + code);
+                    fn = new AsyncFunction('console', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', '"use strict";\\n' + code);
                 } catch(compileErr) {
                     if (rawCode && rawCode !== code && (compileErr instanceof SyntaxError)) {
-                        fn = new AsyncFunction('console', '"use strict";\\n' + rawCode);
+                        fn = new AsyncFunction('console', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', '"use strict";\\n' + rawCode);
                     } else {
                         throw compileErr;
                     }
                 }
-                var result = await fn(customConsole);
+                var result = await fn(customConsole, wrappedSetTimeout, wrappedClearTimeout, wrappedSetInterval, wrappedClearInterval);
+
+                // Wait for any remaining async tasks (timers & intervals) up to timeoutMs limit
+                var startWait = Date.now();
+                var timerSafetyLimit = Math.max(100, timeoutMs - 200);
+                while ((activeTimers.size > 0 || activeIntervals.size > 0) && (Date.now() - startWait) < timerSafetyLimit) {
+                    await new Promise(function(resolve) { originalSetTimeout(resolve, 30); });
+                }
+
+                // Clean up any remaining intervals/timers
+                activeTimers.forEach(function(id) { originalClearTimeout(id); });
+                activeIntervals.forEach(function(id) { originalClearInterval(id); });
+                activeTimers.clear();
+                activeIntervals.clear();
+
                 self.postMessage({
                     type: 'done',
                     success: true,
@@ -105,6 +179,11 @@
                     error: null
                 });
             } catch(err) {
+                activeTimers.forEach(function(id) { originalClearTimeout(id); });
+                activeIntervals.forEach(function(id) { originalClearInterval(id); });
+                activeTimers.clear();
+                activeIntervals.clear();
+
                 self.postMessage({
                     type: 'done',
                     success: false,
@@ -248,12 +327,18 @@
             }
         }
 
-        async executeJS(code, contextExtension = {}) {
+        async executeJS(code, options = {}) {
+            let contextExtension = {};
+            if (options && typeof options === 'object') {
+                if (options.contextExtension) {
+                    contextExtension = options.contextExtension;
+                }
+            }
             const preparedCode = this.prepareCodeWithReturn(code);
             // Check if Web Workers are supported
             if (typeof Worker !== 'undefined' && this.getWorkerBlobUrl()) {
                 try {
-                    const res = await this.executeJSInWorker(preparedCode, code);
+                    const res = await this.executeJSInWorker(preparedCode, code, options);
                     if (res && res.success) {
                         return res;
                     }
@@ -265,10 +350,10 @@
                 }
             }
             // Fallback for environments without Worker support or where Blob Worker fails (e.g. CSP restrictions)
-            return this.executeJSFallback(preparedCode, code, contextExtension);
+            return this.executeJSFallback(preparedCode, code, contextExtension, options);
         }
 
-        executeJSInWorker(code, rawCode = null) {
+        executeJSInWorker(code, rawCode = null, options = {}) {
             return new Promise((resolve) => {
                 const logs = [];
                 let worker = null;
@@ -309,6 +394,9 @@
 
                         if (data.type === 'log') {
                             logs.push(data.log);
+                            if (typeof options.onLog === 'function') {
+                                try { options.onLog(data.log); } catch (e) { }
+                            }
                         } else if (data.type === 'done') {
                             if (!isFinished) {
                                 isFinished = true;
@@ -336,7 +424,7 @@
                         }
                     };
 
-                    worker.postMessage({ code, rawCode });
+                    worker.postMessage({ code, rawCode, timeoutMs: this.timeoutMs });
                 } catch (err) {
                     if (timeoutTimer) clearTimeout(timeoutTimer);
                     if (worker) worker.terminate();
@@ -350,7 +438,7 @@
             });
         }
 
-        async executeJSFallback(code, rawCode = null, contextExtension = {}) {
+        async executeJSFallback(code, rawCode = null, contextExtension = {}, options = {}) {
             if (typeof rawCode === 'object' && rawCode !== null && (!contextExtension || Object.keys(contextExtension).length === 0)) {
                 contextExtension = rawCode;
                 rawCode = null;
@@ -358,23 +446,91 @@
 
             const logs = [];
             const customConsole = {
-                log: (...args) => logs.push(args.map(a => this.serialize(a)).join(' ')),
-                error: (...args) => logs.push(`ERROR: ${args.map(a => this.serialize(a)).join(' ')}`),
-                warn: (...args) => logs.push(`WARN: ${args.map(a => this.serialize(a)).join(' ')}`),
-                info: (...args) => logs.push(`INFO: ${args.map(a => this.serialize(a)).join(' ')}`),
-                dir: (arg) => logs.push(this.serialize(arg, 3)),
+                log: (...args) => {
+                    const line = args.map(a => this.serialize(a)).join(' ');
+                    logs.push(line);
+                    if (typeof options.onLog === 'function') options.onLog(line);
+                },
+                error: (...args) => {
+                    const line = `ERROR: ${args.map(a => this.serialize(a)).join(' ')}`;
+                    logs.push(line);
+                    if (typeof options.onLog === 'function') options.onLog(line);
+                },
+                warn: (...args) => {
+                    const line = `WARN: ${args.map(a => this.serialize(a)).join(' ')}`;
+                    logs.push(line);
+                    if (typeof options.onLog === 'function') options.onLog(line);
+                },
+                info: (...args) => {
+                    const line = `INFO: ${args.map(a => this.serialize(a)).join(' ')}`;
+                    logs.push(line);
+                    if (typeof options.onLog === 'function') options.onLog(line);
+                },
+                dir: (arg) => {
+                    const line = this.serialize(arg, 3);
+                    logs.push(line);
+                    if (typeof options.onLog === 'function') options.onLog(line);
+                },
                 table: (arg) => {
                     try {
-                        logs.push(JSON.stringify(arg, null, 2));
+                        const line = JSON.stringify(arg, null, 2);
+                        logs.push(line);
+                        if (typeof options.onLog === 'function') options.onLog(line);
                     } catch (e) {
-                        logs.push(this.serialize(arg));
+                        const line = this.serialize(arg);
+                        logs.push(line);
+                        if (typeof options.onLog === 'function') options.onLog(line);
                     }
                 }
+            };
+
+            const activeTimers = new Set();
+            const activeIntervals = new Set();
+
+            const wrappedSetTimeout = (fn, delay, ...args) => {
+                let id;
+                id = setTimeout(() => {
+                    activeTimers.delete(id);
+                    try {
+                        if (typeof fn === 'function') fn(...args);
+                    } catch (err) {
+                        customConsole.error(`Async Error (setTimeout): ${err.message || String(err)}`);
+                    }
+                }, delay);
+                activeTimers.add(id);
+                return id;
+            };
+
+            const wrappedClearTimeout = (id) => {
+                if (id !== undefined && id !== null) activeTimers.delete(id);
+                return clearTimeout(id);
+            };
+
+            const wrappedSetInterval = (fn, delay, ...args) => {
+                let id;
+                id = setInterval(() => {
+                    try {
+                        if (typeof fn === 'function') fn(...args);
+                    } catch (err) {
+                        customConsole.error(`Async Error (setInterval): ${err.message || String(err)}`);
+                    }
+                }, delay);
+                activeIntervals.add(id);
+                return id;
+            };
+
+            const wrappedClearInterval = (id) => {
+                if (id !== undefined && id !== null) activeIntervals.delete(id);
+                return clearInterval(id);
             };
 
             try {
                 const sandbox = {
                     console: customConsole,
+                    setTimeout: wrappedSetTimeout,
+                    clearTimeout: wrappedClearTimeout,
+                    setInterval: wrappedSetInterval,
+                    clearInterval: wrappedClearInterval,
                     Math: window.Math,
                     Date: window.Date,
                     JSON: window.JSON,
@@ -411,6 +567,19 @@
 
                 const result = await Promise.race([execPromise, timeoutPromise]);
 
+                // Wait for any remaining async timers & intervals up to safety limit
+                const startWait = Date.now();
+                const timerSafetyLimit = Math.max(100, this.timeoutMs - 200);
+                while ((activeTimers.size > 0 || activeIntervals.size > 0) && (Date.now() - startWait) < timerSafetyLimit) {
+                    await new Promise(res => setTimeout(res, 30));
+                }
+
+                // Clean up remaining intervals/timers
+                activeTimers.forEach(id => clearTimeout(id));
+                activeIntervals.forEach(id => clearInterval(id));
+                activeTimers.clear();
+                activeIntervals.clear();
+
                 return {
                     success: true,
                     result: this.serialize(result),
@@ -418,6 +587,11 @@
                     error: null
                 };
             } catch (err) {
+                activeTimers.forEach(id => clearTimeout(id));
+                activeIntervals.forEach(id => clearInterval(id));
+                activeTimers.clear();
+                activeIntervals.clear();
+
                 return {
                     success: false,
                     result: null,
@@ -431,7 +605,7 @@
         // 2. TYPESCRIPT RUNNER (In-Browser Transpile -> Web Worker Sandbox -> Cloud Fallback)
         // =========================================================================
 
-        async executeTS(code, contextExtension = {}) {
+        async executeTS(code, options = {}) {
             const tsCdnMirrors = [
                 'https://cdnjs.cloudflare.com/ajax/libs/typescript/5.3.3/typescript.min.js',
                 'https://cdn.jsdelivr.net/npm/typescript@5.3.3/lib/typescript.min.js',
@@ -464,7 +638,7 @@
                         }
                     });
 
-                    return await this.executeJS(transpileResult.outputText, contextExtension);
+                    return await this.executeJS(transpileResult.outputText, options);
                 }
             } catch (tsErr) {
                 console.warn('[BrowserEngine] Local TS transpilation failed, falling back to Cloud Runner:', tsErr.message);

@@ -57,27 +57,36 @@ class AntigravityEngine {
             info: (...args) => { logs.push(`INFO: ${args.map(a => this._serialize(a)).join(' ')}`); },
         };
 
-        // Activity tracking for async tasks
-        let activeTasks = 0;
-        const taskFinished = () => { activeTasks = Math.max(0, activeTasks - 1); };
+        // Activity tracking for async tasks (timers & intervals)
+        const activeTimers = new Set();
+        const activeIntervals = new Set();
 
         const wrappedSetTimeout = (fn, delay, ...args) => {
-            activeTasks++;
-            return setTimeout(() => {
+            let id;
+            id = setTimeout(() => {
+                activeTimers.delete(id);
                 try {
                     if (typeof fn === 'function') {
                         fn(...args);
                     }
                 } catch (err) {
                     customConsole.error(`Async Error (setTimeout): ${err.message}`);
-                } finally {
-                    taskFinished();
                 }
             }, delay);
+            activeTimers.add(id);
+            return id;
+        };
+
+        const wrappedClearTimeout = (id) => {
+            if (id !== undefined && id !== null) {
+                activeTimers.delete(id);
+            }
+            return clearTimeout(id);
         };
 
         const wrappedSetInterval = (fn, delay, ...args) => {
-            return setInterval(() => {
+            let id;
+            id = setInterval(() => {
                 try {
                     if (typeof fn === 'function') {
                         fn(...args);
@@ -86,19 +95,23 @@ class AntigravityEngine {
                     customConsole.error(`Async Error (setInterval): ${err.message}`);
                 }
             }, delay, ...args);
+            activeIntervals.add(id);
+            return id;
+        };
+
+        const wrappedClearInterval = (id) => {
+            if (id !== undefined && id !== null) {
+                activeIntervals.delete(id);
+            }
+            return clearInterval(id);
         };
 
         const sandbox = {
             console: customConsole,
             setTimeout: wrappedSetTimeout,
-            clearTimeout: (id) => {
-                if (id) {
-                    clearTimeout(id);
-                    taskFinished();
-                }
-            },
+            clearTimeout: wrappedClearTimeout,
             setInterval: wrappedSetInterval,
-            clearInterval,
+            clearInterval: wrappedClearInterval,
             Buffer, URL, Promise,
             process: { env: {} },
             ...contextExtension,
@@ -111,11 +124,18 @@ class AntigravityEngine {
             const result = script.runInContext(context, { timeout: this.timeout });
             let resolvedResult = (result && typeof result.then === 'function') ? await result : result;
 
-            // Wait for remaining async tasks (timers)
+            // Wait for remaining async tasks (timers & intervals)
             const startWait = Date.now();
-            while (activeTasks > 0 && (Date.now() - startWait) < this.timeout) {
-                await new Promise(resolve => setTimeout(resolve, 100));
+            const safetyLimit = Math.max(100, this.timeout - 200);
+            while ((activeTimers.size > 0 || activeIntervals.size > 0) && (Date.now() - startWait) < safetyLimit) {
+                await new Promise(resolve => setTimeout(resolve, 30));
             }
+
+            // Cleanup remaining active intervals and timers
+            activeTimers.forEach(id => clearTimeout(id));
+            activeIntervals.forEach(id => clearInterval(id));
+            activeTimers.clear();
+            activeIntervals.clear();
 
             return {
                 id: resultId,
@@ -124,6 +144,10 @@ class AntigravityEngine {
                 logs,
             };
         } catch (err) {
+            activeTimers.forEach(id => clearTimeout(id));
+            activeIntervals.forEach(id => clearInterval(id));
+            activeTimers.clear();
+            activeIntervals.clear();
             return {
                 id: resultId,
                 success: false,
