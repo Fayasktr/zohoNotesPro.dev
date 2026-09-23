@@ -182,6 +182,17 @@ function createZohoNotesMcpServer(config = {}) {
                         },
                         required: ['noteId']
                     }
+                },
+                {
+                    name: 'list_users',
+                    description: 'List registered users with their username, email, and role.',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            limit: { type: 'number', description: 'Maximum users to return (default 50)' },
+                            query: { type: 'string', description: 'Optional search query for username or email' }
+                        }
+                    }
                 }
             ]
         };
@@ -616,6 +627,43 @@ function createZohoNotesMcpServer(config = {}) {
                                             username: targetUser.username,
                                             email: targetUser.email
                                         }
+                                    },
+                                    null,
+                                    2
+                                )
+                            }
+                        ]
+                    };
+                }
+
+                case 'list_users': {
+                    const limit = Math.min(Math.max(1, args.limit || 50), 100);
+                    const filter = {};
+                    if (args.query) {
+                        const regex = new RegExp(args.query, 'i');
+                        filter.$or = [{ username: regex }, { email: regex }];
+                    }
+                    const users = await User.find(filter)
+                        .select('_id username email role isBlocked createdAt')
+                        .sort({ createdAt: 1 })
+                        .limit(limit)
+                        .lean();
+
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: JSON.stringify(
+                                    {
+                                        count: users.length,
+                                        users: users.map(u => ({
+                                            id: u._id,
+                                            username: u.username,
+                                            email: u.email,
+                                            role: u.role || 'user',
+                                            isBlocked: !!u.isBlocked,
+                                            createdAt: u.createdAt
+                                        }))
                                     },
                                     null,
                                     2
