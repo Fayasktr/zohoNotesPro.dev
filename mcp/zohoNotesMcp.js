@@ -479,6 +479,7 @@ function createZohoNotesMcpServer(config = {}) {
                 }
 
                 case 'get_system_stats': {
+                    const totalUsers = await User.countDocuments();
                     const totalNotes = await Note.countDocuments({ isTrashed: false });
                     const trashedNotes = await Note.countDocuments({ isTrashed: true });
                     const starredNotes = await Note.countDocuments({ isStarred: true, isTrashed: false });
@@ -494,6 +495,7 @@ function createZohoNotesMcpServer(config = {}) {
                                         version: '1.0.0',
                                         supportedLanguages: ['javascript', 'typescript', 'python', 'c', 'cpp', 'java'],
                                         database: {
+                                            totalUsers: totalUsers,
                                             activeNotes: totalNotes,
                                             starredNotes: starredNotes,
                                             trashedNotes: trashedNotes,
