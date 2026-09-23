@@ -154,8 +154,24 @@ async function testTimerExecution() {
     ]);
     console.log('  ✅ [PASS] Browser worker sandbox simulation passed with all timers captured.\n');
 
+    // 7. Sequential array timer loop (user's exact scenario)
+    console.log('[Test 7] Sequential array setTimeout loop (User Scenario)...');
+    const streamedLogs7 = [];
+    const res7 = await engine.execute(`
+        let arr = [4, 3, 5, 4, 4];
+        for (let i = 0; i < arr.length; i++) {
+            setTimeout(() => {
+                console.log(arr[i]);
+            }, i * 80);
+        }
+    `, 'javascript');
+
+    assert.strictEqual(res7.success, true);
+    assert.deepStrictEqual(res7.logs, ['4', '3', '5', '4', '4']);
+    console.log('  ✅ [PASS] Array loop with sequential timeouts executed and logged in order.\n');
+
     console.log('═══════════════════════════════════════════════════');
-    console.log('🎉 ALL 6 TIMER EXECUTION TESTS PASSED SUCCESSFULLY!');
+    console.log('🎉 ALL 7 TIMER EXECUTION TESTS PASSED SUCCESSFULLY!');
     console.log('═══════════════════════════════════════════════════\n');
 }
 

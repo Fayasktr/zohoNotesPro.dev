@@ -7,7 +7,7 @@ const os = require('os');
 
 class AntigravityEngine {
     constructor() {
-        this.timeout = 8000; // 8 seconds timeout for compilation + execution
+        this.timeout = 15000; // 15 seconds timeout for compilation + execution
         this.tempDir = path.join(os.tmpdir(), 'antigravity_exec');
         if (!fs.existsSync(this.tempDir)) {
             fs.mkdirSync(this.tempDir, { recursive: true });

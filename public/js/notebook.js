@@ -3839,7 +3839,17 @@ class NotebookApp {
             let data;
             if (activeEngine) {
                 // Execute via Polyglot Browser Engine (Local JS/TS/Python WASM, Cloud for C/C++/Java with stdin)
-                data = await activeEngine.execute(code, lang, { stdin });
+                data = await activeEngine.execute(code, lang, {
+                    stdin,
+                    onLog: (line) => {
+                        if (!outputDiv) return;
+                        const logElem = document.createElement('div');
+                        logElem.className = 'output-log';
+                        logElem.textContent = line;
+                        outputDiv.appendChild(logElem);
+                        outputDiv.scrollTop = outputDiv.scrollHeight;
+                    }
+                });
             } else {
                 // Fallback to direct server execution
                 const response = await this.safeFetch('/api/execute', {
@@ -4264,6 +4274,7 @@ class NotebookApp {
                 outputDiv.appendChild(errElem);
             }
         }
+        outputDiv.scrollTop = outputDiv.scrollHeight;
     }
 
     toggleCellStar(cellId) {

@@ -196,7 +196,7 @@
 
     class BrowserExecutionEngine {
         constructor() {
-            this.timeoutMs = 5000;
+            this.timeoutMs = 15000;
             this.pyodide = null;
             this.isPyodideLoading = false;
             this.pyodideLoadPromise = null;
@@ -219,12 +219,12 @@
             switch (normalizedLang) {
                 case 'javascript':
                 case 'js':
-                    response = await this.executeJS(code);
+                    response = await this.executeJS(code, options);
                     break;
 
                 case 'typescript':
                 case 'ts':
-                    response = await this.executeTS(code);
+                    response = await this.executeTS(code, options);
                     break;
 
                 case 'python':
@@ -374,7 +374,8 @@
                         }
                     };
 
-                    // Strict 5s Timeout Guard (terminates infinite loops without freezing the UI)
+                    // Strict Timeout Guard (terminates infinite loops without freezing the UI)
+                    const executionTimeout = (options && options.timeoutMs) ? options.timeoutMs : this.timeoutMs;
                     timeoutTimer = setTimeout(() => {
                         if (!isFinished) {
                             isFinished = true;
@@ -383,10 +384,10 @@
                                 success: false,
                                 result: null,
                                 logs,
-                                error: 'Execution timed out (5s limit). Infinite loop terminated safely.'
+                                error: `Execution timed out (${Math.round(executionTimeout / 1000)}s limit). Infinite loop terminated safely.`
                             });
                         }
-                    }, this.timeoutMs);
+                    }, executionTimeout);
 
                     worker.onmessage = (e) => {
                         const data = e.data;
@@ -424,7 +425,7 @@
                         }
                     };
 
-                    worker.postMessage({ code, rawCode, timeoutMs: this.timeoutMs });
+                    worker.postMessage({ code, rawCode, timeoutMs: executionTimeout });
                 } catch (err) {
                     if (timeoutTimer) clearTimeout(timeoutTimer);
                     if (worker) worker.terminate();
@@ -561,15 +562,16 @@
                 }
 
                 const execPromise = userFunc(...paramValues);
+                const executionTimeout = (options && options.timeoutMs) ? options.timeoutMs : this.timeoutMs;
                 const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Execution timed out (5s limit)')), this.timeoutMs)
+                    setTimeout(() => reject(new Error(`Execution timed out (${Math.round(executionTimeout / 1000)}s limit)`)), executionTimeout)
                 );
 
                 const result = await Promise.race([execPromise, timeoutPromise]);
 
                 // Wait for any remaining async timers & intervals up to safety limit
                 const startWait = Date.now();
-                const timerSafetyLimit = Math.max(100, this.timeoutMs - 200);
+                const timerSafetyLimit = Math.max(100, executionTimeout - 200);
                 while ((activeTimers.size > 0 || activeIntervals.size > 0) && (Date.now() - startWait) < timerSafetyLimit) {
                     await new Promise(res => setTimeout(res, 30));
                 }

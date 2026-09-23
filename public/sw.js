@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zoho-notes-v19-pure-live-partition';
+const CACHE_NAME = 'zoho-notes-v20-realtime-timers';
 const OFFLINE_URL = '/offline.html';
 
 // Static Shell & Local-First Engine Assets to Pre-cache

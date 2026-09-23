@@ -140,9 +140,9 @@ export const cellRunner = {
         wrappedClearInterval
       );
 
-      // Wait for remaining async tasks (up to 5s safety limit)
+      // Wait for remaining async tasks (up to 15s safety limit)
       const startWait = Date.now();
-      const maxWaitMs = 5000;
+      const maxWaitMs = 15000;
       while ((activeTimers.size > 0 || activeIntervals.size > 0) && (Date.now() - startWait) < (maxWaitMs - 200)) {
         await new Promise(resolve => setTimeout(resolve, 30));
       }
