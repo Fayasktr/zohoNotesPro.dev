@@ -51,6 +51,33 @@ router.get('/status', (req, res) => {
 });
 
 /**
+ * GET /mcp/users
+ * Direct endpoint to list registered users
+ */
+router.get('/users', mcpAuth, async (req, res) => {
+    try {
+        const User = require('../models/User');
+        const users = await User.find({})
+            .select('_id username email role isBlocked createdAt')
+            .sort({ createdAt: 1 })
+            .lean();
+        res.json({
+            count: users.length,
+            users: users.map(u => ({
+                id: u._id,
+                username: u.username,
+                email: u.email,
+                role: u.role || 'user',
+                isBlocked: !!u.isBlocked,
+                createdAt: u.createdAt
+            }))
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
  * GET /mcp/sse
  * Primary SSE endpoint where MCP clients connect
  */
