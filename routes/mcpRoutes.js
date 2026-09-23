@@ -59,8 +59,11 @@ router.get('/sse', mcpAuth, async (req, res) => {
 
     try {
         const { server } = createZohoNotesMcpServer();
-        // The second parameter to SSEServerTransport is the endpoint path the client should POST messages to
-        const transport = new SSEServerTransport('/mcp/messages', res);
+        const configuredKey = process.env.MCP_API_KEY ? process.env.MCP_API_KEY.trim().replace(/^["']|["']$/g, '') : null;
+        const apiKeyParam = configuredKey ? `?apiKey=${encodeURIComponent(configuredKey)}` : '';
+        const transport = new SSEServerTransport(`/mcp/messages${apiKeyParam}`, res, {
+            enableDnsRebindingProtection: false
+        });
         const sessionId = transport.sessionId;
 
         activeTransports.set(sessionId, transport);
@@ -83,7 +86,7 @@ router.get('/sse', mcpAuth, async (req, res) => {
  * POST /mcp/messages
  * Endpoint where MCP clients send JSON-RPC tool/resource requests
  */
-router.post('/messages', mcpAuth, async (req, res) => {
+router.post('/messages', async (req, res) => {
     const sessionId = req.query.sessionId;
     let transport;
 
