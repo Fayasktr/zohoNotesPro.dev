@@ -101,7 +101,7 @@ router.post('/messages', mcpAuth, async (req, res) => {
     }
 
     try {
-        await transport.handlePostMessage(req, res);
+        await transport.handlePostMessage(req, res, req.body);
     } catch (err) {
         console.error('[MCP POST] Error processing message:', err);
         if (!res.headersSent) {
