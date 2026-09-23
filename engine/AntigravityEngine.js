@@ -124,6 +124,9 @@ class AntigravityEngine {
             const result = script.runInContext(context, { timeout: this.timeout });
             let resolvedResult = (result && typeof result.then === 'function') ? await result : result;
 
+            // Flush microtasks and immediate unawaited Promise resolutions
+            await new Promise(resolve => setTimeout(resolve, 50));
+
             // Wait for remaining async tasks (timers & intervals)
             const startWait = Date.now();
             const safetyLimit = Math.max(100, this.timeout - 200);

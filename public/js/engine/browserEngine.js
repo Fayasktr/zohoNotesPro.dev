@@ -136,6 +136,13 @@
             return originalClearInterval(id);
         };
 
+        if (typeof self.addEventListener === 'function') {
+            self.addEventListener('unhandledrejection', function(event) {
+                var reason = event && event.reason;
+                customConsole.error('Unhandled Promise Rejection: ' + self.serialize(reason));
+            });
+        }
+
         self.setTimeout = wrappedSetTimeout;
         self.clearTimeout = wrappedClearTimeout;
         self.setInterval = wrappedSetInterval;
@@ -158,6 +165,9 @@
                     }
                 }
                 var result = await fn(customConsole, wrappedSetTimeout, wrappedClearTimeout, wrappedSetInterval, wrappedClearInterval);
+
+                // Flush microtasks and immediate unawaited Promise resolutions before checking timers
+                await new Promise(function(resolve) { originalSetTimeout(resolve, 50); });
 
                 // Wait for any remaining async tasks (timers & intervals) up to timeoutMs limit
                 var startWait = Date.now();
@@ -290,30 +300,46 @@
                 'import', 'export', 'debugger', 'break', 'continue'
             ];
 
-            const firstWord = lastLine.split(/[\s\(\{]/)[0];
-            if (nonReturnableKeywords.includes(firstWord) || lastLine.endsWith('}') || lastLine.endsWith('{')) {
+            // Find the start line of the last expression (handling multiline method chains starting with '.')
+            let startIdx = lastIdx;
+            while (startIdx > 0) {
+                const curLine = lines[startIdx].trim();
+                const prevLine = lines[startIdx - 1].trim();
+                if (curLine.startsWith('.') || prevLine.endsWith('.')) {
+                    startIdx--;
+                } else {
+                    break;
+                }
+            }
+
+            const firstWord = lines[startIdx].trim().split(/[\s\(\{]/)[0];
+            if (nonReturnableKeywords.includes(firstWord) || lines[startIdx].trim().endsWith('}') || lines[startIdx].trim().endsWith('{')) {
                 return code;
             }
 
-            // Check bracket balance on lastLine:
-            // If lastLine has more closing brackets/parens/braces than opening ones,
-            // it cannot be wrapped as a standalone expression.
+            // Check bracket balance on candidate expression
             let parenBalance = 0, braceBalance = 0, bracketBalance = 0;
-            for (const char of lastLine) {
-                if (char === '(') parenBalance++;
-                else if (char === ')') parenBalance--;
-                else if (char === '{') braceBalance++;
-                else if (char === '}') braceBalance--;
-                else if (char === '[') bracketBalance++;
-                else if (char === ']') bracketBalance--;
+            for (let i = startIdx; i <= lastIdx; i++) {
+                for (const char of lines[i]) {
+                    if (char === '(') parenBalance++;
+                    else if (char === ')') parenBalance--;
+                    else if (char === '{') braceBalance++;
+                    else if (char === '}') braceBalance--;
+                    else if (char === '[') bracketBalance++;
+                    else if (char === ']') bracketBalance--;
+                }
             }
             if (parenBalance < 0 || braceBalance < 0 || bracketBalance < 0) {
                 return code;
             }
 
-            // Try wrapping candidate
+            // Try wrapping candidate across [startIdx ... lastIdx]
             const candidateLines = [...lines];
-            candidateLines[lastIdx] = `return (${lastLine});`;
+            if (candidateLines[lastIdx].trim().endsWith(';')) {
+                candidateLines[lastIdx] = candidateLines[lastIdx].trim().slice(0, -1);
+            }
+            candidateLines[startIdx] = 'return (' + candidateLines[startIdx];
+            candidateLines[lastIdx] = candidateLines[lastIdx] + ');';
             const candidateCode = candidateLines.join('\n');
 
             // Pre-compile validation: ensure candidate does NOT introduce a SyntaxError
@@ -568,6 +594,9 @@
                 );
 
                 const result = await Promise.race([execPromise, timeoutPromise]);
+
+                // Flush microtasks and immediate unawaited Promise resolutions
+                await new Promise(res => setTimeout(res, 50));
 
                 // Wait for any remaining async timers & intervals up to safety limit
                 const startWait = Date.now();

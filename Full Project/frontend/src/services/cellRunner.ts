@@ -140,6 +140,9 @@ export const cellRunner = {
         wrappedClearInterval
       );
 
+      // Flush microtasks and immediate unawaited Promise resolutions
+      await new Promise(resolve => setTimeout(resolve, 50));
+
       // Wait for remaining async tasks (up to 15s safety limit)
       const startWait = Date.now();
       const maxWaitMs = 15000;

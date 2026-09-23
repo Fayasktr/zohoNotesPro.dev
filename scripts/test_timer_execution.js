@@ -170,8 +170,29 @@ async function testTimerExecution() {
     assert.deepStrictEqual(res7.logs, ['4', '3', '5', '4', '4']);
     console.log('  ✅ [PASS] Array loop with sequential timeouts executed and logged in order.\n');
 
+    // 8. AntigravityEngine: Promise.all with rejection and chained .catch (User Scenario)
+    console.log('[Test 8] AntigravityEngine: Promise.all rejection with chained catch (User Scenario)...');
+    const res8 = await engine.execute(`
+        let p1 = new Promise((res, rej) => {
+            res("hello")
+        })
+        let p2 = new Promise((res, rej) => {
+            rej("done")
+        })
+        let p3 = new Promise((res, rej) => {
+            res("katham")
+        })
+
+        Promise.all([p1, p2, p3]).then((result) => console.log(result))
+        .catch((e) => console.log(e))
+    `, 'javascript');
+
+    assert.strictEqual(res8.success, true);
+    assert.deepStrictEqual(res8.logs, ['done']);
+    console.log('  ✅ [PASS] Promise.all rejection captured and logged in chained catch.\n');
+
     console.log('═══════════════════════════════════════════════════');
-    console.log('🎉 ALL 7 TIMER EXECUTION TESTS PASSED SUCCESSFULLY!');
+    console.log('🎉 ALL 8 ASYNC/TIMER EXECUTION TESTS PASSED SUCCESSFULLY!');
     console.log('═══════════════════════════════════════════════════\n');
 }
 

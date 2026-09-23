@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zoho-notes-v20-realtime-timers';
+const CACHE_NAME = 'zoho-notes-v21-promise-microtask-flush';
 const OFFLINE_URL = '/offline.html';
 
 // Static Shell & Local-First Engine Assets to Pre-cache
