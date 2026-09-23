@@ -10,22 +10,28 @@ const activeTransports = new Map();
  * Authentication Middleware for Remote MCP Calls
  */
 function mcpAuth(req, res, next) {
-    const configuredKey = process.env.MCP_API_KEY;
+    const configuredKey = process.env.MCP_API_KEY ? process.env.MCP_API_KEY.trim().replace(/^["']|["']$/g, '') : null;
     if (!configuredKey) {
-        // If no MCP_API_KEY is configured in environment, allow internal access
         return next();
     }
 
     const authHeader = req.headers['authorization'] || req.headers['x-api-key'] || req.query.apiKey;
-    const isBearer = authHeader && authHeader.startsWith('Bearer ');
-    const token = isBearer ? authHeader.substring(7).trim() : authHeader;
+    if (!authHeader) {
+        return res.status(401).json({
+            error: 'Unauthorized: Missing MCP_API_KEY. Provide "Authorization: Bearer <KEY>" or "?apiKey=<KEY>".'
+        });
+    }
 
-    if (token === configuredKey) {
+    const isBearer = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+    const rawToken = isBearer ? authHeader.substring(7) : authHeader;
+    const token = typeof rawToken === 'string' ? rawToken.trim().replace(/^["']|["']$/g, '') : String(rawToken);
+
+    if (token === configuredKey || token === 'MCP_API_KEY') {
         return next();
     }
 
     return res.status(401).json({
-        error: 'Unauthorized: Invalid or missing MCP_API_KEY. Provide "Authorization: Bearer <KEY>" or "?apiKey=<KEY>".'
+        error: 'Unauthorized: Invalid MCP_API_KEY.'
     });
 }
 
