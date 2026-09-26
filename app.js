@@ -340,8 +340,13 @@ app.use('/forgot-password', authLimiter);
 // Mount Model Context Protocol (MCP) endpoints for remote AI agents (SSE & Messages)
 app.use('/mcp', mcpRoutes);
 
-// Apply CSRF Protection to all routes after session is initialized
-app.use(csrfProtection);
+// Apply CSRF Protection to all routes after session is initialized (strictly exempting /mcp routes)
+app.use((req, res, next) => {
+    if (req.path.startsWith('/mcp') || req.originalUrl.startsWith('/mcp')) {
+        return next();
+    }
+    csrfProtection(req, res, next);
+});
 
 // Pass CSRF token to all views
 app.use((req, res, next) => {

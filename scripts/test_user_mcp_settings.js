@@ -22,7 +22,7 @@ async function runTests() {
 
     try {
         const studentEmail = 'test_student_rate_limit@example.com';
-        const adminEmail = 'fayaskpktr@gmail.com';
+        const adminEmail = 'admin@gmail.com';
 
         await User.deleteMany({ email: { $in: [studentEmail, 'temp_test_user@example.com'] } });
 
@@ -122,11 +122,11 @@ async function runTests() {
         console.log('✓ Verified: 51st request successfully blocked with 429:', rateLimitBody.error);
 
         // Test 6: Test Super Admin Bypass (Unlimited Access)
-        console.log('Testing Super Admin (fayaskpktr@gmail.com) unlimited access...');
+        console.log('Testing Super Admin (admin@gmail.com) unlimited access...');
         let admin = await User.findOne({ email: adminEmail });
         if (!admin) {
             admin = await User.create({
-                username: 'fayas kp',
+                username: 'admin',
                 email: adminEmail,
                 role: 'admin',
                 apiKey: `zn_admin_${crypto.randomBytes(20).toString('hex')}`
