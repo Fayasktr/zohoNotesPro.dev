@@ -110,6 +110,7 @@ async function mcpAuth(req, res, next) {
         }
 
         const isAdmin = user.role === 'admin';
+        const isUnlimited = isAdmin || (user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com');
 
         // Check if API key has expired
         if (user.apiKeyExpiresAt && new Date() > new Date(user.apiKeyExpiresAt)) {
@@ -118,8 +119,8 @@ async function mcpAuth(req, res, next) {
             });
         }
 
-        // Check daily rate limiting (50 req/day for regular users; unlimited for superadmin)
-        if (!isAdmin) {
+        // Check daily rate limiting (50 req/day for regular users; unlimited for admin and fayas kp)
+        if (!isUnlimited) {
             const todayStr = new Date().toISOString().slice(0, 10);
             let currentCount = 0;
             if (user.mcpUsage && user.mcpUsage.lastResetDate === todayStr) {
@@ -302,9 +303,10 @@ router.post(['/', '/sse', '/messages'], async (req, res) => {
         try {
             const user = sessionEntry.user;
             const isAdmin = user && user.role === 'admin';
+            const isUnlimited = isAdmin || (user && user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com');
 
             // Check if regular user has exceeded daily request quota
-            if (!isAdmin && user && user._id) {
+            if (!isUnlimited && user && user._id) {
                 const todayStr = new Date().toISOString().slice(0, 10);
                 const freshUser = await User.findById(user._id).select('mcpUsage apiKeyExpiresAt').lean();
                 

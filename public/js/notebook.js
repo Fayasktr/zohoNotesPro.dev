@@ -3483,13 +3483,14 @@ class NotebookApp {
         if (rotateDrawer) rotateDrawer.classList.add('hidden');
 
         const isAdmin = !!data.isAdmin;
+        const isUnlimited = isAdmin || !!data.isUnlimited;
         if (roleTag) {
-            roleTag.innerText = isAdmin ? 'Super Admin' : 'Student Access';
-            roleTag.style.color = isAdmin ? '#a5b4fc' : '#30ff6a';
+            roleTag.innerText = isAdmin ? 'Super Admin' : (isUnlimited ? '👑 Unlimited Access' : 'Student Access');
+            roleTag.style.color = isUnlimited ? '#c084fc' : '#30ff6a';
         }
 
         // Rate Limit display
-        if (isAdmin) {
+        if (isUnlimited) {
             if (quotaBadge) {
                 quotaBadge.innerText = '👑 Unlimited Access';
                 quotaBadge.style.background = 'rgba(168, 85, 247, 0.2)';
@@ -3500,7 +3501,7 @@ class NotebookApp {
                 usageBar.style.width = '100%';
                 usageBar.style.background = 'linear-gradient(90deg, #a855f7, #6366f1)';
             }
-            if (usageSubtext) usageSubtext.innerText = 'Admin privileges: No daily rate limit applied.';
+            if (usageSubtext) usageSubtext.innerText = 'Privileged quota: No daily rate limit applied.';
         } else {
             const used = data.usedToday || 0;
             const limit = data.dailyLimit || 50;

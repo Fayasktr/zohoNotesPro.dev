@@ -1173,10 +1173,11 @@ app.get('/api/user/mcp-credentials', isAuthenticated, async (req, res) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const isAdmin = user.role === 'admin';
+        const isUnlimited = isAdmin || (user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com');
         const todayStr = new Date().toISOString().slice(0, 10);
         const usedToday = (user.mcpUsage && user.mcpUsage.lastResetDate === todayStr) ? (user.mcpUsage.dailyCount || 0) : 0;
-        const dailyLimit = isAdmin ? null : 50;
-        const remainingToday = isAdmin ? null : Math.max(0, 50 - usedToday);
+        const dailyLimit = isUnlimited ? null : 50;
+        const remainingToday = isUnlimited ? null : Math.max(0, 50 - usedToday);
 
         // DO NOT auto-generate key. Key generation must be an explicit user action.
         if (!user.apiKey) {
@@ -1185,6 +1186,7 @@ app.get('/api/user/mcp-credentials', isAuthenticated, async (req, res) => {
                 hasKey: false,
                 role: user.role,
                 isAdmin,
+                isUnlimited,
                 dailyLimit,
                 usedToday,
                 remainingToday
@@ -1201,6 +1203,7 @@ app.get('/api/user/mcp-credentials', isAuthenticated, async (req, res) => {
             apiKey: user.apiKey,
             role: user.role,
             isAdmin,
+            isUnlimited,
             createdAt: user.apiKeyCreatedAt,
             expiresAt: user.apiKeyExpiresAt,
             isExpired,

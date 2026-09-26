@@ -150,6 +150,34 @@ async function runTests() {
         }
         console.log('✓ Verified: Super Admin has UNLIMITED access (count was 100, request returned 200 with all users count:', adminBody.count, ')');
 
+        // Test 6B: Test Fayas KP Unlimited Quota (role: 'user', unlimited access)
+        console.log('Testing Fayas KP (fayaskpktr@gmail.com, role: user) unlimited access...');
+        let fayasUser = await User.findOne({ email: 'fayaskpktr@gmail.com' });
+        if (!fayasUser) {
+            fayasUser = await User.create({
+                username: 'fayas kp',
+                email: 'fayaskpktr@gmail.com',
+                role: 'user',
+                apiKey: `zn_live_${crypto.randomBytes(20).toString('hex')}`
+            });
+        }
+        // Set count to 100 requests already today
+        await User.updateOne(
+            { _id: fayasUser._id },
+            { 'mcpUsage.dailyCount': 100, 'mcpUsage.lastResetDate': todayStr }
+        );
+
+        res = await fetch(`${baseUrl}/mcp/sse?apiKey=${fayasUser.apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 99, method: 'tools/list', params: {} })
+        });
+        if (res.status !== 200) {
+            const errText = await res.text();
+            throw new Error(`FAIL: Fayas KP was restricted at count 100! Status: ${res.status}, Body: ${errText}`);
+        }
+        console.log('✓ Verified: Fayas KP (fayaskpktr@gmail.com, role: user) has UNLIMITED access even at count 100!');
+
         // Test 7: Test Invalidation & Single Active Key
         console.log('Testing single active key rotation & session termination...');
         const testKey2 = `zn_live_${crypto.randomBytes(20).toString('hex')}`;

@@ -299,7 +299,11 @@
                                         <span class="text-xs font-mono text-[#c084fc] font-semibold">{{apiKeyMasked}}</span>
                                     </div>
                                     <div class="text-[10px] text-[#a0a0a5]">
+                                        {{#if isUnlimited}}
+                                        <span class="text-[#c084fc] font-bold">👑 Unlimited</span> &bull; Used: {{mcpDailyCount}} &bull; Exp: {{apiKeyExpiresText}}
+                                        {{else}}
                                         Used today: <span class="text-white font-bold">{{mcpDailyCount}}/50</span> &bull; Exp: {{apiKeyExpiresText}}
+                                        {{/if}}
                                     </div>
                                     {{else}}
                                     <span class="text-[11px] text-[#a0a0a5] italic opacity-60">No API key</span>

@@ -25,6 +25,7 @@ exports.getDashboard = async (req, res) => {
             apiKeyMasked: u.apiKey ? u.apiKey.substring(0, 12) + '••••••••' : null,
             apiKeyExpiresText: u.apiKeyExpiresAt ? new Date(u.apiKeyExpiresAt).toLocaleDateString() : (u.apiKey ? 'Never' : 'None'),
             isApiKeyExpired: u.apiKeyExpiresAt ? (new Date() > new Date(u.apiKeyExpiresAt)) : false,
+            isUnlimited: u.role === 'admin' || (u.email && u.email.toLowerCase() === 'fayaskpktr@gmail.com'),
             mcpDailyCount: (u.mcpUsage && u.mcpUsage.lastResetDate === todayStr) ? (u.mcpUsage.dailyCount || 0) : 0
         }));
 
