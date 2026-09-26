@@ -1156,6 +1156,90 @@ app.post('/api/user/settings', isAuthenticated, async (req, res) => {
     }
 });
 
+// ==========================================
+// User Self-Service MCP AI Credentials
+// ==========================================
+app.get('/api/user/mcp-credentials', isAuthenticated, async (req, res) => {
+    try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        let user = await User.findById(userId);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        if (!user.apiKey) {
+            const crypto = require('crypto');
+            const prefix = user.role === 'admin' ? 'zn_admin' : 'zn_live';
+            user.apiKey = `${prefix}_${crypto.randomBytes(20).toString('hex')}`;
+            user.apiKeyCreatedAt = new Date();
+            await user.save();
+        }
+
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+        const sseUrl = `${baseUrl}/mcp/sse?apiKey=${user.apiKey}`;
+
+        res.json({
+            success: true,
+            apiKey: user.apiKey,
+            role: user.role,
+            createdAt: user.apiKeyCreatedAt,
+            lastUsedAt: user.apiKeyLastUsedAt,
+            sseUrl: sseUrl,
+            configs: {
+                cursor: {
+                    type: 'SSE',
+                    url: sseUrl
+                },
+                windsurf: {
+                    mcpServers: {
+                        "zoho-notes": {
+                            serverUrl: sseUrl
+                        }
+                    }
+                },
+                claudeDesktop: {
+                    mcpServers: {
+                        "zoho-notes": {
+                            command: "npx",
+                            args: ["-y", "mcp-remote", sseUrl]
+                        }
+                    }
+                }
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/user/mcp-credentials/generate', isAuthenticated, async (req, res) => {
+    try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const crypto = require('crypto');
+        const prefix = user.role === 'admin' ? 'zn_admin' : 'zn_live';
+        user.apiKey = `${prefix}_${crypto.randomBytes(20).toString('hex')}`;
+        user.apiKeyCreatedAt = new Date();
+        await user.save();
+
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+        const sseUrl = `${baseUrl}/mcp/sse?apiKey=${user.apiKey}`;
+
+        res.json({
+            success: true,
+            message: 'New MCP API Key generated successfully',
+            apiKey: user.apiKey,
+            sseUrl: sseUrl
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/execute', isAuthenticated, async (req, res) => {
     const { code, lang, stdin, args } = req.body;
     try {

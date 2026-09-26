@@ -16,19 +16,25 @@ const engine = require('../engine/AntigravityEngine');
  * Connect to MongoDB if not already connected
  */
 async function connectToDatabase(customUri) {
-    if (mongoose.connection.readyState === 1) return; // Already connected
+    if (mongoose.connection.readyState === 1) return;
     const uri = customUri || process.env.MONGODB_URI || 'mongodb://localhost:27017/zoho';
     await mongoose.connect(uri);
 }
 
 /**
- * Factory to create and configure a Zoho Notes MCP Server
+ * Factory to create and configure a Scoped Zoho Notes MCP Server
+ * @param {Object} config
+ * @param {Object} config.user Authenticated user object ({ _id, username, email, role })
+ * @param {string} config.mongoUri Optional custom MongoDB URI
  */
 function createZohoNotesMcpServer(config = {}) {
+    const currentUser = config.user || null;
+    const isAdmin = currentUser ? currentUser.role === 'admin' : true; // Default to admin if unauthenticated internal call
+
     const server = new Server(
         {
             name: config.name || 'zoho-notes',
-            version: config.version || '1.0.0'
+            version: config.version || '2.0.0'
         },
         {
             capabilities: {
@@ -39,153 +45,143 @@ function createZohoNotesMcpServer(config = {}) {
     );
 
     // ==========================================
-    // 1. TOOL DEFINITIONS
+    // 1. TOOL DEFINITIONS (ROLE-BASED EXPOSURE)
     // ==========================================
     server.setRequestHandler(ListToolsRequestSchema, async () => {
-        return {
-            tools: [
-                {
-                    name: 'list_notes',
-                    description: 'List recent notes with ID, title, folder, starred status, live status, and update timestamp.',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            limit: { type: 'number', description: 'Maximum number of notes to return (default: 20, max: 100)' },
-                            folder: { type: 'string', description: 'Filter by folder name (e.g., "root", "work", "algorithms")' },
-                            isStarred: { type: 'boolean', description: 'Filter by starred notes only' },
-                            includeTrashed: { type: 'boolean', description: 'Include trashed notes (default: false)' }
-                        }
+        const tools = [
+            {
+                name: 'list_notes',
+                description: isAdmin
+                    ? 'List notes across the entire platform (Admin), with optional folder or starred filters.'
+                    : 'List your personal notes with ID, title, folder, and update timestamp.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        limit: { type: 'number', description: 'Maximum number of notes to return (default: 20, max: 100)' },
+                        folder: { type: 'string', description: 'Filter by folder name (e.g., "root", "practice")' },
+                        isStarred: { type: 'boolean', description: 'Filter by starred notes only' },
+                        includeTrashed: { type: 'boolean', description: 'Include trashed notes (default: false)' }
                     }
-                },
-                {
-                    name: 'get_note',
-                    description: 'Retrieve full content and cells of a specific note by ID or shareCode.',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            noteId: { type: 'string', description: 'The unique ID or shareCode of the note' }
-                        },
-                        required: ['noteId']
-                    }
-                },
-                {
-                    name: 'search_notes',
-                    description: 'Search for notes matching a text query in their title or cell content.',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            query: { type: 'string', description: 'Search term or keyword' },
-                            limit: { type: 'number', description: 'Maximum number of results to return (default: 10)' }
-                        },
-                        required: ['query']
-                    }
-                },
-                {
-                    name: 'create_note',
-                    description: 'Create a new notebook note with markdown explanation and optional code cells.',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            title: { type: 'string', description: 'Title of the note' },
-                            folder: { type: 'string', description: 'Folder name (default: "root")' },
-                            isLive: { type: 'boolean', description: 'If true, create as a live review / collaboration session' },
-                            ownerEmail: { type: 'string', description: 'Optional owner email (defaults to Fayas KP fayaskpktr@gmail.com)' },
-                            markdown: { type: 'string', description: 'Initial markdown explanation content' },
-                            codeCells: {
-                                type: 'array',
-                                description: 'Optional list of initial code cells',
-                                items: {
-                                    type: 'object',
-                                    properties: {
-                                        title: { type: 'string', description: 'Title of the cell' },
-                                        type: { type: 'string', enum: ['code', 'markdown'] },
-                                        language: { type: 'string', enum: ['javascript', 'typescript', 'python', 'c', 'cpp', 'java', 'markdown'] },
-                                        code: { type: 'string' }
-                                    },
-                                    required: ['code']
-                                }
-                            }
-                        },
-                        required: ['title']
-                    }
-                },
-                {
-                    name: 'update_note',
-                    description: 'Update an existing note (modify title, folder, markdown, star status, or append a new cell).',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            noteId: { type: 'string', description: 'ID of the note to update' },
-                            title: { type: 'string', description: 'New title' },
-                            folder: { type: 'string', description: 'New folder' },
-                            isStarred: { type: 'boolean', description: 'Set starred status' },
-                            markdown: { type: 'string', description: 'Update main markdown content' },
-                            appendCell: {
+                }
+            },
+            {
+                name: 'get_note',
+                description: 'Retrieve full content and cells of a specific note by ID or shareCode.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        noteId: { type: 'string', description: 'The unique ID or shareCode of the note' }
+                    },
+                    required: ['noteId']
+                }
+            },
+            {
+                name: 'search_notes',
+                description: isAdmin
+                    ? 'Search all notes in the database matching a text query in title or cell content.'
+                    : 'Search through your own notes matching a text query in title or cell content.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        query: { type: 'string', description: 'Search term or keyword' },
+                        limit: { type: 'number', description: 'Maximum number of results to return (default: 10)' }
+                    },
+                    required: ['query']
+                }
+            },
+            {
+                name: 'create_note',
+                description: isAdmin
+                    ? 'Create a new notebook note or live exam session, optionally assigning ownership to a candidate.'
+                    : 'Create a new personal notebook note with markdown explanation and optional code cells.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        title: { type: 'string', description: 'Title of the note' },
+                        folder: { type: 'string', description: 'Folder name (default: "root")' },
+                        isLive: { type: 'boolean', description: 'If true, create as a live review / collaboration session' },
+                        ownerEmail: { type: 'string', description: isAdmin ? 'Target owner email (Admin only)' : 'Ignored for non-admins' },
+                        markdown: { type: 'string', description: 'Initial markdown explanation content' },
+                        codeCells: {
+                            type: 'array',
+                            description: 'Optional list of initial code cells',
+                            items: {
                                 type: 'object',
-                                description: 'Append a new cell to the notebook',
                                 properties: {
-                                    type: { type: 'string', enum: ['code', 'markdown'] },
-                                    language: { type: 'string', enum: ['javascript', 'typescript', 'python', 'c', 'cpp', 'java'] },
-                                    content: { type: 'string' }
+                                    title: { type: 'string', description: 'Title of the cell' },
+                                    language: { type: 'string', description: 'Programming language (default: javascript)' },
+                                    code: { type: 'string', description: 'Source code content' }
                                 },
-                                required: ['type', 'content']
+                                required: ['code']
                             }
-                        },
-                        required: ['noteId']
-                    }
-                },
-                {
-                    name: 'delete_note',
-                    description: 'Move a note to trash or permanently remove it.',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            noteId: { type: 'string', description: 'ID of the note' },
-                            permanent: { type: 'boolean', description: 'If true, permanently delete from database. If false (default), move to trash.' }
-                        },
-                        required: ['noteId']
-                    }
-                },
-                {
-                    name: 'run_code_cell',
-                    description: 'Execute code in JavaScript, TypeScript, Python, Java, C, or C++ using the Zoho Notes Antigravity sandbox engine.',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            language: {
-                                type: 'string',
-                                enum: ['javascript', 'typescript', 'python', 'c', 'cpp', 'java'],
-                                description: 'Programming language'
+                        }
+                    },
+                    required: ['title']
+                }
+            },
+            {
+                name: 'update_note',
+                description: 'Update metadata or append new cells to an existing note.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        noteId: { type: 'string', description: 'ID of the note to update' },
+                        title: { type: 'string', description: 'New title' },
+                        folder: { type: 'string', description: 'New folder name' },
+                        isStarred: { type: 'boolean', description: 'Star or unstar note' },
+                        markdown: { type: 'string', description: 'Update or replace the markdown explanation' },
+                        appendCell: {
+                            type: 'object',
+                            description: 'Append a new code cell to the note',
+                            properties: {
+                                type: { type: 'string', enum: ['code', 'markdown'], default: 'code' },
+                                language: { type: 'string', default: 'javascript' },
+                                content: { type: 'string' }
                             },
-                            code: { type: 'string', description: 'Source code to compile & execute' },
-                            stdin: { type: 'string', description: 'Optional standard input provided to the process' }
-                        },
-                        required: ['language', 'code']
-                    }
-                },
-                {
-                    name: 'get_system_stats',
-                    description: 'Get statistics on note counts, folders, trashed notes, and supported languages.',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {}
-                    }
-                },
-                {
-                    name: 'reassign_note',
-                    description: 'Reassign a note to Fayas KP (or specified user email).',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            noteId: { type: 'string', description: 'ID of the note to reassign' },
-                            email: { type: 'string', description: 'Target user email (defaults to fayaskpktr@gmail.com)' }
-                        },
-                        required: ['noteId']
-                    }
-                },
+                            required: ['content']
+                        }
+                    },
+                    required: ['noteId']
+                }
+            },
+            {
+                name: 'delete_note',
+                description: 'Move a note to trash, or permanently delete it.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        noteId: { type: 'string', description: 'ID of the note to delete' },
+                        permanent: { type: 'boolean', description: 'If true, permanently remove from DB (default: false)' }
+                    },
+                    required: ['noteId']
+                }
+            },
+            {
+                name: 'run_code_cell',
+                description: 'Execute JavaScript/Python/C/Java code securely in AntigravityEngine and return the output.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        language: { type: 'string', description: 'Programming language: javascript, python, c, cpp, java' },
+                        code: { type: 'string', description: 'Source code to run' },
+                        stdin: { type: 'string', description: 'Optional standard input' }
+                    },
+                    required: ['language', 'code']
+                }
+            },
+            {
+                name: 'get_system_stats',
+                description: 'Get platform health and note statistics.',
+                inputSchema: { type: 'object', properties: {} }
+            }
+        ];
+
+        // Only expose Admin Tools if the connected user is an Admin
+        if (isAdmin) {
+            tools.push(
                 {
                     name: 'list_users',
-                    description: 'List registered users with their username, email, and role.',
+                    description: 'List registered users with their username, email, and role (Admin only).',
                     inputSchema: {
                         type: 'object',
                         properties: {
@@ -193,9 +189,35 @@ function createZohoNotesMcpServer(config = {}) {
                             query: { type: 'string', description: 'Optional search query for username or email' }
                         }
                     }
+                },
+                {
+                    name: 'reassign_note',
+                    description: 'Reassign ownership of a note to another user (Admin only).',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            noteId: { type: 'string', description: 'ID of the note to reassign' },
+                            email: { type: 'string', description: 'Target user email' }
+                        },
+                        required: ['noteId', 'email']
+                    }
+                },
+                {
+                    name: 'set_user_role',
+                    description: 'Grant or revoke admin privileges for a user (Fayas KP / Admin only).',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            email: { type: 'string', description: 'Target user email' },
+                            role: { type: 'string', enum: ['admin', 'user'], description: 'Role to assign: "admin" or "user"' }
+                        },
+                        required: ['email', 'role']
+                    }
                 }
-            ]
-        };
+            );
+        }
+
+        return { tools };
     });
 
     // ==========================================
@@ -219,9 +241,18 @@ function createZohoNotesMcpServer(config = {}) {
                         query.isStarred = args.isStarred;
                     }
 
+                    // Scoping: Non-admin users can ONLY see their own notes or shared notes
+                    if (!isAdmin && currentUser) {
+                        query.$or = [
+                            { owner: currentUser._id },
+                            { 'collaborators.user': currentUser._id },
+                            { 'collaborators.email': currentUser.email?.toLowerCase() }
+                        ];
+                    }
+
                     const limit = Math.min(Math.max(1, args.limit || 20), 100);
                     const notes = await Note.find(query)
-                        .select('id title folder isStarred isTrashed isLive updatedAt shareCode authorName')
+                        .select('id title folder isStarred isTrashed isLive updatedAt shareCode authorName owner')
                         .sort({ updatedAt: -1 })
                         .limit(limit)
                         .lean();
@@ -233,6 +264,7 @@ function createZohoNotesMcpServer(config = {}) {
                                 text: JSON.stringify(
                                     {
                                         count: notes.length,
+                                        scopedToUser: !isAdmin && currentUser ? currentUser.email : 'all (admin)',
                                         notes: notes.map(n => ({
                                             id: n.id,
                                             title: n.title,
@@ -262,6 +294,22 @@ function createZohoNotesMcpServer(config = {}) {
                             content: [{ type: 'text', text: `Note not found for ID/shareCode: "${args.noteId}"` }],
                             isError: true
                         };
+                    }
+
+                    // Ownership Check: Non-admins cannot access other users' notes
+                    if (!isAdmin && currentUser) {
+                        const isOwner = note.owner && note.owner._id.toString() === currentUser._id.toString();
+                        const isCollaborator = Array.isArray(note.collaborators) && note.collaborators.some(c =>
+                            (c.user && c.user.toString() === currentUser._id.toString()) ||
+                            (c.email && c.email.toLowerCase() === currentUser.email?.toLowerCase())
+                        );
+
+                        if (!isOwner && !isCollaborator) {
+                            return {
+                                content: [{ type: 'text', text: 'Forbidden: You do not have permission to access this note.' }],
+                                isError: true
+                            };
+                        }
                     }
 
                     // Format cells cleanly
@@ -305,15 +353,24 @@ function createZohoNotesMcpServer(config = {}) {
                     const regex = new RegExp(args.query, 'i');
                     const limit = Math.min(Math.max(1, args.limit || 10), 50);
 
-                    const notes = await Note.find({
+                    const matchConditions = [
+                        { title: regex },
+                        { 'content.markdown': regex },
+                        { 'content.text': regex },
+                        { 'content.cells.content': regex }
+                    ];
+
+                    const query = {
                         isTrashed: false,
-                        $or: [
-                            { title: regex },
-                            { 'content.markdown': regex },
-                            { 'content.text': regex },
-                            { 'content.cells.content': regex }
-                        ]
-                    })
+                        $or: matchConditions
+                    };
+
+                    // Scope search to current user if not admin
+                    if (!isAdmin && currentUser) {
+                        query.owner = currentUser._id;
+                    }
+
+                    const notes = await Note.find(query)
                         .select('id title folder isStarred isLive updatedAt')
                         .sort({ updatedAt: -1 })
                         .limit(limit)
@@ -338,27 +395,28 @@ function createZohoNotesMcpServer(config = {}) {
                 }
 
                 case 'create_note': {
-                    // Find owner: prioritize args.ownerEmail, then Fayas KP, then defaultUser
-                    let targetUser = null;
-                    if (args.ownerEmail) {
-                        targetUser = await User.findOne({ email: args.ownerEmail });
+                    let ownerId;
+                    let authorName;
+
+                    if (isAdmin) {
+                        // Admins can create notes for other users if ownerEmail is specified
+                        let targetUser = null;
+                        if (args.ownerEmail) {
+                            targetUser = await User.findOne({ email: args.ownerEmail });
+                        }
+                        if (!targetUser && currentUser) {
+                            targetUser = currentUser;
+                        }
+                        if (!targetUser) {
+                            targetUser = await User.findOne({ email: 'fayaskpktr@gmail.com' });
+                        }
+                        ownerId = targetUser ? targetUser._id : new mongoose.Types.ObjectId();
+                        authorName = targetUser ? (targetUser.username || targetUser.email) : 'fayas kp';
+                    } else {
+                        // Non-admins strictly own the notes they create
+                        ownerId = currentUser._id;
+                        authorName = currentUser.username || currentUser.email;
                     }
-                    if (!targetUser) {
-                        targetUser = await User.findOne({
-                            $or: [
-                                { email: 'fayaskpktr@gmail.com' },
-                                { username: 'fayas kp' },
-                                { username: 'fayas' },
-                                { email: /fayas/i },
-                                { username: /fayas/i }
-                            ]
-                        });
-                    }
-                    if (!targetUser) {
-                        targetUser = await User.findOne().sort({ createdAt: 1 });
-                    }
-                    const ownerId = targetUser ? targetUser._id : new mongoose.Types.ObjectId();
-                    const authorName = targetUser ? (targetUser.username || targetUser.name || 'fayas kp') : 'fayas kp';
 
                     const isLive = Boolean(args.isLive);
                     const newId = (isLive ? 'live-' : 'ntbk-') + Date.now() + (isLive ? '-' + crypto.randomBytes(2).toString('hex') : '');
@@ -421,7 +479,8 @@ function createZohoNotesMcpServer(config = {}) {
                                         message: `Note "${note.title}" created successfully`,
                                         id: note.id,
                                         folder: note.folder,
-                                        cellCount: cells.length
+                                        cellCount: cells.length,
+                                        shareCode: note.shareCode || null
                                     },
                                     null,
                                     2
@@ -438,6 +497,16 @@ function createZohoNotesMcpServer(config = {}) {
                             content: [{ type: 'text', text: `Note not found for ID: ${args.noteId}` }],
                             isError: true
                         };
+                    }
+
+                    // Check ownership
+                    if (!isAdmin && currentUser) {
+                        if (!note.owner || note.owner.toString() !== currentUser._id.toString()) {
+                            return {
+                                content: [{ type: 'text', text: 'Forbidden: You do not have permission to edit this note.' }],
+                                isError: true
+                            };
+                        }
                     }
 
                     if (args.title !== undefined) note.title = args.title;
@@ -463,7 +532,6 @@ function createZohoNotesMcpServer(config = {}) {
 
                     note._version = (note._version || 1) + 1;
                     note.updatedAt = new Date();
-
                     await note.save();
 
                     return {
@@ -492,6 +560,16 @@ function createZohoNotesMcpServer(config = {}) {
                             content: [{ type: 'text', text: `Note not found for ID: ${args.noteId}` }],
                             isError: true
                         };
+                    }
+
+                    // Check ownership
+                    if (!isAdmin && currentUser) {
+                        if (!note.owner || note.owner.toString() !== currentUser._id.toString()) {
+                            return {
+                                content: [{ type: 'text', text: 'Forbidden: You do not have permission to delete this note.' }],
+                                isError: true
+                            };
+                        }
                     }
 
                     if (args.permanent) {
@@ -534,45 +612,71 @@ function createZohoNotesMcpServer(config = {}) {
                 }
 
                 case 'get_system_stats': {
-                    const totalUsers = await User.countDocuments();
-                    const fayasUsers = await User.find({
-                        $or: [
-                            { email: /fayas/i },
-                            { username: /fayas/i }
-                        ]
-                    }, '_id username email').lean();
-                    const totalNotes = await Note.countDocuments({ isTrashed: false });
-                    const trashedNotes = await Note.countDocuments({ isTrashed: true });
-                    const starredNotes = await Note.countDocuments({ isStarred: true, isTrashed: false });
-                    const folders = await Note.distinct('folder', { isTrashed: false });
+                    if (isAdmin) {
+                        const totalUsers = await User.countDocuments();
+                        const totalNotes = await Note.countDocuments({ isTrashed: false });
+                        const starredNotes = await Note.countDocuments({ isStarred: true, isTrashed: false });
+                        const trashedNotes = await Note.countDocuments({ isTrashed: true });
+                        const folders = await Note.distinct('folder', { isTrashed: false });
 
-                    return {
-                        content: [
-                            {
-                                type: 'text',
-                                text: JSON.stringify(
-                                    {
-                                        server: 'Zoho Notes MCP',
-                                        version: '1.0.0',
-                                        supportedLanguages: ['javascript', 'typescript', 'python', 'c', 'cpp', 'java'],
-                                        database: {
-                                            totalUsers: totalUsers,
-                                            fayasUsers: fayasUsers,
-                                            activeNotes: totalNotes,
-                                            starredNotes: starredNotes,
-                                            trashedNotes: trashedNotes,
-                                            folders: folders
-                                        }
-                                    },
-                                    null,
-                                    2
-                                )
-                            }
-                        ]
-                    };
+                        return {
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: JSON.stringify(
+                                        {
+                                            server: 'Zoho Notes MCP (Multi-Tenant Admin)',
+                                            version: '2.0.0',
+                                            database: {
+                                                totalUsers,
+                                                activeNotes: totalNotes,
+                                                starredNotes,
+                                                trashedNotes,
+                                                folders
+                                            }
+                                        },
+                                        null,
+                                        2
+                                    )
+                                }
+                            ]
+                        };
+                    } else {
+                        // User-scoped stats
+                        const userNotes = await Note.countDocuments({ owner: currentUser._id, isTrashed: false });
+                        const starredNotes = await Note.countDocuments({ owner: currentUser._id, isStarred: true, isTrashed: false });
+                        const userFolders = await Note.distinct('folder', { owner: currentUser._id, isTrashed: false });
+
+                        return {
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: JSON.stringify(
+                                        {
+                                            server: 'Zoho Notes MCP (User Sandbox)',
+                                            user: currentUser.username,
+                                            email: currentUser.email,
+                                            myNotesCount: userNotes,
+                                            myStarredCount: starredNotes,
+                                            myFolders: userFolders
+                                        },
+                                        null,
+                                        2
+                                    )
+                                }
+                            ]
+                        };
+                    }
                 }
 
                 case 'reassign_note': {
+                    if (!isAdmin) {
+                        return {
+                            content: [{ type: 'text', text: 'Forbidden: Admin privileges required to reassign notes.' }],
+                            isError: true
+                        };
+                    }
+
                     const note = await Note.findOne({
                         $or: [{ id: args.noteId }, { shareCode: args.noteId }]
                     });
@@ -583,30 +687,16 @@ function createZohoNotesMcpServer(config = {}) {
                         };
                     }
 
-                    let targetUser = null;
-                    if (args.email) {
-                        targetUser = await User.findOne({ email: args.email });
-                    }
-                    if (!targetUser) {
-                        targetUser = await User.findOne({
-                            $or: [
-                                { email: 'fayaskpktr@gmail.com' },
-                                { username: 'fayas kp' },
-                                { username: 'fayas' },
-                                { email: /fayas/i },
-                                { username: /fayas/i }
-                            ]
-                        });
-                    }
+                    const targetUser = await User.findOne({ email: args.email });
                     if (!targetUser) {
                         return {
-                            content: [{ type: 'text', text: 'Target user (Fayas KP) not found in database' }],
+                            content: [{ type: 'text', text: `Target user with email "${args.email}" not found.` }],
                             isError: true
                         };
                     }
 
                     note.owner = targetUser._id;
-                    note.authorName = targetUser.username || targetUser.name || 'fayas kp';
+                    note.authorName = targetUser.username || targetUser.email;
                     if (note.content) {
                         note.content.owner = targetUser._id;
                     }
@@ -622,7 +712,7 @@ function createZohoNotesMcpServer(config = {}) {
                                         success: true,
                                         message: `Note "${note.title}" reassigned to ${targetUser.username} (${targetUser.email})`,
                                         noteId: note.id,
-                                        owner: {
+                                        newOwner: {
                                             id: targetUser._id,
                                             username: targetUser.username,
                                             email: targetUser.email
@@ -637,6 +727,13 @@ function createZohoNotesMcpServer(config = {}) {
                 }
 
                 case 'list_users': {
+                    if (!isAdmin) {
+                        return {
+                            content: [{ type: 'text', text: 'Forbidden: Admin privileges required to list all users.' }],
+                            isError: true
+                        };
+                    }
+
                     const limit = Math.min(Math.max(1, args.limit || 50), 100);
                     const filter = {};
                     if (args.query) {
@@ -673,6 +770,55 @@ function createZohoNotesMcpServer(config = {}) {
                     };
                 }
 
+                case 'set_user_role': {
+                    if (!isAdmin) {
+                        return {
+                            content: [{ type: 'text', text: 'Forbidden: Admin privileges required to modify roles.' }],
+                            isError: true
+                        };
+                    }
+
+                    const targetUser = await User.findOne({ email: args.email.toLowerCase().trim() });
+                    if (!targetUser) {
+                        return {
+                            content: [{ type: 'text', text: `User not found with email: ${args.email}` }],
+                            isError: true
+                        };
+                    }
+
+                    // Safety: Do not demote Superadmin Fayas KP
+                    if (targetUser.email === 'fayaskpktr@gmail.com' && args.role !== 'admin') {
+                        return {
+                            content: [{ type: 'text', text: 'Cannot demote the primary Superadmin account (fayaskpktr@gmail.com).' }],
+                            isError: true
+                        };
+                    }
+
+                    targetUser.role = args.role;
+                    await targetUser.save();
+
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: JSON.stringify(
+                                    {
+                                        success: true,
+                                        message: `Role for ${targetUser.username} (${targetUser.email}) updated to "${args.role}".`,
+                                        user: {
+                                            username: targetUser.username,
+                                            email: targetUser.email,
+                                            role: targetUser.role
+                                        }
+                                    },
+                                    null,
+                                    2
+                                )
+                            }
+                        ]
+                    };
+                }
+
                 default:
                     return {
                         content: [{ type: 'text', text: `Unknown tool requested: ${name}` }],
@@ -697,7 +843,7 @@ function createZohoNotesMcpServer(config = {}) {
                     uri: 'zohonotes://notes/recent',
                     name: 'Recent Zoho Notes',
                     mimeType: 'application/json',
-                    description: 'List of the 20 most recently updated active notes'
+                    description: isAdmin ? '20 most recently updated notes platform-wide' : 'Your 20 most recent personal notes'
                 }
             ]
         };
@@ -708,7 +854,12 @@ function createZohoNotesMcpServer(config = {}) {
         const { uri } = request.params;
 
         if (uri === 'zohonotes://notes/recent') {
-            const notes = await Note.find({ isTrashed: false })
+            const query = { isTrashed: false };
+            if (!isAdmin && currentUser) {
+                query.owner = currentUser._id;
+            }
+
+            const notes = await Note.find(query)
                 .select('id title folder isStarred updatedAt')
                 .sort({ updatedAt: -1 })
                 .limit(20)
@@ -725,12 +876,15 @@ function createZohoNotesMcpServer(config = {}) {
             };
         }
 
-        // Support dynamic URI: zohonotes://note/{id}
         if (uri.startsWith('zohonotes://note/')) {
             const noteId = uri.replace('zohonotes://note/', '');
             const note = await Note.findOne({ id: noteId }).lean();
             if (!note) {
                 throw new Error(`Note not found: ${noteId}`);
+            }
+
+            if (!isAdmin && currentUser && note.owner?.toString() !== currentUser._id.toString()) {
+                throw new Error(`Forbidden: You do not have permission to view note ${noteId}`);
             }
 
             return {

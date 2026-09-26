@@ -95,6 +95,29 @@ exports.toggleBlock = async (req, res) => {
     }
 };
 
+exports.setUserRole = async (req, res) => {
+    const { id } = req.params;
+    const { role } = req.body;
+    try {
+        if (!['admin', 'user'].includes(role)) {
+            return res.status(400).json({ error: 'Invalid role. Must be "admin" or "user".' });
+        }
+        const user = await User.findById(id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Safety: Do not demote Superadmin Fayas KP
+        if (user.email === 'fayaskpktr@gmail.com' && role !== 'admin') {
+            return res.status(400).json({ error: 'Cannot remove admin role from primary superadmin (fayaskpktr@gmail.com)' });
+        }
+
+        user.role = role;
+        await user.save();
+        res.json({ success: true, user: { id: user._id, email: user.email, role: user.role } });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update user role' });
+    }
+};
+
 exports.getUserNotes = async (req, res) => {
     const { id } = req.params;
     try {

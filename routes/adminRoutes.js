@@ -18,6 +18,7 @@ router.post('/users', adminController.createUser);
 router.put('/users/:id', adminController.updateUser);
 router.delete('/users/:id', adminController.deleteUser);
 router.post('/users/:id/toggle-block', adminController.toggleBlock);
+router.post('/users/:id/role', adminController.setUserRole);
 router.get('/users/:id/notes', adminController.getUserNotes);
 router.put('/notes/:noteId', adminController.updateUserNote);
 router.get('/system-logs', adminController.getSystemLogs);
