@@ -54,14 +54,51 @@ async function mcpAuth(req, res, next) {
             });
         }
 
-        if (user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com') {
+        const isAdmin = (user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com') || user.role === 'admin';
+        if (isAdmin) {
             user.role = 'admin'; // Always guarantee superadmin
         }
 
-        // Update lastUsed timestamp asynchronously
-        User.updateOne({ _id: user._id }, { apiKeyLastUsedAt: new Date() }).catch(err => {
-            console.warn('[MCP Auth] Failed to update apiKeyLastUsedAt:', err.message);
-        });
+        // Check if API key has expired
+        if (user.apiKeyExpiresAt && new Date() > new Date(user.apiKeyExpiresAt)) {
+            return res.status(401).json({
+                error: 'Unauthorized: MCP API Key has expired. Please regenerate your API key in User Settings.'
+            });
+        }
+
+        // Check daily rate limiting (50 req/day for regular users; unlimited for superadmin)
+        if (!isAdmin) {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            let currentCount = 0;
+            if (user.mcpUsage && user.mcpUsage.lastResetDate === todayStr) {
+                currentCount = user.mcpUsage.dailyCount || 0;
+            }
+
+            if (currentCount >= 50) {
+                return res.status(429).json({
+                    error: 'Daily MCP request limit reached (50/50 requests). Quota resets at 00:00 UTC tomorrow. Contact admin for unlimited access.'
+                });
+            }
+
+            // Increment daily count
+            User.updateOne(
+                { _id: user._id },
+                {
+                    $set: {
+                        'mcpUsage.dailyCount': currentCount + 1,
+                        'mcpUsage.lastResetDate': todayStr,
+                        apiKeyLastUsedAt: new Date()
+                    }
+                }
+            ).catch(err => {
+                console.warn('[MCP Auth] Failed to update usage:', err.message);
+            });
+        } else {
+            // Update lastUsed timestamp asynchronously for admin
+            User.updateOne({ _id: user._id }, { apiKeyLastUsedAt: new Date() }).catch(err => {
+                console.warn('[MCP Auth] Failed to update apiKeyLastUsedAt:', err.message);
+            });
+        }
 
         req.user = user;
         next();
@@ -221,6 +258,44 @@ router.post('/messages', async (req, res) => {
     }
 
     try {
+        const user = sessionEntry.user;
+        const isAdmin = user && ((user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com') || user.role === 'admin');
+
+        // Check if regular user has exceeded daily request quota
+        if (!isAdmin && user && user._id) {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const freshUser = await User.findById(user._id).select('mcpUsage apiKeyExpiresAt').lean();
+            
+            // Check expiry
+            if (freshUser && freshUser.apiKeyExpiresAt && new Date() > new Date(freshUser.apiKeyExpiresAt)) {
+                return res.status(401).json({
+                    error: 'Unauthorized: MCP API Key has expired. Please regenerate your API key in User Settings.'
+                });
+            }
+
+            let currentCount = 0;
+            if (freshUser && freshUser.mcpUsage && freshUser.mcpUsage.lastResetDate === todayStr) {
+                currentCount = freshUser.mcpUsage.dailyCount || 0;
+            }
+
+            if (currentCount >= 50) {
+                return res.status(429).json({
+                    error: 'Daily MCP request limit reached (50/50 requests). Quota resets at 00:00 UTC tomorrow.'
+                });
+            }
+
+            User.updateOne(
+                { _id: user._id },
+                {
+                    $set: {
+                        'mcpUsage.dailyCount': currentCount + 1,
+                        'mcpUsage.lastResetDate': todayStr,
+                        apiKeyLastUsedAt: new Date()
+                    }
+                }
+            ).catch(err => console.warn('[MCP POST] Failed to update usage:', err.message));
+        }
+
         // Update last activity in DB asynchronously
         if (sessionId) {
             McpSession.updateOne({ sessionId }, { lastActiveAt: new Date() }).catch(() => {});
@@ -235,4 +310,31 @@ router.post('/messages', async (req, res) => {
     }
 });
 
+/**
+ * Terminate active SSE transports and invalidate sessions for a given user
+ * Used when user regenerates or revokes their API key
+ */
+function closeUserSessions(userId) {
+    let closedCount = 0;
+    const targetIdStr = String(userId);
+    for (const [sessionId, entry] of activeTransports.entries()) {
+        if (entry.user && String(entry.user._id) === targetIdStr) {
+            try {
+                if (entry.transport && typeof entry.transport.close === 'function') {
+                    entry.transport.close();
+                }
+            } catch (e) {
+                console.warn('[MCP] Error closing transport for session', sessionId, e.message);
+            }
+            activeTransports.delete(sessionId);
+            McpSession.updateOne({ sessionId }, { status: 'closed' }).catch(() => {});
+            closedCount++;
+        }
+    }
+    return closedCount;
+}
+
 module.exports = router;
+module.exports.closeUserSessions = closeUserSessions;
+module.exports.activeTransports = activeTransports;
+

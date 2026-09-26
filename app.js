@@ -1164,30 +1164,57 @@ app.get('/api/user/mcp-credentials', isAuthenticated, async (req, res) => {
         const userId = req.session.userId || (req.user ? req.user._id : null);
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-        let user = await User.findById(userId);
+        const user = await User.findById(userId);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
+        const isAdmin = user.role === 'admin' || (user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com');
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const usedToday = (user.mcpUsage && user.mcpUsage.lastResetDate === todayStr) ? (user.mcpUsage.dailyCount || 0) : 0;
+        const dailyLimit = isAdmin ? null : 50;
+        const remainingToday = isAdmin ? null : Math.max(0, 50 - usedToday);
+
+        // DO NOT auto-generate key. Key generation must be an explicit user action.
         if (!user.apiKey) {
-            const crypto = require('crypto');
-            const prefix = user.role === 'admin' ? 'zn_admin' : 'zn_live';
-            user.apiKey = `${prefix}_${crypto.randomBytes(20).toString('hex')}`;
-            user.apiKeyCreatedAt = new Date();
-            await user.save();
+            return res.json({
+                success: true,
+                hasKey: false,
+                role: user.role,
+                isAdmin,
+                dailyLimit,
+                usedToday,
+                remainingToday
+            });
         }
 
+        const isExpired = user.apiKeyExpiresAt ? (new Date() > new Date(user.apiKeyExpiresAt)) : false;
         const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
         const sseUrl = `${baseUrl}/mcp/sse?apiKey=${user.apiKey}`;
 
         res.json({
             success: true,
+            hasKey: true,
             apiKey: user.apiKey,
             role: user.role,
+            isAdmin,
             createdAt: user.apiKeyCreatedAt,
+            expiresAt: user.apiKeyExpiresAt,
+            isExpired,
             lastUsedAt: user.apiKeyLastUsedAt,
+            dailyLimit,
+            usedToday,
+            remainingToday,
             sseUrl: sseUrl,
             configs: {
+                antigravity: {
+                    mcpServers: {
+                        "zoho-notes": {
+                            serverUrl: sseUrl
+                        }
+                    }
+                },
                 cursor: {
-                    type: 'SSE',
+                    name: "zoho-notes",
+                    type: "SSE",
                     url: sseUrl
                 },
                 windsurf: {
@@ -1220,10 +1247,31 @@ app.post('/api/user/mcp-credentials/generate', isAuthenticated, async (req, res)
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
+        const isAdmin = user.role === 'admin' || (user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com');
+        const { expiryDays } = req.body;
+
+        // Calculate expiration date
+        let expiresAt = null;
+        if (expiryDays !== 'never' && expiryDays !== 0 && expiryDays !== '0' && expiryDays !== null && expiryDays !== undefined) {
+            const days = parseInt(expiryDays, 10);
+            if (!isNaN(days) && days > 0) {
+                expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+            } else {
+                // Default 30 days
+                expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+            }
+        }
+
+        // Close any currently active sessions for this user so old key is invalidated immediately
+        if (mcpRoutes.closeUserSessions) {
+            mcpRoutes.closeUserSessions(user._id);
+        }
+
         const crypto = require('crypto');
-        const prefix = user.role === 'admin' ? 'zn_admin' : 'zn_live';
+        const prefix = isAdmin ? 'zn_admin' : 'zn_live';
         user.apiKey = `${prefix}_${crypto.randomBytes(20).toString('hex')}`;
         user.apiKeyCreatedAt = new Date();
+        user.apiKeyExpiresAt = expiresAt;
         await user.save();
 
         const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
@@ -1233,7 +1281,35 @@ app.post('/api/user/mcp-credentials/generate', isAuthenticated, async (req, res)
             success: true,
             message: 'New MCP API Key generated successfully',
             apiKey: user.apiKey,
+            createdAt: user.apiKeyCreatedAt,
+            expiresAt: user.apiKeyExpiresAt,
             sseUrl: sseUrl
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/user/mcp-credentials/revoke', isAuthenticated, async (req, res) => {
+    try {
+        const userId = req.session.userId || (req.user ? req.user._id : null);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Terminate active sessions
+        if (mcpRoutes.closeUserSessions) {
+            mcpRoutes.closeUserSessions(user._id);
+        }
+
+        user.apiKey = undefined;
+        user.apiKeyExpiresAt = undefined;
+        await user.save();
+
+        res.json({
+            success: true,
+            message: 'MCP API Key revoked successfully'
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

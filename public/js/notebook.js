@@ -605,7 +605,12 @@ class NotebookApp {
         document.getElementById('btn-confirm-folder').addEventListener('click', () => this.handleFolderCreate());
         document.getElementById('btn-confirm-file').addEventListener('click', () => this.handleFileCreate());
 
-        document.getElementById('nav-settings').addEventListener('click', () => this.openModal('modal-settings'));
+        document.getElementById('nav-settings').addEventListener('click', () => {
+            this.openModal('modal-settings');
+            this.loadMcpSettings();
+        });
+        this.bindMcpSettingsEvents();
+
         document.getElementById('btn-open-live-modal')?.addEventListener('click', () => {
             this.openModal('modal-live-broadcast');
             this.updateBroadcastModalUI();
@@ -3339,6 +3344,314 @@ class NotebookApp {
             console.error('Feedback error:', err);
             btn.textContent = 'Failed to Send';
             btn.disabled = false;
+        }
+    }
+
+    bindMcpSettingsEvents() {
+        if (this._mcpEventsBound) return;
+        this._mcpEventsBound = true;
+
+        // Generate key
+        document.getElementById('btn-generate-mcp-key')?.addEventListener('click', () => {
+            const expiry = document.getElementById('mcp-create-expiry')?.value || '30';
+            this.generateMcpKey(expiry);
+        });
+
+        // Reveal / Hide API key
+        document.getElementById('btn-toggle-mcp-key')?.addEventListener('click', () => {
+            const input = document.getElementById('mcp-api-key-display');
+            const icon = document.getElementById('icon-toggle-mcp-key');
+            if (input) {
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    icon?.setAttribute('data-lucide', 'eye-off');
+                } else {
+                    input.type = 'password';
+                    icon?.setAttribute('data-lucide', 'eye');
+                }
+                if (window.lucide) window.lucide.createIcons();
+            }
+        });
+
+        // Copy API key
+        document.getElementById('btn-copy-mcp-key')?.addEventListener('click', () => {
+            const key = this.currentMcpApiKey;
+            if (key) {
+                navigator.clipboard.writeText(key).then(() => {
+                    this.showToast('MCP API Key copied to clipboard!', 'success');
+                }).catch(() => {
+                    this.showToast('Failed to copy API key', 'error');
+                });
+            }
+        });
+
+        // Show/hide rotate drawer
+        document.getElementById('btn-show-rotate-mcp')?.addEventListener('click', () => {
+            const drawer = document.getElementById('mcp-rotate-drawer');
+            drawer?.classList.toggle('hidden');
+        });
+
+        document.getElementById('btn-cancel-rotate-mcp')?.addEventListener('click', () => {
+            document.getElementById('mcp-rotate-drawer')?.classList.add('hidden');
+        });
+
+        // Confirm rotate key
+        document.getElementById('btn-confirm-rotate-mcp')?.addEventListener('click', () => {
+            const expiry = document.getElementById('mcp-rotate-expiry')?.value || '30';
+            this.generateMcpKey(expiry);
+        });
+
+        // Revoke key
+        document.getElementById('btn-revoke-mcp-key')?.addEventListener('click', () => {
+            this.confirmAction(
+                'Revoke MCP API Key?',
+                'Your connected AI agents (Antigravity, Cursor, etc.) will immediately lose access until you generate a new key.',
+                () => this.revokeMcpKey()
+            );
+        });
+
+        // Tab switching for AI setup guides
+        document.querySelectorAll('.mcp-guide-tab').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tabName = e.currentTarget.getAttribute('data-tab');
+                document.querySelectorAll('.mcp-guide-tab').forEach(b => {
+                    b.style.borderBottomColor = 'transparent';
+                    b.style.color = 'var(--text-dim)';
+                });
+                e.currentTarget.style.borderBottomColor = 'var(--accent)';
+                e.currentTarget.style.color = 'var(--accent)';
+
+                document.querySelectorAll('.mcp-tab-pane').forEach(pane => pane.classList.add('hidden'));
+                document.getElementById(`mcp-tab-${tabName}`)?.classList.remove('hidden');
+            });
+        });
+
+        // Copy Snippet buttons
+        document.querySelectorAll('.btn-copy-snippet').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const targetId = e.currentTarget.getAttribute('data-target');
+                const codeEl = document.getElementById(targetId);
+                if (codeEl && codeEl.innerText) {
+                    navigator.clipboard.writeText(codeEl.innerText).then(() => {
+                        this.showToast('Configuration snippet copied!', 'success');
+                    }).catch(() => {
+                        this.showToast('Failed to copy snippet', 'error');
+                    });
+                }
+            });
+        });
+
+        // Copy Cursor URL button
+        document.getElementById('btn-copy-cursor-url')?.addEventListener('click', () => {
+            const urlEl = document.getElementById('mcp-cursor-url');
+            if (urlEl && urlEl.innerText) {
+                navigator.clipboard.writeText(urlEl.innerText).then(() => {
+                    this.showToast('SSE URL copied to clipboard!', 'success');
+                }).catch(() => {
+                    this.showToast('Failed to copy URL', 'error');
+                });
+            }
+        });
+    }
+
+    async loadMcpSettings() {
+        try {
+            const quotaBadge = document.getElementById('mcp-quota-badge');
+            if (quotaBadge) quotaBadge.innerText = 'Loading...';
+
+            const res = await this.safeFetch('/api/user/mcp-credentials');
+            if (!res.ok) throw new Error('Failed to load MCP credentials');
+            const data = await res.json();
+            this.renderMcpSettings(data);
+        } catch (err) {
+            console.error('[MCP Settings] Error:', err);
+            const quotaBadge = document.getElementById('mcp-quota-badge');
+            if (quotaBadge) quotaBadge.innerText = 'Error loading';
+        }
+    }
+
+    renderMcpSettings(data) {
+        const quotaBadge = document.getElementById('mcp-quota-badge');
+        const usageText = document.getElementById('mcp-usage-text');
+        const usageBar = document.getElementById('mcp-usage-bar');
+        const usageSubtext = document.getElementById('mcp-usage-subtext');
+        const roleTag = document.getElementById('mcp-role-tag');
+        const noKeySection = document.getElementById('mcp-no-key-section');
+        const keyActiveSection = document.getElementById('mcp-key-active-section');
+        const rotateDrawer = document.getElementById('mcp-rotate-drawer');
+
+        if (rotateDrawer) rotateDrawer.classList.add('hidden');
+
+        const isAdmin = !!data.isAdmin;
+        if (roleTag) {
+            roleTag.innerText = isAdmin ? 'Super Admin' : 'Student Access';
+            roleTag.style.color = isAdmin ? '#a5b4fc' : '#30ff6a';
+        }
+
+        // Rate Limit display
+        if (isAdmin) {
+            if (quotaBadge) {
+                quotaBadge.innerText = '👑 Unlimited Access';
+                quotaBadge.style.background = 'rgba(168, 85, 247, 0.2)';
+                quotaBadge.style.color = '#c084fc';
+            }
+            if (usageText) usageText.innerText = 'Unlimited Requests';
+            if (usageBar) {
+                usageBar.style.width = '100%';
+                usageBar.style.background = 'linear-gradient(90deg, #a855f7, #6366f1)';
+            }
+            if (usageSubtext) usageSubtext.innerText = 'Admin privileges: No daily rate limit applied.';
+        } else {
+            const used = data.usedToday || 0;
+            const limit = data.dailyLimit || 50;
+            const pct = Math.min(100, Math.round((used / limit) * 100));
+
+            if (quotaBadge) {
+                quotaBadge.innerText = `${data.remainingToday !== undefined ? data.remainingToday : (limit - used)} left today`;
+                quotaBadge.style.background = 'rgba(109, 93, 252, 0.15)';
+                quotaBadge.style.color = 'var(--accent)';
+            }
+            if (usageText) usageText.innerText = `${used} / ${limit} requests used today`;
+            if (usageBar) {
+                usageBar.style.width = `${pct}%`;
+                if (pct >= 90) {
+                    usageBar.style.background = '#ff5c5c';
+                } else if (pct >= 70) {
+                    usageBar.style.background = '#ffbe3d';
+                } else {
+                    usageBar.style.background = 'linear-gradient(90deg, #6d5dfc, #30ff6a)';
+                }
+            }
+            if (usageSubtext) usageSubtext.innerText = `Standard limit: ${limit} req/day (Resets at 00:00 UTC)`;
+        }
+
+        if (!data.hasKey || !data.apiKey) {
+            this.currentMcpApiKey = null;
+            if (noKeySection) noKeySection.classList.remove('hidden');
+            if (keyActiveSection) keyActiveSection.classList.add('hidden');
+        } else {
+            this.currentMcpApiKey = data.apiKey;
+            if (noKeySection) noKeySection.classList.add('hidden');
+            if (keyActiveSection) keyActiveSection.classList.remove('hidden');
+
+            // Populate API Key display
+            const keyDisplay = document.getElementById('mcp-api-key-display');
+            if (keyDisplay) {
+                keyDisplay.value = data.apiKey;
+                keyDisplay.type = 'password';
+            }
+
+            // Expiry text & badge
+            const expiryBadge = document.getElementById('mcp-expiry-badge');
+            const expiryText = document.getElementById('mcp-expiry-text');
+
+            if (data.isExpired) {
+                if (expiryBadge) {
+                    expiryBadge.innerText = 'Expired';
+                    expiryBadge.style.background = 'rgba(255, 92, 92, 0.2)';
+                    expiryBadge.style.color = '#ff5c5c';
+                }
+                if (expiryText) {
+                    expiryText.innerText = 'Expired. Please regenerate your key.';
+                    expiryText.style.color = '#ff5c5c';
+                }
+            } else if (data.expiresAt) {
+                const expDate = new Date(data.expiresAt);
+                const daysLeft = Math.max(0, Math.ceil((expDate - new Date()) / (1000 * 60 * 60 * 24)));
+                if (expiryBadge) {
+                    expiryBadge.innerText = 'Active';
+                    expiryBadge.style.background = 'rgba(48, 255, 106, 0.15)';
+                    expiryBadge.style.color = '#30ff6a';
+                }
+                if (expiryText) {
+                    expiryText.innerText = `Expires on ${expDate.toLocaleDateString()} (${daysLeft} day${daysLeft === 1 ? '' : 's'} left)`;
+                    expiryText.style.color = 'var(--text-dim)';
+                }
+            } else {
+                if (expiryBadge) {
+                    expiryBadge.innerText = 'Active';
+                    expiryBadge.style.background = 'rgba(48, 255, 106, 0.15)';
+                    expiryBadge.style.color = '#30ff6a';
+                }
+                if (expiryText) {
+                    expiryText.innerText = 'Never expires';
+                    expiryText.style.color = 'var(--text-dim)';
+                }
+            }
+
+            // Setup AI Client code snippets
+            if (data.configs) {
+                const antigravityCode = document.getElementById('code-antigravity');
+                if (antigravityCode && data.configs.antigravity) {
+                    antigravityCode.innerText = JSON.stringify(data.configs.antigravity, null, 2);
+                }
+
+                const cursorUrl = document.getElementById('mcp-cursor-url');
+                if (cursorUrl) {
+                    cursorUrl.innerText = data.sseUrl || '';
+                }
+
+                const windsurfCode = document.getElementById('code-windsurf');
+                if (windsurfCode && data.configs.windsurf) {
+                    windsurfCode.innerText = JSON.stringify(data.configs.windsurf, null, 2);
+                }
+
+                const claudeCode = document.getElementById('code-claude');
+                if (claudeCode && data.configs.claudeDesktop) {
+                    claudeCode.innerText = JSON.stringify(data.configs.claudeDesktop, null, 2);
+                }
+            }
+        }
+
+        if (window.lucide) window.lucide.createIcons();
+    }
+
+    async generateMcpKey(expiryDays) {
+        try {
+            const btn = document.getElementById('btn-generate-mcp-key') || document.getElementById('btn-confirm-rotate-mcp');
+            if (btn) btn.disabled = true;
+
+            const res = await this.safeFetch('/api/user/mcp-credentials/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expiryDays })
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || 'Failed to generate MCP key');
+            }
+
+            this.showToast('New MCP API Key generated successfully!', 'success');
+            await this.loadMcpSettings();
+        } catch (err) {
+            console.error('[MCP Generate] Error:', err);
+            this.showToast(err.message, 'error');
+        } finally {
+            const btn = document.getElementById('btn-generate-mcp-key');
+            if (btn) btn.disabled = false;
+            const rotateBtn = document.getElementById('btn-confirm-rotate-mcp');
+            if (rotateBtn) rotateBtn.disabled = false;
+        }
+    }
+
+    async revokeMcpKey() {
+        try {
+            const res = await this.safeFetch('/api/user/mcp-credentials/revoke', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || 'Failed to revoke MCP key');
+            }
+
+            this.showToast('MCP API Key revoked successfully.', 'info');
+            await this.loadMcpSettings();
+        } catch (err) {
+            console.error('[MCP Revoke] Error:', err);
+            this.showToast(err.message, 'error');
         }
     }
 

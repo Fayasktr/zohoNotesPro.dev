@@ -13,7 +13,12 @@ const userSchema = new mongoose.Schema({
     isBlocked: { type: Boolean, default: false },
     apiKey: { type: String, unique: true, sparse: true, index: true },
     apiKeyCreatedAt: { type: Date },
+    apiKeyExpiresAt: { type: Date },
     apiKeyLastUsedAt: { type: Date },
+    mcpUsage: {
+        dailyCount: { type: Number, default: 0 },
+        lastResetDate: { type: String, default: () => new Date().toISOString().slice(0, 10) }
+    },
     lastLogin: Date,
     lastLogout: Date,
     lastActivity: Date,
