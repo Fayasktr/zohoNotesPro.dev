@@ -13,12 +13,32 @@ exports.getDashboard = async (req, res) => {
         if (!loggingConfig) {
             loggingConfig = { value: false };
         }
+        const adminUser = await User.findById(req.session.userId).lean();
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+        const adminApiKey = adminUser?.apiKey || null;
+        const sseUrl = adminApiKey ? `${baseUrl}/mcp/sse?apiKey=${adminApiKey}` : `${baseUrl}/mcp/sse`;
+
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const enrichedUsers = users.map(u => ({
+            ...u,
+            hasApiKey: !!u.apiKey,
+            apiKeyMasked: u.apiKey ? u.apiKey.substring(0, 12) + '••••••••' : null,
+            apiKeyExpiresText: u.apiKeyExpiresAt ? new Date(u.apiKeyExpiresAt).toLocaleDateString() : (u.apiKey ? 'Never' : 'None'),
+            isApiKeyExpired: u.apiKeyExpiresAt ? (new Date() > new Date(u.apiKeyExpiresAt)) : false,
+            mcpDailyCount: (u.mcpUsage && u.mcpUsage.lastResetDate === todayStr) ? (u.mcpUsage.dailyCount || 0) : 0
+        }));
+
         res.render('admin/dashboard', {
             title: 'Admin Dashboard - Zoho Notes',
             metaTitle: 'Admin Dashboard - Zoho Notes',
             metaRobots: 'noindex, nofollow',
             adminName: req.session.username,
-            users: users,
+            adminUser: adminUser,
+            adminApiKey: adminApiKey,
+            adminApiKeyExpiresAt: adminUser?.apiKeyExpiresAt || null,
+            sseUrl: sseUrl,
+            baseUrl: baseUrl,
+            users: enrichedUsers,
             unreadFeedbackCount: unreadFeedbackCount,
             isLoggingPaused: loggingConfig.value
         });
