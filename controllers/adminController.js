@@ -125,9 +125,9 @@ exports.setUserRole = async (req, res) => {
         const user = await User.findById(id);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        // Safety: Do not demote Superadmin Fayas KP
-        if (user.email === 'fayaskpktr@gmail.com' && role !== 'admin') {
-            return res.status(400).json({ error: 'Cannot remove admin role from primary superadmin (fayaskpktr@gmail.com)' });
+        // Safety: Do not demote primary administrator account
+        if (user.email === 'admin@gmail.com' && role !== 'admin') {
+            return res.status(400).json({ error: 'Cannot remove admin role from primary administrator (admin@gmail.com)' });
         }
 
         user.role = role;

@@ -1167,7 +1167,7 @@ app.get('/api/user/mcp-credentials', isAuthenticated, async (req, res) => {
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        const isAdmin = user.role === 'admin' || (user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com');
+        const isAdmin = user.role === 'admin';
         const todayStr = new Date().toISOString().slice(0, 10);
         const usedToday = (user.mcpUsage && user.mcpUsage.lastResetDate === todayStr) ? (user.mcpUsage.dailyCount || 0) : 0;
         const dailyLimit = isAdmin ? null : 50;
@@ -1247,7 +1247,7 @@ app.post('/api/user/mcp-credentials/generate', isAuthenticated, async (req, res)
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        const isAdmin = user.role === 'admin' || (user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com');
+        const isAdmin = user.role === 'admin';
         const { expiryDays } = req.body;
 
         // Calculate expiration date

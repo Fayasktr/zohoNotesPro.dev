@@ -787,10 +787,10 @@ function createZohoNotesMcpServer(config = {}) {
                         };
                     }
 
-                    // Safety: Do not demote Superadmin Fayas KP
-                    if (targetUser.email === 'fayaskpktr@gmail.com' && args.role !== 'admin') {
+                    // Safety: Do not demote primary administrator account
+                    if (targetUser.email === 'admin@gmail.com' && args.role !== 'admin') {
                         return {
-                            content: [{ type: 'text', text: 'Cannot demote the primary Superadmin account (fayaskpktr@gmail.com).' }],
+                            content: [{ type: 'text', text: 'Cannot demote the primary administrator account (admin@gmail.com).' }],
                             isError: true
                         };
                     }

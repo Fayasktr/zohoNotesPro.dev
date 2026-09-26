@@ -31,16 +31,14 @@ async function mcpAuth(req, res, next) {
 
         // 1. Check if token is the master admin key
         if ((configuredMasterKey && token === configuredMasterKey) || token === 'MCP_API_KEY') {
-            let adminUser = await User.findOne({ email: 'fayaskpktr@gmail.com' }).lean();
+            let adminUser = await User.findOne({ role: 'admin' }).lean();
             if (!adminUser) {
                 adminUser = {
-                    _id: '69622bc2b09b19e03efadf36',
-                    username: 'fayas kp',
-                    email: 'fayaskpktr@gmail.com',
+                    _id: '6962380aba753149bdca5c89',
+                    username: 'Administrator',
+                    email: 'admin@gmail.com',
                     role: 'admin'
                 };
-            } else {
-                adminUser.role = 'admin'; // Always guarantee admin privileges
             }
             req.user = adminUser;
             return next();
@@ -54,10 +52,7 @@ async function mcpAuth(req, res, next) {
             });
         }
 
-        const isAdmin = (user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com') || user.role === 'admin';
-        if (isAdmin) {
-            user.role = 'admin'; // Always guarantee superadmin
-        }
+        const isAdmin = user.role === 'admin';
 
         // Check if API key has expired
         if (user.apiKeyExpiresAt && new Date() > new Date(user.apiKeyExpiresAt)) {
@@ -259,7 +254,7 @@ router.post('/messages', async (req, res) => {
 
     try {
         const user = sessionEntry.user;
-        const isAdmin = user && ((user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com') || user.role === 'admin');
+        const isAdmin = user && user.role === 'admin';
 
         // Check if regular user has exceeded daily request quota
         if (!isAdmin && user && user._id) {
