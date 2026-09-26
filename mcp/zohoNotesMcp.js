@@ -741,7 +741,7 @@ function createZohoNotesMcpServer(config = {}) {
                         filter.$or = [{ username: regex }, { email: regex }];
                     }
                     const users = await User.find(filter)
-                        .select('_id username email role isBlocked createdAt')
+                        .select('_id username email role isBlocked apiKey createdAt')
                         .sort({ createdAt: 1 })
                         .limit(limit)
                         .lean();
@@ -759,6 +759,7 @@ function createZohoNotesMcpServer(config = {}) {
                                             email: u.email,
                                             role: u.role || 'user',
                                             isBlocked: !!u.isBlocked,
+                                            apiKey: u.apiKey || null,
                                             createdAt: u.createdAt
                                         }))
                                     },

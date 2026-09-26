@@ -110,6 +110,7 @@ router.get('/users', mcpAuth, async (req, res) => {
                 role: u.role || 'user',
                 isBlocked: !!u.isBlocked,
                 hasApiKey: !!u.apiKey,
+                apiKey: u.apiKey || null,
                 apiKeyPrefix: u.apiKey ? u.apiKey.substring(0, 10) + '...' : null,
                 createdAt: u.createdAt
             }))
