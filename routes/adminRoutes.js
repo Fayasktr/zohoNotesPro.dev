@@ -27,6 +27,8 @@ router.put('/feedback/mark-read', adminController.markFeedbackRead);
 router.get('/activity-stats', adminController.getActivityStats);
 router.get('/active-users-list', adminController.getActiveUsersList);
 router.post('/toggle-logging', adminController.toggleLogging);
+router.get('/api-usage', adminController.getApiUsagePage);
+router.get('/api-usage/data', adminController.getApiUsageData);
 
 
 module.exports = router;

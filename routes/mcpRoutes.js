@@ -119,39 +119,34 @@ async function mcpAuth(req, res, next) {
             });
         }
 
+        const todayStr = new Date().toISOString().slice(0, 10);
+        let currentCount = 0;
+        if (user.mcpUsage && user.mcpUsage.lastResetDate === todayStr) {
+            currentCount = user.mcpUsage.dailyCount || 0;
+        }
+
         // Check daily rate limiting (50 req/day for regular users; unlimited for admin and fayas kp)
         if (!isUnlimited) {
-            const todayStr = new Date().toISOString().slice(0, 10);
-            let currentCount = 0;
-            if (user.mcpUsage && user.mcpUsage.lastResetDate === todayStr) {
-                currentCount = user.mcpUsage.dailyCount || 0;
-            }
-
             if (currentCount >= 50) {
                 return res.status(429).json({
                     error: 'Daily MCP request limit reached (50/50 requests). Quota resets at 00:00 UTC tomorrow. Contact admin for unlimited access.'
                 });
             }
-
-            // Increment daily count
-            User.updateOne(
-                { _id: user._id },
-                {
-                    $set: {
-                        'mcpUsage.dailyCount': currentCount + 1,
-                        'mcpUsage.lastResetDate': todayStr,
-                        apiKeyLastUsedAt: new Date()
-                    }
-                }
-            ).catch(err => {
-                console.warn('[MCP Auth] Failed to update usage:', err.message);
-            });
-        } else {
-            // Update lastUsed timestamp asynchronously for admin
-            User.updateOne({ _id: user._id }, { apiKeyLastUsedAt: new Date() }).catch(err => {
-                console.warn('[MCP Auth] Failed to update apiKeyLastUsedAt:', err.message);
-            });
         }
+
+        // Increment daily count and update last used timestamp for all users
+        User.updateOne(
+            { _id: user._id },
+            {
+                $set: {
+                    'mcpUsage.dailyCount': currentCount + 1,
+                    'mcpUsage.lastResetDate': todayStr,
+                    apiKeyLastUsedAt: new Date()
+                }
+            }
+        ).catch(err => {
+            console.warn('[MCP Auth] Failed to update usage:', err.message);
+        });
 
         req.user = user;
         next();
@@ -305,8 +300,7 @@ router.post(['/', '/sse', '/messages'], async (req, res) => {
             const isAdmin = user && user.role === 'admin';
             const isUnlimited = isAdmin || (user && user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com');
 
-            // Check if regular user has exceeded daily request quota
-            if (!isUnlimited && user && user._id) {
+            if (user && user._id) {
                 const todayStr = new Date().toISOString().slice(0, 10);
                 const freshUser = await User.findById(user._id).select('mcpUsage apiKeyExpiresAt').lean();
                 
@@ -322,12 +316,14 @@ router.post(['/', '/sse', '/messages'], async (req, res) => {
                     currentCount = freshUser.mcpUsage.dailyCount || 0;
                 }
 
-                if (currentCount >= 50) {
+                // Check quota limit for regular users
+                if (!isUnlimited && currentCount >= 50) {
                     return res.status(429).json({
                         error: 'Daily MCP request limit reached (50/50 requests). Quota resets at 00:00 UTC tomorrow.'
                     });
                 }
 
+                // Increment daily count and last used timestamp for all users
                 User.updateOne(
                     { _id: user._id },
                     {

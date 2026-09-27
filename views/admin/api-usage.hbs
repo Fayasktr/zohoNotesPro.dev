@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    {{> seo}}
+    <meta name="csrf-token" content="{{csrfToken}}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --accent: #6d5dfc;
+            --accent-glow: rgba(109, 93, 252, 0.4);
+        }
+
+        * {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(109, 93, 252, 0.3);
+            border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(109, 93, 252, 0.5);
+        }
+    </style>
+</head>
+
+<body class="bg-[#0a0a0c] text-white min-h-screen selection:bg-[#6d5dfc33]">
+    <!-- Navbar -->
+    <nav class="sticky top-0 z-50 bg-[#0a0a0c99] backdrop-blur-xl border-b border-[#ffffff1a] py-4 px-6 lg:px-12 flex justify-between items-center">
+        <div class="flex items-center gap-6">
+            <a href="/admin/dashboard" class="logo text-xl lg:text-2xl font-bold bg-gradient-to-r from-white to-[#6d5dfc] bg-clip-text text-transparent flex items-center gap-3">
+                <i data-lucide="shield-check" class="text-[#6d5dfc]"></i>
+                Admin Console
+            </a>
+            <div class="hidden md:flex items-center gap-2 text-sm text-[#a0a0a5]">
+                <span class="text-[#ffffff26]">/</span>
+                <span class="text-white font-semibold flex items-center gap-1.5">
+                    <i data-lucide="zap" class="w-4 h-4 text-[#c084fc]"></i>
+                    API Usage Leaderboard
+                </span>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <a href="/admin/dashboard" class="text-sm font-semibold text-[#a0a0a5] hover:text-white transition-colors flex items-center gap-1.5">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                Dashboard
+            </a>
+            <a href="/" class="text-sm font-semibold text-[#a0a0a5] hover:text-white transition-colors flex items-center gap-1.5">
+                <i data-lucide="book" class="w-4 h-4"></i>
+                Notebook
+            </a>
+            <div class="hidden sm:block text-sm text-[#a0a0a5]">
+                Admin: <span class="text-white font-semibold">{{adminName}}</span>
+            </div>
+            <a href="/logout" class="bg-[#ff3b301a] text-[#ff3b30] border border-[#ff3b3033] px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#ff3b30] hover:text-white transition-all">
+                Logout
+            </a>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-6 lg:p-12 w-full">
+        <!-- Page Header -->
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
+            <div>
+                <div class="flex items-center gap-3 mb-1">
+                    <h1 class="text-3xl font-bold bg-gradient-to-r from-white via-white to-[#c084fc] bg-clip-text text-transparent">
+                        Daily API Usage Leaderboard
+                    </h1>
+                    <span class="px-3 py-1 rounded-full text-xs font-bold tracking-wide bg-[#c084fc1a] text-[#c084fc] border border-[#c084fc33] flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-[#c084fc] animate-ping"></span>
+                        Live Today
+                    </span>
+                </div>
+                <p class="text-[#a0a0a5] text-sm">
+                    Real-time daily MCP token/request consumption per user. Most active users ranked at the top.
+                </p>
+            </div>
+
+            <!-- Header Actions -->
+            <div class="flex flex-wrap items-center gap-3">
+                <button onclick="refreshUsageData()" id="refreshBtn"
+                    class="bg-[#ffffff08] hover:bg-[#ffffff14] border border-[#ffffff1a] text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all">
+                    <i data-lucide="refresh-cw" id="refreshIcon" class="w-4 h-4 text-[#6d5dfc]"></i>
+                    Refresh Now
+                </button>
+                <button onclick="exportToCSV()"
+                    class="bg-[#ffffff08] hover:bg-[#ffffff14] border border-[#ffffff1a] text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all">
+                    <i data-lucide="download" class="w-4 h-4 text-[#30ff6a]"></i>
+                    Export CSV
+                </button>
+                <a href="/admin/dashboard"
+                    class="bg-[#6d5dfc] hover:bg-[#5b4be0] text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-[#6d5dfc33]">
+                    <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                    Back to Dashboard
+                </a>
+            </div>
+        </div>
+
+        <!-- 4 Summary Stat Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+            <!-- Card 1: Total Calls Today -->
+            <div class="glass-card p-6 rounded-3xl border border-[#c084fc33] bg-gradient-to-br from-[#c084fc1a] via-[#151518] to-transparent shadow-xl">
+                <div class="flex items-center gap-4">
+                    <div class="p-4 bg-[#c084fc1a] rounded-2xl text-[#c084fc] ring-1 ring-[#c084fc4d]">
+                        <i data-lucide="zap" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-[#a0a0a5] font-bold uppercase tracking-widest">Total Requests Today</div>
+                        <div class="text-3xl font-bold mt-1 text-white" id="statTotalRequests">{{totalRequestsToday}}</div>
+                    </div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-[#ffffff0a] flex justify-between items-center text-[11px] text-[#a0a0a5]">
+                    <span>Quota Resets In</span>
+                    <span id="resetTimer" class="font-mono text-[#c084fc] font-bold">--:--:--</span>
+                </div>
+            </div>
+
+            <!-- Card 2: Active Consumers -->
+            <div class="glass-card p-6 rounded-3xl border border-[#30ff6a33] bg-gradient-to-br from-[#30ff6a1a] via-[#151518] to-transparent shadow-xl">
+                <div class="flex items-center gap-4">
+                    <div class="p-4 bg-[#30ff6a1a] rounded-2xl text-[#30ff6a] ring-1 ring-[#30ff6a4d]">
+                        <i data-lucide="activity" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-[#a0a0a5] font-bold uppercase tracking-widest">Active Today</div>
+                        <div class="text-3xl font-bold mt-1 text-white" id="statActiveConsumers">{{activeConsumersToday}}</div>
+                    </div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-[#ffffff0a] flex justify-between items-center text-[11px] text-[#a0a0a5]">
+                    <span>Active Ratio</span>
+                    <span class="text-[#30ff6a] font-bold">{{activeConsumersToday}} / {{totalUsersCount}} users</span>
+                </div>
+            </div>
+
+            <!-- Card 3: Limit Reached (50/50) -->
+            <div class="glass-card p-6 rounded-3xl border {{#if limitReachedCount}}border-[#ff3b3066] bg-gradient-to-br from-[#ff3b301a]{{else}}border-[#ffffff10] bg-gradient-to-br from-[#ffffff05]{{/if}} via-[#151518] to-transparent shadow-xl">
+                <div class="flex items-center gap-4">
+                    <div class="p-4 {{#if limitReachedCount}}bg-[#ff3b301a] text-[#ff3b30] ring-1 ring-[#ff3b304d]{{else}}bg-[#ffffff08] text-[#a0a0a5]{{/if}} rounded-2xl">
+                        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-[#a0a0a5] font-bold uppercase tracking-widest">At Limit (50/50)</div>
+                        <div class="text-3xl font-bold mt-1 {{#if limitReachedCount}}text-[#ff3b30]{{else}}text-white{{/if}}" id="statLimitReached">{{limitReachedCount}}</div>
+                    </div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-[#ffffff0a] flex justify-between items-center text-[11px] text-[#a0a0a5]">
+                    <span>Standard Students</span>
+                    <span class="{{#if limitReachedCount}}text-[#ff3b30]{{else}}text-[#a0a0a5]{{/if}} font-bold">50 req/day cap</span>
+                </div>
+            </div>
+
+            <!-- Card 4: Total Keys Provisioned -->
+            <div class="glass-card p-6 rounded-3xl border border-[#6d5dfc33] bg-gradient-to-br from-[#6d5dfc1a] via-[#151518] to-transparent shadow-xl">
+                <div class="flex items-center gap-4">
+                    <div class="p-4 bg-[#6d5dfc1a] rounded-2xl text-[#6d5dfc] ring-1 ring-[#6d5dfc4d]">
+                        <i data-lucide="key" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-[#a0a0a5] font-bold uppercase tracking-widest">API Keys Issued</div>
+                        <div class="text-3xl font-bold mt-1 text-white" id="statKeysIssued">{{totalKeysIssued}}</div>
+                    </div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-[#ffffff0a] flex justify-between items-center text-[11px] text-[#a0a0a5]">
+                    <span>Coverage</span>
+                    <span class="text-[#6d5dfc] font-bold">{{totalKeysIssued}} of {{totalUsersCount}} users</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="glass-card p-4 rounded-2xl mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <!-- Search Box -->
+            <div class="relative w-full md:w-96 group">
+                <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a0a0a5] group-focus-within:text-[#6d5dfc] transition-colors"></i>
+                <input type="text" id="usageSearch" placeholder="Search by name, email, or key..."
+                    class="w-full bg-[#ffffff08] border border-[#ffffff1a] pl-11 pr-4 py-2.5 rounded-xl outline-none focus:border-[#6d5dfc] focus:ring-4 focus:ring-[#6d5dfc1a] transition-all text-sm"
+                    oninput="filterUsageTable()">
+            </div>
+
+            <!-- Filter Buttons -->
+            <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                <button type="button" onclick="setFilter('all')" id="btnFilter-all"
+                    class="filter-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-[#6d5dfc] text-white transition-all">
+                    All ({{users.length}})
+                </button>
+                <button type="button" onclick="setFilter('active')" id="btnFilter-active"
+                    class="filter-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-[#ffffff0a] text-[#a0a0a5] hover:text-white transition-all">
+                    Active Today
+                </button>
+                <button type="button" onclick="setFilter('capped')" id="btnFilter-capped"
+                    class="filter-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-[#ffffff0a] text-[#a0a0a5] hover:text-white transition-all">
+                    At Limit (50)
+                </button>
+                <button type="button" onclick="setFilter('unlimited')" id="btnFilter-unlimited"
+                    class="filter-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-[#ffffff0a] text-[#a0a0a5] hover:text-white transition-all">
+                    👑 Unlimited
+                </button>
+            </div>
+        </div>
+
+        <!-- Leaderboard Table -->
+        <div class="glass-card rounded-3xl overflow-hidden shadow-2xl">
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse min-w-[800px]">
+                    <thead class="bg-[#ffffff08] border-b border-[#ffffff10]">
+                        <tr>
+                            <th class="py-4 px-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider w-20 text-center">Rank</th>
+                            <th class="py-4 px-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider">User</th>
+                            <th class="py-4 px-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider min-w-[260px]">Today's Usage & Quota</th>
+                            <th class="py-4 px-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider">API Key Status</th>
+                            <th class="py-4 px-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider">Last Request</th>
+                            <th class="py-4 px-6 text-[#a0a0a5] text-xs font-bold uppercase tracking-wider text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usageTableBody">
+                        {{#each users}}
+                        <tr class="usage-row border-b border-[#ffffff08] hover:bg-[#ffffff04] transition-colors group"
+                            data-username="{{username}}"
+                            data-email="{{email}}"
+                            data-key="{{apiKeyMasked}}"
+                            data-count="{{todayCount}}"
+                            data-unlimited="{{isUnlimited}}"
+                            data-capped="{{isCapped}}">
+                            <!-- Rank Column -->
+                            <td class="py-5 px-6 text-center">
+                                {{#if isTop1}}
+                                <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-extrabold text-sm shadow-lg shadow-amber-500/30">
+                                    🥇
+                                </div>
+                                {{else if isTop2}}
+                                <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-slate-200 to-slate-400 text-black font-extrabold text-sm shadow-lg shadow-slate-300/20">
+                                    🥈
+                                </div>
+                                {{else if isTop3}}
+                                <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-amber-600 to-amber-800 text-white font-extrabold text-sm shadow-lg shadow-amber-700/20">
+                                    🥉
+                                </div>
+                                {{else}}
+                                <span class="font-mono text-xs font-semibold text-[#a0a0a5]">#{{rank}}</span>
+                                {{/if}}
+                            </td>
+
+                            <!-- User Profile -->
+                            <td class="py-5 px-6">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-base ring-2 {{#if isUnlimited}}bg-[#a855f7] ring-[#a855f74d]{{else}}bg-[#6d5dfc] ring-[#6d5dfc33]{{/if}}">
+                                        {{substring username 0 1}}
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-semibold text-white text-sm">{{username}}</span>
+                                            {{#if isUnlimited}}
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#a855f726] text-[#c084fc] border border-[#a855f74d]">
+                                                👑 Unlimited
+                                            </span>
+                                            {{/if}}
+                                            {{#if isBlocked}}
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#ff3b3026] text-[#ff3b30] border border-[#ff3b304d]">
+                                                Blocked
+                                            </span>
+                                            {{/if}}
+                                        </div>
+                                        <div class="text-[11px] text-[#a0a0a5] font-mono">{{email}}</div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- Today's Usage & Quota Progress -->
+                            <td class="py-5 px-6">
+                                <div class="space-y-1.5">
+                                    <div class="flex justify-between items-center text-xs">
+                                        <div class="font-semibold flex items-center gap-1.5">
+                                            {{#if isUnlimited}}
+                                            <span class="text-[#c084fc] font-bold text-sm">{{todayCount}}</span>
+                                            <span class="text-[#a0a0a5] text-[11px]">requests made today</span>
+                                            {{else}}
+                                            <span class="{{#if isCapped}}text-[#ff3b30] font-bold text-sm{{else}}text-white font-bold text-sm{{/if}}">{{todayCount}}</span>
+                                            <span class="text-[#a0a0a5]">/ 50 requests</span>
+                                            {{/if}}
+                                        </div>
+
+                                        {{#if isUnlimited}}
+                                        <span class="text-[10px] font-mono font-bold text-[#c084fc]">NO LIMIT</span>
+                                        {{else if isCapped}}
+                                        <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#ff3b3026] text-[#ff3b30] border border-[#ff3b304d]">
+                                            CAPPED (100%)
+                                        </span>
+                                        {{else}}
+                                        <span class="text-[10px] font-mono text-[#a0a0a5]">{{percent}}%</span>
+                                        {{/if}}
+                                    </div>
+
+                                    <!-- Progress Bar -->
+                                    <div class="w-full bg-[#ffffff10] h-2 rounded-full overflow-hidden">
+                                        {{#if isUnlimited}}
+                                        <div class="bg-gradient-to-r from-[#6d5dfc] via-[#a855f7] to-[#ec4899] h-full rounded-full transition-all duration-500" style="width: 100%;"></div>
+                                        {{else}}
+                                        <div class="h-full rounded-full transition-all duration-500 {{#if isCapped}}bg-[#ff3b30]{{else if (add percent -50)}}bg-amber-400{{else}}bg-[#30ff6a]{{/if}}"
+                                            style="width: {{percent}}%;"></div>
+                                        {{/if}}
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- API Key Status -->
+                            <td class="py-5 px-6">
+                                <div class="flex flex-col gap-1">
+                                    {{#if hasApiKey}}
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full {{#if isApiKeyExpired}}bg-[#ff3b30]{{else}}bg-[#30ff6a]{{/if}}"></span>
+                                        <span class="text-xs font-mono text-[#c084fc] font-semibold">{{apiKeyMasked}}</span>
+                                    </div>
+                                    <div class="text-[10px] text-[#a0a0a5]">
+                                        Expires: <span class="{{#if isApiKeyExpired}}text-[#ff3b30] font-bold{{else}}text-white{{/if}}">{{apiKeyExpiresText}}</span>
+                                    </div>
+                                    {{else}}
+                                    <span class="text-xs text-[#a0a0a5] italic opacity-50">No API key issued</span>
+                                    {{/if}}
+                                </div>
+                            </td>
+
+                            <!-- Last Request Timestamp -->
+                            <td class="py-5 px-6">
+                                <div class="flex flex-col">
+                                    <span class="text-xs text-white font-medium flex items-center gap-1.5" title="{{lastUsedFull}}">
+                                        <i data-lucide="clock" class="w-3.5 h-3.5 text-[#a0a0a5]"></i>
+                                        {{lastUsedRelative}}
+                                    </span>
+                                    {{#if apiKeyLastUsedAt}}
+                                    <span class="text-[10px] text-[#a0a0a5] font-mono mt-0.5">{{lastUsedFull}}</span>
+                                    {{/if}}
+                                </div>
+                            </td>
+
+                            <!-- Action Buttons -->
+                            <td class="py-5 px-6 text-right">
+                                <div class="flex justify-end gap-2">
+                                    <a href="/admin/dashboard" title="Inspect user notes on Dashboard"
+                                        class="w-8 h-8 rounded-lg bg-[#ffffff08] hover:bg-[#6d5dfc] hover:text-white border border-[#ffffff1a] flex items-center justify-center transition-all">
+                                        <i data-lucide="external-link" class="w-4 h-4"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Empty State for Search Filter -->
+            <div id="emptyState" class="hidden p-12 text-center">
+                <div class="w-12 h-12 rounded-2xl bg-[#ffffff08] flex items-center justify-center mx-auto mb-3 text-[#a0a0a5]">
+                    <i data-lucide="search-x" class="w-6 h-6"></i>
+                </div>
+                <div class="font-bold text-white text-base">No users match your filter</div>
+                <p class="text-xs text-[#a0a0a5] mt-1">Try searching for a different name, email, or reset filters.</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let currentFilter = 'all';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            startResetCountdown();
+        });
+
+        // Countdown timer to 00:00 UTC
+        function startResetCountdown() {
+            function update() {
+                const now = new Date();
+                const nextUtcMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+                const diffMs = nextUtcMidnight - now;
+
+                if (diffMs <= 0) {
+                    document.getElementById('resetTimer').textContent = '00:00:00 (Resetting...)';
+                    return;
+                }
+
+                const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+                const pad = (n) => String(n).padStart(2, '0');
+                const el = document.getElementById('resetTimer');
+                if (el) {
+                    el.textContent = `${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
+                }
+            }
+            update();
+            setInterval(update, 1000);
+        }
+
+        // Live Client-side Search and Filter
+        function filterUsageTable() {
+            const query = (document.getElementById('usageSearch').value || '').toLowerCase().trim();
+            const rows = document.querySelectorAll('.usage-row');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const username = (row.dataset.username || '').toLowerCase();
+                const email = (row.dataset.email || '').toLowerCase();
+                const key = (row.dataset.key || '').toLowerCase();
+                const count = parseInt(row.dataset.count || '0', 10);
+                const isUnlimited = row.dataset.unlimited === 'true';
+                const isCapped = row.dataset.capped === 'true';
+
+                const matchesQuery = !query || username.includes(query) || email.includes(query) || key.includes(query);
+
+                let matchesFilter = true;
+                if (currentFilter === 'active') {
+                    matchesFilter = count > 0;
+                } else if (currentFilter === 'capped') {
+                    matchesFilter = isCapped;
+                } else if (currentFilter === 'unlimited') {
+                    matchesFilter = isUnlimited;
+                }
+
+                if (matchesQuery && matchesFilter) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            const emptyState = document.getElementById('emptyState');
+            if (emptyState) {
+                emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+            }
+        }
+
+        function setFilter(filterType) {
+            currentFilter = filterType;
+            document.querySelectorAll('.filter-pill').forEach(btn => {
+                btn.classList.remove('bg-[#6d5dfc]', 'text-white');
+                btn.classList.add('bg-[#ffffff0a]', 'text-[#a0a0a5]');
+            });
+            const activeBtn = document.getElementById(`btnFilter-${filterType}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('bg-[#ffffff0a]', 'text-[#a0a0a5]');
+                activeBtn.classList.add('bg-[#6d5dfc]', 'text-white');
+            }
+            filterUsageTable();
+        }
+
+        // AJAX Real-time Refresh
+        async function refreshUsageData() {
+            const refreshIcon = document.getElementById('refreshIcon');
+            if (refreshIcon) refreshIcon.classList.add('animate-spin');
+
+            try {
+                const res = await fetch('/admin/api-usage/data');
+                const data = await res.json();
+                if (data.success) {
+                    // Update stat cards
+                    document.getElementById('statTotalRequests').textContent = data.stats.totalRequestsToday;
+                    document.getElementById('statActiveConsumers').textContent = data.stats.activeConsumersToday;
+                    document.getElementById('statLimitReached').textContent = data.stats.limitReachedCount;
+                    document.getElementById('statKeysIssued').textContent = data.stats.totalKeysIssued;
+
+                    // Reload table content
+                    renderTable(data.users);
+                }
+            } catch (err) {
+                console.error('Failed to refresh API usage:', err);
+            } finally {
+                if (refreshIcon) {
+                    setTimeout(() => refreshIcon.classList.remove('animate-spin'), 600);
+                }
+            }
+        }
+
+        function renderTable(users) {
+            const tbody = document.getElementById('usageTableBody');
+            if (!tbody) return;
+
+            tbody.innerHTML = users.map(u => {
+                let rankBadge = `<span class="font-mono text-xs font-semibold text-[#a0a0a5]">#${u.rank}</span>`;
+                if (u.isTop1) rankBadge = `<div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-extrabold text-sm shadow-lg shadow-amber-500/30">🥇</div>`;
+                else if (u.isTop2) rankBadge = `<div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-slate-200 to-slate-400 text-black font-extrabold text-sm shadow-lg shadow-slate-300/20">🥈</div>`;
+                else if (u.isTop3) rankBadge = `<div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-amber-600 to-amber-800 text-white font-extrabold text-sm shadow-lg shadow-amber-700/20">🥉</div>`;
+
+                let usageBar = '';
+                if (u.isUnlimited) {
+                    usageBar = `<div class="bg-gradient-to-r from-[#6d5dfc] via-[#a855f7] to-[#ec4899] h-full rounded-full transition-all duration-500" style="width: 100%;"></div>`;
+                } else {
+                    const color = u.isCapped ? 'bg-[#ff3b30]' : (u.percent >= 50 ? 'bg-amber-400' : 'bg-[#30ff6a]');
+                    usageBar = `<div class="h-full rounded-full transition-all duration-500 ${color}" style="width: ${u.percent}%;"></div>`;
+                }
+
+                return `
+                <tr class="usage-row border-b border-[#ffffff08] hover:bg-[#ffffff04] transition-colors group"
+                    data-username="${u.username}"
+                    data-email="${u.email}"
+                    data-key="${u.apiKeyMasked || ''}"
+                    data-count="${u.todayCount}"
+                    data-unlimited="${u.isUnlimited}"
+                    data-capped="${u.isCapped}">
+                    <td class="py-5 px-6 text-center">${rankBadge}</td>
+                    <td class="py-5 px-6">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-base ring-2 ${u.isUnlimited ? 'bg-[#a855f7] ring-[#a855f74d]' : 'bg-[#6d5dfc] ring-[#6d5dfc33]'}">
+                                ${u.username ? u.username.charAt(0) : '?'}
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-semibold text-white text-sm">${u.username}</span>
+                                    ${u.isUnlimited ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#a855f726] text-[#c084fc] border border-[#a855f74d]">👑 Unlimited</span>' : ''}
+                                    ${u.isBlocked ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#ff3b3026] text-[#ff3b30] border border-[#ff3b304d]">Blocked</span>' : ''}
+                                </div>
+                                <div class="text-[11px] text-[#a0a0a5] font-mono">${u.email}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="py-5 px-6">
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between items-center text-xs">
+                                <div class="font-semibold flex items-center gap-1.5">
+                                    ${u.isUnlimited
+                                        ? `<span class="text-[#c084fc] font-bold text-sm">${u.todayCount}</span> <span class="text-[#a0a0a5] text-[11px]">requests made today</span>`
+                                        : `<span class="${u.isCapped ? 'text-[#ff3b30] font-bold text-sm' : 'text-white font-bold text-sm'}">${u.todayCount}</span> <span class="text-[#a0a0a5]">/ 50 requests</span>`}
+                                </div>
+                                ${u.isUnlimited
+                                    ? '<span class="text-[10px] font-mono font-bold text-[#c084fc]">NO LIMIT</span>'
+                                    : (u.isCapped ? '<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#ff3b3026] text-[#ff3b30] border border-[#ff3b304d]">CAPPED (100%)</span>' : `<span class="text-[10px] font-mono text-[#a0a0a5]">${u.percent}%</span>`)}
+                            </div>
+                            <div class="w-full bg-[#ffffff10] h-2 rounded-full overflow-hidden">
+                                ${usageBar}
+                            </div>
+                        </div>
+                    </td>
+                    <td class="py-5 px-6">
+                        <div class="flex flex-col gap-1">
+                            ${u.hasApiKey ? `
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full ${u.isApiKeyExpired ? 'bg-[#ff3b30]' : 'bg-[#30ff6a]'}"></span>
+                                    <span class="text-xs font-mono text-[#c084fc] font-semibold">${u.apiKeyMasked}</span>
+                                </div>
+                                <div class="text-[10px] text-[#a0a0a5]">
+                                    Expires: <span class="${u.isApiKeyExpired ? 'text-[#ff3b30] font-bold' : 'text-white'}">${u.apiKeyExpiresText}</span>
+                                </div>
+                            ` : '<span class="text-xs text-[#a0a0a5] italic opacity-50">No API key issued</span>'}
+                        </div>
+                    </td>
+                    <td class="py-5 px-6">
+                        <div class="flex flex-col">
+                            <span class="text-xs text-white font-medium flex items-center gap-1.5">
+                                <i data-lucide="clock" class="w-3.5 h-3.5 text-[#a0a0a5]"></i>
+                                ${u.lastUsedRelative}
+                            </span>
+                        </div>
+                    </td>
+                    <td class="py-5 px-6 text-right">
+                        <a href="/admin/dashboard" title="Inspect user notes on Dashboard"
+                            class="w-8 h-8 rounded-lg bg-[#ffffff08] hover:bg-[#6d5dfc] hover:text-white border border-[#ffffff1a] inline-flex items-center justify-center transition-all">
+                            <i data-lucide="external-link" class="w-4 h-4"></i>
+                        </a>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+            filterUsageTable();
+        }
+
+        // Export to CSV
+        function exportToCSV() {
+            const rows = document.querySelectorAll('.usage-row');
+            const data = [
+                ['Rank', 'Username', 'Email', 'Role', 'Requests Today', 'Daily Quota', 'Quota Status', 'API Key Masked', 'Last Used Relative']
+            ];
+
+            rows.forEach((row, idx) => {
+                const username = row.dataset.username;
+                const email = row.dataset.email;
+                const count = row.dataset.count;
+                const isUnlimited = row.dataset.unlimited === 'true';
+                const isCapped = row.dataset.capped === 'true';
+                const quota = isUnlimited ? 'Unlimited' : '50';
+                const status = isUnlimited ? 'Unlimited' : (isCapped ? 'Capped (100%)' : 'Normal');
+                const key = row.dataset.key || 'None';
+
+                data.push([
+                    idx + 1,
+                    `"${username}"`,
+                    `"${email}"`,
+                    isUnlimited ? 'Unlimited Admin' : 'Student',
+                    count,
+                    quota,
+                    status,
+                    `"${key}"`,
+                    'Today'
+                ]);
+            });
+
+            const csvContent = "data:text/csv;charset=utf-8," + data.map(e => e.join(",")).join("\n");
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            const today = new Date().toISOString().slice(0, 10);
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `mcp_api_usage_${today}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+
+</html>

@@ -19,15 +19,25 @@ exports.getDashboard = async (req, res) => {
         const sseUrl = adminApiKey ? `${baseUrl}/mcp/sse?apiKey=${adminApiKey}` : `${baseUrl}/mcp/sse`;
 
         const todayStr = new Date().toISOString().slice(0, 10);
-        const enrichedUsers = users.map(u => ({
-            ...u,
-            hasApiKey: !!u.apiKey,
-            apiKeyMasked: u.apiKey ? u.apiKey.substring(0, 12) + '••••••••' : null,
-            apiKeyExpiresText: u.apiKeyExpiresAt ? new Date(u.apiKeyExpiresAt).toLocaleDateString() : (u.apiKey ? 'Never' : 'None'),
-            isApiKeyExpired: u.apiKeyExpiresAt ? (new Date() > new Date(u.apiKeyExpiresAt)) : false,
-            isUnlimited: u.role === 'admin' || (u.email && u.email.toLowerCase() === 'fayaskpktr@gmail.com'),
-            mcpDailyCount: (u.mcpUsage && u.mcpUsage.lastResetDate === todayStr) ? (u.mcpUsage.dailyCount || 0) : 0
-        }));
+        let totalMcpRequestsToday = 0;
+        const enrichedUsers = users.map(u => {
+            const mcpDailyCount = (u.mcpUsage && u.mcpUsage.lastResetDate === todayStr) ? (u.mcpUsage.dailyCount || 0) : 0;
+            totalMcpRequestsToday += mcpDailyCount;
+            return {
+                ...u,
+                hasApiKey: !!u.apiKey,
+                apiKeyMasked: u.apiKey ? u.apiKey.substring(0, 12) + '••••••••' : null,
+                apiKeyExpiresText: u.apiKeyExpiresAt ? new Date(u.apiKeyExpiresAt).toLocaleDateString() : (u.apiKey ? 'Never' : 'None'),
+                isApiKeyExpired: u.apiKeyExpiresAt ? (new Date() > new Date(u.apiKeyExpiresAt)) : false,
+                isUnlimited: u.role === 'admin' || (u.email && u.email.toLowerCase() === 'fayaskpktr@gmail.com'),
+                mcpDailyCount
+            };
+        });
+
+        // Also add adminUser's requests if any
+        if (adminUser && adminUser.mcpUsage && adminUser.mcpUsage.lastResetDate === todayStr) {
+            totalMcpRequestsToday += (adminUser.mcpUsage.dailyCount || 0);
+        }
 
         res.render('admin/dashboard', {
             title: 'Admin Dashboard - Zoho Notes',
@@ -41,7 +51,8 @@ exports.getDashboard = async (req, res) => {
             baseUrl: baseUrl,
             users: enrichedUsers,
             unreadFeedbackCount: unreadFeedbackCount,
-            isLoggingPaused: loggingConfig.value
+            isLoggingPaused: loggingConfig.value,
+            totalMcpRequestsToday
         });
     } catch (err) {
         console.error('Dashboard error:', err);
@@ -235,5 +246,193 @@ exports.toggleLogging = async (req, res) => {
         res.json({ success: true, isLoggingPaused: config.value });
     } catch (err) {
         res.status(500).json({ error: 'Failed to toggle logging' });
+    }
+};
+
+exports.getApiUsagePage = async (req, res) => {
+    try {
+        const adminUser = await User.findById(req.session.userId).lean();
+        const unreadFeedbackCount = await Feedback.countDocuments({ isRead: false });
+        const todayStr = new Date().toISOString().slice(0, 10);
+
+        // Fetch all users to measure usage
+        const users = await User.find({}).lean();
+
+        let totalRequestsToday = 0;
+        let activeConsumersToday = 0;
+        let limitReachedCount = 0;
+        let totalKeysIssued = 0;
+
+        const enrichedUsers = users.map(u => {
+            const hasApiKey = !!u.apiKey;
+            if (hasApiKey) totalKeysIssued++;
+
+            const isUnlimited = u.role === 'admin' || (u.email && u.email.toLowerCase() === 'fayaskpktr@gmail.com');
+            const todayCount = (u.mcpUsage && u.mcpUsage.lastResetDate === todayStr) ? (u.mcpUsage.dailyCount || 0) : 0;
+            
+            totalRequestsToday += todayCount;
+            if (todayCount > 0) activeConsumersToday++;
+            if (!isUnlimited && todayCount >= 50) limitReachedCount++;
+
+            const percent = isUnlimited ? 0 : Math.min(100, Math.round((todayCount / 50) * 100));
+            const isCapped = !isUnlimited && todayCount >= 50;
+            const isExpired = u.apiKeyExpiresAt ? (new Date() > new Date(u.apiKeyExpiresAt)) : false;
+
+            let lastUsedRelative = 'Never';
+            if (u.apiKeyLastUsedAt) {
+                const diffMs = Date.now() - new Date(u.apiKeyLastUsedAt).getTime();
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMins / 60);
+                if (diffMins < 1) lastUsedRelative = 'Just now';
+                else if (diffMins < 60) lastUsedRelative = `${diffMins}m ago`;
+                else if (diffHours < 24) lastUsedRelative = `${diffHours}h ago`;
+                else lastUsedRelative = new Date(u.apiKeyLastUsedAt).toLocaleDateString();
+            }
+
+            return {
+                ...u,
+                hasApiKey,
+                apiKeyMasked: u.apiKey ? u.apiKey.substring(0, 12) + '••••••••' : null,
+                apiKeyExpiresText: u.apiKeyExpiresAt ? new Date(u.apiKeyExpiresAt).toLocaleDateString() : (u.apiKey ? 'Never' : 'None'),
+                isApiKeyExpired: isExpired,
+                isUnlimited,
+                todayCount,
+                percent,
+                isCapped,
+                lastUsedRelative,
+                lastUsedFull: u.apiKeyLastUsedAt ? new Date(u.apiKeyLastUsedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Never'
+            };
+        });
+
+        // Sort: Most using in the top!
+        enrichedUsers.sort((a, b) => {
+            if (b.todayCount !== a.todayCount) {
+                return b.todayCount - a.todayCount;
+            }
+            const timeA = a.apiKeyLastUsedAt ? new Date(a.apiKeyLastUsedAt).getTime() : 0;
+            const timeB = b.apiKeyLastUsedAt ? new Date(b.apiKeyLastUsedAt).getTime() : 0;
+            if (timeB !== timeA) return timeB - timeA;
+            return a.username.localeCompare(b.username);
+        });
+
+        // Add 1-based rank and top 3 badges
+        enrichedUsers.forEach((u, idx) => {
+            u.rank = idx + 1;
+            u.isTop1 = u.rank === 1 && u.todayCount > 0;
+            u.isTop2 = u.rank === 2 && u.todayCount > 0;
+            u.isTop3 = u.rank === 3 && u.todayCount > 0;
+        });
+
+        const formattedToday = new Date().toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+        res.render('admin/api-usage', {
+            title: 'MCP API Usage & Quota Leaderboard - Zoho Notes',
+            metaTitle: 'MCP API Usage Leaderboard - Zoho Notes',
+            metaRobots: 'noindex, nofollow',
+            adminName: req.session.username,
+            adminUser,
+            unreadFeedbackCount,
+            todayStr,
+            formattedToday,
+            totalRequestsToday,
+            activeConsumersToday,
+            limitReachedCount,
+            totalKeysIssued,
+            totalUsersCount: users.length,
+            users: enrichedUsers
+        });
+    } catch (err) {
+        console.error('Error fetching API usage page:', err);
+        res.status(500).send('Server Error');
+    }
+};
+
+exports.getApiUsageData = async (req, res) => {
+    try {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const users = await User.find({}).lean();
+
+        let totalRequestsToday = 0;
+        let activeConsumersToday = 0;
+        let limitReachedCount = 0;
+        let totalKeysIssued = 0;
+
+        const enrichedUsers = users.map(u => {
+            const hasApiKey = !!u.apiKey;
+            if (hasApiKey) totalKeysIssued++;
+
+            const isUnlimited = u.role === 'admin' || (u.email && u.email.toLowerCase() === 'fayaskpktr@gmail.com');
+            const todayCount = (u.mcpUsage && u.mcpUsage.lastResetDate === todayStr) ? (u.mcpUsage.dailyCount || 0) : 0;
+            
+            totalRequestsToday += todayCount;
+            if (todayCount > 0) activeConsumersToday++;
+            if (!isUnlimited && todayCount >= 50) limitReachedCount++;
+
+            const percent = isUnlimited ? 0 : Math.min(100, Math.round((todayCount / 50) * 100));
+            const isCapped = !isUnlimited && todayCount >= 50;
+
+            let lastUsedRelative = 'Never';
+            if (u.apiKeyLastUsedAt) {
+                const diffMs = Date.now() - new Date(u.apiKeyLastUsedAt).getTime();
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMins / 60);
+                if (diffMins < 1) lastUsedRelative = 'Just now';
+                else if (diffMins < 60) lastUsedRelative = `${diffMins}m ago`;
+                else if (diffHours < 24) lastUsedRelative = `${diffHours}h ago`;
+                else lastUsedRelative = new Date(u.apiKeyLastUsedAt).toLocaleDateString();
+            }
+
+            return {
+                id: u._id,
+                username: u.username,
+                email: u.email,
+                role: u.role || 'user',
+                isBlocked: !!u.isBlocked,
+                hasApiKey,
+                apiKeyMasked: u.apiKey ? u.apiKey.substring(0, 12) + '••••••••' : null,
+                apiKeyExpiresText: u.apiKeyExpiresAt ? new Date(u.apiKeyExpiresAt).toLocaleDateString() : (u.apiKey ? 'Never' : 'None'),
+                isApiKeyExpired: u.apiKeyExpiresAt ? (new Date() > new Date(u.apiKeyExpiresAt)) : false,
+                isUnlimited,
+                todayCount,
+                percent,
+                isCapped,
+                lastUsedRelative,
+                apiKeyLastUsedAt: u.apiKeyLastUsedAt
+            };
+        });
+
+        enrichedUsers.sort((a, b) => {
+            if (b.todayCount !== a.todayCount) return b.todayCount - a.todayCount;
+            const timeA = a.apiKeyLastUsedAt ? new Date(a.apiKeyLastUsedAt).getTime() : 0;
+            const timeB = b.apiKeyLastUsedAt ? new Date(b.apiKeyLastUsedAt).getTime() : 0;
+            return timeB - timeA;
+        });
+
+        enrichedUsers.forEach((u, idx) => {
+            u.rank = idx + 1;
+            u.isTop1 = u.rank === 1 && u.todayCount > 0;
+            u.isTop2 = u.rank === 2 && u.todayCount > 0;
+            u.isTop3 = u.rank === 3 && u.todayCount > 0;
+        });
+
+        res.json({
+            success: true,
+            todayStr,
+            stats: {
+                totalRequestsToday,
+                activeConsumersToday,
+                limitReachedCount,
+                totalKeysIssued,
+                totalUsersCount: users.length
+            },
+            users: enrichedUsers
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 };

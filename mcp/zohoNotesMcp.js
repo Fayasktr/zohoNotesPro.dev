@@ -213,6 +213,16 @@ function createZohoNotesMcpServer(config = {}) {
                         },
                         required: ['email', 'role']
                     }
+                },
+                {
+                    name: 'get_api_usage',
+                    description: 'Get daily MCP token/request usage across all users, sorted with highest consumers first (Admin only).',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            limit: { type: 'number', description: 'Maximum users to return (default 50)' }
+                        }
+                    }
                 }
             );
         }
@@ -811,6 +821,72 @@ function createZohoNotesMcpServer(config = {}) {
                                             email: targetUser.email,
                                             role: targetUser.role
                                         }
+                                    },
+                                    null,
+                                    2
+                                )
+                            }
+                        ]
+                    };
+                }
+
+                case 'get_api_usage': {
+                    if (!isAdmin) {
+                        return {
+                            content: [{ type: 'text', text: 'Forbidden: Admin privileges required to view API usage statistics.' }],
+                            isError: true
+                        };
+                    }
+
+                    const todayStr = new Date().toISOString().slice(0, 10);
+                    const users = await User.find({}).lean();
+                    const limit = Math.min(Math.max(1, args.limit || 50), 200);
+
+                    let totalRequestsToday = 0;
+                    let activeConsumersToday = 0;
+                    let limitReachedCount = 0;
+
+                    const enriched = users.map(u => {
+                        const isUnlimited = u.role === 'admin' || (u.email && u.email.toLowerCase() === 'fayaskpktr@gmail.com');
+                        const todayCount = (u.mcpUsage && u.mcpUsage.lastResetDate === todayStr) ? (u.mcpUsage.dailyCount || 0) : 0;
+                        totalRequestsToday += todayCount;
+                        if (todayCount > 0) activeConsumersToday++;
+                        if (!isUnlimited && todayCount >= 50) limitReachedCount++;
+
+                        return {
+                            username: u.username,
+                            email: u.email,
+                            role: u.role || 'user',
+                            isUnlimited,
+                            todayRequests: todayCount,
+                            quotaMax: isUnlimited ? 'Unlimited' : 50,
+                            isCapped: !isUnlimited && todayCount >= 50,
+                            hasApiKey: !!u.apiKey,
+                            apiKeyLastUsedAt: u.apiKeyLastUsedAt || null
+                        };
+                    });
+
+                    enriched.sort((a, b) => b.todayRequests - a.todayRequests);
+
+                    const leaderboard = enriched.slice(0, limit).map((u, idx) => ({
+                        rank: idx + 1,
+                        ...u
+                    }));
+
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: JSON.stringify(
+                                    {
+                                        date: todayStr,
+                                        stats: {
+                                            totalRequestsToday,
+                                            activeConsumersToday,
+                                            limitReachedCount,
+                                            totalRegisteredUsers: users.length
+                                        },
+                                        leaderboard
                                     },
                                     null,
                                     2
