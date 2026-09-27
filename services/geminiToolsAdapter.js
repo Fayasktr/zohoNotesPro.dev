@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Note = require('../models/Note');
 const User = require('../models/User');
 const engine = require('../engine/AntigravityEngine');
@@ -17,7 +18,8 @@ function getGeminiToolDeclarations(isAdmin = false) {
                 type: 'OBJECT',
                 properties: {
                     query: { type: 'STRING', description: 'Search term or keyword' },
-                    limit: { type: 'NUMBER', description: 'Maximum results to return (default: 10)' }
+                    limit: { type: 'NUMBER', description: 'Maximum results to return (default: 10)' },
+                    onlyMine: { type: 'BOOLEAN', description: 'If true, only search notes created/owned by the current user' }
                 },
                 required: ['query']
             }
@@ -25,14 +27,15 @@ function getGeminiToolDeclarations(isAdmin = false) {
         {
             name: 'list_notes',
             description: isAdmin
-                ? 'List notes across the platform (or candidate notes) with optional folder or starred filters.'
+                ? 'List notes across the platform (or candidate notes) with optional folder or starred filters. Set onlyMine: true to list only your personal notes.'
                 : 'List your personal notes with title, folder name, and last updated timestamp.',
             parameters: {
                 type: 'OBJECT',
                 properties: {
                     limit: { type: 'NUMBER', description: 'Maximum notes to return (default: 20)' },
                     folder: { type: 'STRING', description: 'Filter by folder name (e.g. "root", "practice")' },
-                    isStarred: { type: 'BOOLEAN', description: 'Filter by starred notes only' }
+                    isStarred: { type: 'BOOLEAN', description: 'Filter by starred notes only' },
+                    onlyMine: { type: 'BOOLEAN', description: 'If true, only returns notes created/owned by the current user' }
                 }
             }
         },
@@ -141,8 +144,10 @@ async function executeGeminiTool(name, args = {}, user, isAdmin = false) {
                 const limit = Math.min(Math.max(1, args.limit || 10), 50);
                 const filter = { isTrashed: false };
 
-                if (!isAdmin && user) {
-                    filter.owner = user._id;
+                if (args.onlyMine || !isAdmin) {
+                    if (user && user._id) {
+                        filter.owner = user._id;
+                    }
                 }
 
                 if (query) {
@@ -177,8 +182,10 @@ async function executeGeminiTool(name, args = {}, user, isAdmin = false) {
                 const limit = Math.min(Math.max(1, args.limit || 20), 100);
                 const filter = { isTrashed: false };
 
-                if (!isAdmin && user) {
-                    filter.owner = user._id;
+                if (args.onlyMine || !isAdmin) {
+                    if (user && user._id) {
+                        filter.owner = user._id;
+                    }
                 }
                 if (args.folder) {
                     filter.folder = args.folder;
@@ -207,12 +214,24 @@ async function executeGeminiTool(name, args = {}, user, isAdmin = false) {
             }
 
             case 'get_note': {
+                const noteIdentifier = (args.noteId || '').trim();
+                const queryConditions = [
+                    { id: noteIdentifier },
+                    { shareCode: noteIdentifier }
+                ];
+                if (mongoose.Types.ObjectId.isValid(noteIdentifier)) {
+                    queryConditions.push({ _id: noteIdentifier });
+                }
+                // Allow matching by exact or case-insensitive title
+                queryConditions.push({ title: { $regex: '^' + noteIdentifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' } });
+
                 const note = await Note.findOne({
-                    $or: [{ id: args.noteId }, { shareCode: args.noteId }]
+                    $or: queryConditions,
+                    isTrashed: false
                 }).lean();
 
                 if (!note) {
-                    return { error: `Note not found for ID: ${args.noteId}` };
+                    return { error: `Note not found for: ${args.noteId}` };
                 }
 
                 if (!isAdmin && user && note.owner && note.owner.toString() !== user._id.toString()) {

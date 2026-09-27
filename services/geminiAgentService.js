@@ -1,7 +1,7 @@
 const { decrypt } = require('./encryptionService');
 const { getGeminiToolDeclarations, executeGeminiTool } = require('./geminiToolsAdapter');
 
-const DEFAULT_MODEL = 'models/gemini-flash-latest';
+const DEFAULT_MODEL = 'models/gemini-3.5-flash';
 const MAX_TURNS = 5;
 
 /**
@@ -22,7 +22,7 @@ async function streamGeminiChat({
         apiKey = decrypt(user.geminiApiKey);
     }
     if (!apiKey) {
-        apiKey = process.env.GEMINI_API_KEY || 'AIzaSyCIQkbe9yYuAU7CYULPQel9iUwGbIxRG_0';
+        apiKey = process.env.GEMINI_API_KEY;
     }
 
     if (!apiKey) {
@@ -85,7 +85,14 @@ Provide direct, concise, and helpful responses formatted in clean GitHub-flavore
             tools
         };
 
-        const candidateModels = [modelName, 'models/gemini-3.8-flash', 'models/gemini-flash-latest'];
+        const candidateModels = [
+            modelName,
+            'models/gemini-3.5-flash',
+            'models/gemini-flash-lite-latest',
+            'models/gemini-3-flash-preview',
+            'models/gemini-flash-latest',
+            'models/gemini-3.8-flash'
+        ];
         const uniqueModels = [...new Set(candidateModels)];
 
         let response = null;
