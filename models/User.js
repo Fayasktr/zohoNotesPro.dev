@@ -30,7 +30,8 @@ const userSchema = new mongoose.Schema({
     lastLogout: Date,
     lastActivity: Date,
     settings: {
-        defaultLanguage: { type: String, default: 'javascript' }
+        defaultLanguage: { type: String, default: 'javascript' },
+        aiCopilotEnabled: { type: Boolean, default: false }
     },
     // Game Progress
     points: { type: Number, default: 0 },

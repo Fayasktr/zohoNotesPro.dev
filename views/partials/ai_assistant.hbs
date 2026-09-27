@@ -1,138 +1,141 @@
 <!-- Zoho Notes Pro AI Copilot Assistant Partial -->
 {{#if isAiAllowed}}
 <div id="aiCopilotRoot">
-    <!-- Floating Trigger Button -->
+    <!-- Floating Trigger Button:
+         - Hidden unless user turns ON "Gemini AI Copilot" in Settings (aiCopilotEnabled)
+         - Positioned at bottom-[82px] right-[20px] (mobile) and lg:bottom-[96px] lg:right-[30px] (laptop)
+           so it sits cleanly ABOVE the + / Play / Eraser controls and NEVER covers them! -->
     <button id="aiTriggerBtn" onclick="toggleAiDrawer()"
-        class="fixed bottom-6 right-6 z-[999] flex items-center gap-2.5 bg-gradient-to-r from-[#6d5dfc] via-[#8b5cf6] to-[#ec4899] text-white px-4 py-3 rounded-2xl shadow-2xl shadow-[#6d5dfc66] hover:scale-105 active:scale-95 transition-all group">
+        style="bottom: 82px; right: 20px;"
+        class="{{#unless aiCopilotEnabled}}hidden{{/unless}} fixed lg:!bottom-[96px] lg:!right-[30px] z-[900] flex items-center gap-2 bg-gradient-to-r from-[#6d5dfc] via-[#8b5cf6] to-[#ec4899] text-white px-3.5 py-2.5 rounded-full shadow-xl shadow-[#6d5dfc55] hover:scale-105 active:scale-95 transition-all group border border-white/20">
         <div class="relative flex items-center justify-center">
-            <i data-lucide="bot" class="w-5 h-5 text-white"></i>
-            <span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#30ff6a] ring-2 ring-[#0a0a0c] animate-pulse"></span>
+            <i data-lucide="bot" class="w-4 h-4 text-white"></i>
+            <span id="aiTriggerStatusDot" class="absolute -top-1 -right-1 w-2 h-2 rounded-full {{#if hasGeminiKey}}bg-[#30ff6a]{{else}}bg-[#ffbe3d]{{/if}} ring-2 ring-[#0a0a0c]"></span>
         </div>
-        <span class="text-xs font-bold tracking-wide hidden sm:inline">AI Copilot</span>
-        <span class="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full font-mono font-semibold">Gemini</span>
+        <span class="text-xs font-bold tracking-wide">AI Copilot</span>
     </button>
 
-    <!-- Floating Chat Window -->
+    <!-- Floating Chat Window:
+         - Positioned above the trigger button (bottom-[136px] on mobile, sm:bottom-[148px] on desktop)
+           so the bottom + / - / Play / Eraser buttons remain 100% uncovered on both mobile and laptop -->
     <div id="aiChatDrawer"
-        class="fixed bottom-20 right-6 z-[1000] w-[440px] max-w-[calc(100vw-32px)] h-[620px] max-h-[calc(100vh-100px)] flex flex-col rounded-3xl border border-[#ffffff1a] bg-[#101014]/95 backdrop-blur-2xl shadow-2xl overflow-hidden transition-all duration-300 transform scale-95 opacity-0 pointer-events-none">
+        style="bottom: 136px;"
+        class="fixed left-3.5 right-3.5 sm:left-auto sm:right-[30px] sm:!bottom-[148px] z-[950] sm:w-[410px] h-[500px] max-h-[calc(100vh-160px)] flex flex-col rounded-3xl border border-[#ffffff1f] bg-[#101014]/95 backdrop-blur-2xl shadow-2xl overflow-hidden transition-all duration-300 transform scale-95 opacity-0 pointer-events-none">
         
         <!-- Drawer Header -->
-        <div class="p-4 border-b border-[#ffffff10] bg-[#16161c]/80 flex items-center justify-between shrink-0">
-            <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#6d5dfc] to-[#a855f7] flex items-center justify-center text-white shadow-md shadow-[#6d5dfc33]">
+        <div class="p-3.5 border-b border-[#ffffff10] bg-[#16161c]/90 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-[#6d5dfc] to-[#a855f7] flex items-center justify-center text-white shadow-md shadow-[#6d5dfc33]">
                     <i data-lucide="sparkles" class="w-4 h-4"></i>
                 </div>
                 <div>
                     <div class="flex items-center gap-2">
-                        <span class="text-sm font-bold text-white">AI Copilot</span>
-                        <span class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#30ff6a1a] text-[#30ff6a] border border-[#30ff6a33]">
-                            Flash · 1.5K RPD
+                        <span class="text-xs font-bold text-white">Gemini AI Copilot</span>
+                        <span id="aiHeaderKeyBadge" class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold {{#if hasGeminiKey}}bg-[#30ff6a1a] text-[#30ff6a] border border-[#30ff6a33]{{else}}bg-[#ffbe3d1a] text-[#ffbe3d] border border-[#ffbe3d33]{{/if}}">
+                            {{#if hasGeminiKey}}Key Active{{else}}Key Required{{/if}}
                         </span>
                     </div>
-                    <p class="text-[10px] text-[#a0a0a5]">Direct access to notes, sandbox & tools</p>
+                    <p class="text-[10px] text-[#a0a0a5]">Personal BYOK Assistant · Notes & Sandbox</p>
                 </div>
             </div>
 
             <div class="flex items-center gap-1">
-                <button onclick="toggleAiKeyModal()" title="Gemini API Key Settings"
-                    class="p-2 rounded-xl text-[#a0a0a5] hover:text-white hover:bg-[#ffffff0d] transition-all">
+                <button onclick="openUserSettingsToGemini()" title="Configure Gemini API Key in Settings"
+                    class="p-1.5 rounded-xl text-[#a0a0a5] hover:text-white hover:bg-[#ffffff0d] transition-all">
                     <i data-lucide="key" class="w-4 h-4"></i>
                 </button>
                 <button onclick="clearAiChat()" title="Clear Chat History"
-                    class="p-2 rounded-xl text-[#a0a0a5] hover:text-[#ff3b30] hover:bg-[#ffffff0d] transition-all">
+                    class="p-1.5 rounded-xl text-[#a0a0a5] hover:text-[#ff3b30] hover:bg-[#ffffff0d] transition-all">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
                 <button onclick="toggleAiDrawer()" title="Close Copilot"
-                    class="p-2 rounded-xl text-[#a0a0a5] hover:text-white hover:bg-[#ffffff0d] transition-all">
+                    class="p-1.5 rounded-xl text-[#a0a0a5] hover:text-white hover:bg-[#ffffff0d] transition-all">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </button>
             </div>
         </div>
 
-        <!-- Chat Messages Container -->
-        <div id="aiMessagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar text-xs leading-relaxed">
-            <!-- Welcome message -->
-            <div class="flex items-start gap-3">
-                <div class="w-7 h-7 rounded-lg bg-[#6d5dfc26] text-[#c084fc] flex items-center justify-center shrink-0 mt-0.5">
-                    <i data-lucide="bot" class="w-3.5 h-3.5"></i>
-                </div>
-                <div class="bg-[#181820] border border-[#ffffff10] rounded-2xl rounded-tl-sm p-3.5 text-white/90 max-w-[85%] space-y-2">
-                    <p>👋 Hello Fayas! I'm your **Zoho Notes Pro AI Copilot** connected to Gemini Flash.</p>
-                    <p class="text-[#a0a0a5]">I can search your notebooks, create or update notes, execute code in the sandbox, inspect candidates, or answer coding questions.</p>
-                    
-                    <!-- Quick Prompt Pills -->
-                    <div class="pt-2 flex flex-wrap gap-1.5">
-                        <button onclick="sendQuickPrompt('Search my notes for Python')"
-                            class="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#ffffff0a] hover:bg-[#6d5dfc33] text-[#c084fc] border border-[#ffffff14] transition-all">
-                            🔍 Search notes for Python
-                        </button>
-                        <button onclick="sendQuickPrompt('Run this Python code: print([x*2 for x in range(5)])')"
-                            class="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#ffffff0a] hover:bg-[#6d5dfc33] text-[#c084fc] border border-[#ffffff14] transition-all">
-                            ⚡ Run sandbox code
-                        </button>
-                        <button onclick="sendQuickPrompt('Who used the most API requests today?')"
-                            class="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#ffffff0a] hover:bg-[#6d5dfc33] text-[#c084fc] border border-[#ffffff14] transition-all">
-                            📊 API usage leaderboard
-                        </button>
+        <!-- STRICT BYOK GATE OVERLAY: Shown whenever user has NOT added their own API key -->
+        <div id="aiKeyRequiredOverlay" class="{{#if hasGeminiKey}}hidden{{/if}} flex-1 flex flex-col items-center justify-center p-6 text-center bg-[#101014] z-20 overflow-y-auto">
+            <div class="w-12 h-12 rounded-2xl bg-[#ffbe3d1a] border border-[#ffbe3d33] text-[#ffbe3d] flex items-center justify-center mb-3 shadow-lg">
+                <i data-lucide="key-round" class="w-6 h-6"></i>
+            </div>
+            <h3 class="text-sm font-bold text-white mb-1.5">Add Your Gemini API Key</h3>
+            <p class="text-[11px] text-[#a0a0a5] leading-relaxed mb-4 max-w-xs">
+                Gemini Chat only works when you add your own personal **Google Gemini API Key**. Enter your key below or set it up in **Settings** to start chatting.
+            </p>
+
+            <form onsubmit="handleQuickOverlayKeySave(event)" class="w-full max-w-xs space-y-2.5">
+                <input type="password" id="overlayGeminiKeyInput" placeholder="Paste Gemini API Key (AIzaSy... or AQ....)" required
+                    class="w-full bg-[#0a0a0c] border border-[#ffffff22] px-3 py-2.5 rounded-xl text-xs font-mono text-white placeholder-[#a0a0a5]/60 outline-none focus:border-[#6d5dfc]">
+                <button type="submit" id="overlaySaveKeyBtn"
+                    class="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#6d5dfc] to-[#a855f7] hover:opacity-95 text-xs font-bold text-white shadow-lg shadow-[#6d5dfc40] transition-all">
+                    Save Key & Start Gemini Chat
+                </button>
+            </form>
+
+            <div class="mt-4 pt-3 border-t border-[#ffffff12] w-full max-w-xs flex flex-col gap-2 items-center">
+                <button type="button" onclick="openUserSettingsToGemini()"
+                    class="text-[11px] font-semibold text-[#c084fc] hover:underline flex items-center gap-1">
+                    <i data-lucide="settings" class="w-3.5 h-3.5"></i> Open Settings to Manage Key
+                </button>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank"
+                    class="text-[10px] text-[#a0a0a5] hover:text-white underline">
+                    Get a free API key from Google AI Studio &rarr;
+                </a>
+            </div>
+        </div>
+
+        <!-- Chat Interface Wrapper (Shown ONLY when user has added their own API key) -->
+        <div id="aiActiveChatWrapper" class="{{#unless hasGeminiKey}}hidden{{/unless}} flex-1 flex flex-col min-h-0">
+            <!-- Chat Messages Container -->
+            <div id="aiMessagesContainer" class="flex-1 overflow-y-auto p-4 space-y-3.5 custom-scrollbar text-xs leading-relaxed">
+                <!-- Welcome message -->
+                <div class="flex items-start gap-2.5">
+                    <div class="w-7 h-7 rounded-lg bg-[#6d5dfc26] text-[#c084fc] flex items-center justify-center shrink-0 mt-0.5">
+                        <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+                    </div>
+                    <div class="bg-[#181820] border border-[#ffffff10] rounded-2xl rounded-tl-sm p-3 text-white/90 max-w-[85%] space-y-2">
+                        <p>👋 Hello{{#if username}} <b>{{username}}</b>{{/if}}! Your personal **Gemini AI Copilot** is connected and ready.</p>
+                        <p class="text-[#a0a0a5]">I can search your notes, create or edit notes, run code in the sandbox, or help you debug.</p>
+                        
+                        <!-- Quick Prompt Pills -->
+                        <div class="pt-1.5 flex flex-wrap gap-1.5">
+                            <button onclick="sendQuickPrompt('Get my notes')"
+                                class="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#ffffff0a] hover:bg-[#6d5dfc33] text-[#c084fc] border border-[#ffffff14] transition-all">
+                                📒 Get my notes
+                            </button>
+                            <button onclick="sendQuickPrompt('Run this Python code: print([x*2 for x in range(5)])')"
+                                class="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#ffffff0a] hover:bg-[#6d5dfc33] text-[#c084fc] border border-[#ffffff14] transition-all">
+                                ⚡ Run sandbox code
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Tool Call Progress Banner (Hidden by default) -->
-        <div id="aiToolBanner" class="hidden px-4 py-2 bg-[#6d5dfc15] border-t border-[#6d5dfc33] flex items-center justify-between text-[11px] text-[#c084fc]">
-            <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-[#c084fc] animate-ping"></span>
-                <span id="aiToolStatusText">Calling tool...</span>
-            </div>
-            <i data-lucide="cpu" class="w-3.5 h-3.5 animate-spin"></i>
-        </div>
-
-        <!-- Chat Input Footer -->
-        <div class="p-3 border-t border-[#ffffff10] bg-[#16161c]/90 shrink-0">
-            <form id="aiChatForm" onsubmit="handleAiSubmit(event)" class="relative flex items-center">
-                <textarea id="aiChatInput" rows="1" placeholder="Ask AI Copilot or run tools..."
-                    class="w-full bg-[#0a0a0c] border border-[#ffffff1a] pl-3.5 pr-12 py-3 rounded-2xl text-xs text-white placeholder-[#a0a0a5] outline-none focus:border-[#6d5dfc] focus:ring-2 focus:ring-[#6d5dfc33] resize-none max-h-28 custom-scrollbar"
-                    onkeydown="if(event.key === 'Enter' && !event.shiftKey){ event.preventDefault(); handleAiSubmit(event); }"></textarea>
-                
-                <button type="submit" id="aiSendBtn"
-                    class="absolute right-2.5 w-8 h-8 rounded-xl bg-gradient-to-r from-[#6d5dfc] to-[#a855f7] text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md shadow-[#6d5dfc4d] disabled:opacity-50">
-                    <i data-lucide="send" id="aiSendIcon" class="w-3.5 h-3.5"></i>
-                </button>
-            </form>
-            <div class="mt-1.5 flex justify-between items-center px-1 text-[10px] text-[#a0a0a5]">
-                <span>Shift + Enter for new line</span>
-                <span>Free Tier: 15 req/min</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Gemini Key Config Modal (Inside Drawer) -->
-    <div id="aiKeyModal" class="fixed inset-0 z-[1100] hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div class="bg-[#151518] border border-[#ffffff1a] p-6 rounded-2xl w-full max-w-sm shadow-2xl scale-95 transition-all">
-            <div class="flex items-center justify-between mb-4">
+            <!-- Tool Call Progress Banner -->
+            <div id="aiToolBanner" class="hidden px-4 py-2 bg-[#6d5dfc15] border-t border-[#6d5dfc33] flex items-center justify-between text-[11px] text-[#c084fc] shrink-0">
                 <div class="flex items-center gap-2">
-                    <i data-lucide="key" class="w-4 h-4 text-[#c084fc]"></i>
-                    <h3 class="text-sm font-bold text-white">Gemini API Key</h3>
+                    <span class="w-2 h-2 rounded-full bg-[#c084fc] animate-ping"></span>
+                    <span id="aiToolStatusText">Calling tool...</span>
                 </div>
-                <button onclick="toggleAiKeyModal()" class="text-[#a0a0a5] hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+                <i data-lucide="cpu" class="w-3.5 h-3.5 animate-spin"></i>
             </div>
-            
-            <p class="text-[11px] text-[#a0a0a5] mb-3">
-                Your key is encrypted in MongoDB via **AES-256-GCM**. Get a free key with 1,500 requests/day at <a href="https://aistudio.google.com" target="_blank" class="text-[#c084fc] underline">Google AI Studio</a>.
-            </p>
 
-            <form onsubmit="handleSaveGeminiKey(event)" class="space-y-3">
-                <div>
-                    <label class="text-[10px] font-bold uppercase text-[#a0a0a5] tracking-wider block mb-1">API Key</label>
-                    <input type="password" id="modalGeminiKeyInput" placeholder="AIzaSy..." required
-                        class="w-full bg-[#0a0a0c] border border-[#ffffff1a] px-3 py-2.5 rounded-xl text-xs font-mono text-white outline-none focus:border-[#6d5dfc]">
-                </div>
-                <div class="flex gap-2 pt-2">
-                    <button type="button" onclick="toggleAiKeyModal()" class="flex-1 py-2 rounded-xl border border-[#ffffff1a] text-xs font-semibold text-[#a0a0a5] hover:text-white">Cancel</button>
-                    <button type="submit" id="saveKeyBtn" class="flex-1 py-2 rounded-xl bg-[#6d5dfc] hover:bg-[#5b4be0] text-xs font-bold text-white transition-all">Save Key</button>
-                </div>
-            </form>
+            <!-- Chat Input Footer -->
+            <div class="p-3 border-t border-[#ffffff10] bg-[#16161c]/90 shrink-0">
+                <form id="aiChatForm" onsubmit="handleAiSubmit(event)" class="relative flex items-center">
+                    <textarea id="aiChatInput" rows="1" placeholder="Ask Gemini about your notes or code..."
+                        class="w-full bg-[#0a0a0c] border border-[#ffffff1a] pl-3.5 pr-11 py-2.5 rounded-2xl text-xs text-white placeholder-[#a0a0a5] outline-none focus:border-[#6d5dfc] focus:ring-2 focus:ring-[#6d5dfc33] resize-none max-h-24 custom-scrollbar"
+                        onkeydown="if(event.key === 'Enter' && !event.shiftKey){ event.preventDefault(); handleAiSubmit(event); }"></textarea>
+                    
+                    <button type="submit" id="aiSendBtn"
+                        class="absolute right-2 w-7 h-7 rounded-xl bg-gradient-to-r from-[#6d5dfc] to-[#a855f7] text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md shadow-[#6d5dfc4d] disabled:opacity-50">
+                        <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 </div>
@@ -142,13 +145,102 @@
     let isAiDrawerOpen = false;
     let aiConversationHistory = [];
     let isStreaming = false;
+    window.hasUserGeminiKey = {{#if hasGeminiKey}}true{{else}}false{{/if}};
+    window.isAiCopilotEnabled = {{#if aiCopilotEnabled}}true{{else}}false{{/if}};
 
-    // Ensure icons are rendered on load
     document.addEventListener('DOMContentLoaded', () => {
         if (window.lucide && typeof lucide.createIcons === 'function') {
             lucide.createIcons();
         }
+        // Sync fresh status from backend
+        syncAiStatusFromServer();
     });
+
+    async function syncAiStatusFromServer() {
+        try {
+            const res = await fetch('/api/ai/status');
+            if (!res.ok) return;
+            const data = await res.json();
+            updateAllAiUiStates(data.enabled, data.hasKey, data.maskedKey);
+        } catch (_) {}
+    }
+
+    function updateAllAiUiStates(enabled, hasKey, maskedKey) {
+        window.isAiCopilotEnabled = Boolean(enabled);
+        window.hasUserGeminiKey = Boolean(hasKey);
+
+        const triggerBtn = document.getElementById('aiTriggerBtn');
+        const triggerDot = document.getElementById('aiTriggerStatusDot');
+        const drawer = document.getElementById('aiChatDrawer');
+        const keyOverlay = document.getElementById('aiKeyRequiredOverlay');
+        const activeChatWrapper = document.getElementById('aiActiveChatWrapper');
+        const headerBadge = document.getElementById('aiHeaderKeyBadge');
+
+        // 1. Floating button visibility (ONLY shown when user turned ON in Settings)
+        if (triggerBtn) {
+            if (window.isAiCopilotEnabled) {
+                triggerBtn.classList.remove('hidden');
+            } else {
+                triggerBtn.classList.add('hidden');
+                // Also close drawer if open
+                if (isAiDrawerOpen && drawer) {
+                    isAiDrawerOpen = false;
+                    drawer.classList.remove('scale-100', 'opacity-100', 'pointer-events-auto');
+                    drawer.classList.add('scale-95', 'opacity-0', 'pointer-events-none');
+                }
+            }
+        }
+
+        // 2. Key status indicator inside drawer & trigger dot
+        if (triggerDot) {
+            triggerDot.className = `absolute -top-1 -right-1 w-2 h-2 rounded-full ${window.hasUserGeminiKey ? 'bg-[#30ff6a]' : 'bg-[#ffbe3d]'} ring-2 ring-[#0a0a0c]`;
+        }
+        if (headerBadge) {
+            headerBadge.textContent = window.hasUserGeminiKey ? 'Key Active' : 'Key Required';
+            headerBadge.className = `px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${
+                window.hasUserGeminiKey
+                    ? 'bg-[#30ff6a1a] text-[#30ff6a] border border-[#30ff6a33]'
+                    : 'bg-[#ffbe3d1a] text-[#ffbe3d] border border-[#ffbe3d33]'
+            }`;
+        }
+
+        // 3. Enforce BYOK Gate inside drawer: if no personal API key, lock chat & ask for key
+        if (keyOverlay && activeChatWrapper) {
+            if (window.hasUserGeminiKey) {
+                keyOverlay.classList.add('hidden');
+                activeChatWrapper.classList.remove('hidden');
+            } else {
+                keyOverlay.classList.remove('hidden');
+                activeChatWrapper.classList.add('hidden');
+            }
+        }
+
+        // 4. Sync Settings Modal controls if present on page
+        const settingsSwitch = document.getElementById('setting-ai-copilot-switch');
+        if (settingsSwitch) settingsSwitch.checked = window.isAiCopilotEnabled;
+
+        const settingsBadge = document.getElementById('settings-gemini-status-badge');
+        if (settingsBadge) {
+            settingsBadge.textContent = window.hasUserGeminiKey ? 'Key Active' : 'API Key Required';
+            settingsBadge.style.background = window.hasUserGeminiKey ? 'rgba(48, 255, 106, 0.15)' : 'rgba(255, 190, 61, 0.15)';
+            settingsBadge.style.color = window.hasUserGeminiKey ? '#30ff6a' : '#ffbe3d';
+        }
+
+        const savedView = document.getElementById('settings-gemini-saved-view');
+        const inputView = document.getElementById('settings-gemini-input-view');
+        const maskedInput = document.getElementById('settings-gemini-masked-display');
+        if (maskedInput && maskedKey) maskedInput.value = maskedKey;
+
+        if (savedView && inputView) {
+            if (window.hasUserGeminiKey) {
+                savedView.classList.remove('hidden');
+                inputView.classList.add('hidden');
+            } else {
+                savedView.classList.add('hidden');
+                inputView.classList.remove('hidden');
+            }
+        }
+    }
 
     function toggleAiDrawer() {
         const drawer = document.getElementById('aiChatDrawer');
@@ -161,18 +253,205 @@
             if (window.lucide && typeof lucide.createIcons === 'function') {
                 lucide.createIcons();
             }
-            setTimeout(() => document.getElementById('aiChatInput')?.focus(), 150);
+            if (window.hasUserGeminiKey) {
+                setTimeout(() => document.getElementById('aiChatInput')?.focus(), 150);
+            } else {
+                setTimeout(() => document.getElementById('overlayGeminiKeyInput')?.focus(), 150);
+            }
         } else {
             drawer.classList.remove('scale-100', 'opacity-100', 'pointer-events-auto');
             drawer.classList.add('scale-95', 'opacity-0', 'pointer-events-none');
         }
     }
 
-    function toggleAiKeyModal() {
-        const modal = document.getElementById('aiKeyModal');
-        if (!modal) return;
-        modal.classList.toggle('hidden');
-        modal.classList.toggle('flex');
+    // Open the main User Settings modal directly to the Gemini API key section
+    function openUserSettingsToGemini() {
+        if (isAiDrawerOpen) toggleAiDrawer();
+        const navSettingsBtn = document.getElementById('nav-settings');
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalSettings = document.getElementById('modal-settings');
+
+        if (navSettingsBtn) {
+            navSettingsBtn.click();
+        } else if (modalOverlay && modalSettings) {
+            modalOverlay.classList.remove('hidden');
+            modalSettings.classList.remove('hidden');
+        }
+
+        setTimeout(() => {
+            const geminiSec = document.getElementById('settings-gemini-section');
+            if (geminiSec) {
+                geminiSec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const keyInput = document.getElementById('settings-gemini-key-input');
+                if (keyInput && !keyInput.classList.contains('hidden')) keyInput.focus();
+            }
+        }, 200);
+    }
+
+    // Settings Modal: Toggle AI Copilot ON / OFF
+    window.handleSettingsAiToggle = async function(checked) {
+        const feedbackEl = document.getElementById('settings-gemini-feedback');
+        try {
+            const res = await fetch('/api/ai/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: Boolean(checked) })
+            });
+            const data = await res.json();
+            if (data.success) {
+                updateAllAiUiStates(data.enabled, data.hasKey);
+                if (feedbackEl) {
+                    if (data.enabled && !data.hasKey) {
+                        feedbackEl.textContent = '⚠️ Please add your Gemini API key above to activate Gemini Chat.';
+                        feedbackEl.style.color = '#ffbe3d';
+                        document.getElementById('settings-gemini-key-input')?.focus();
+                    } else {
+                        feedbackEl.textContent = data.enabled ? '✓ AI Copilot enabled in workspace!' : 'AI Copilot hidden from workspace.';
+                        feedbackEl.style.color = data.enabled ? '#30ff6a' : 'var(--text-dim)';
+                    }
+                }
+            }
+        } catch (err) {
+            if (feedbackEl) {
+                feedbackEl.textContent = 'Failed to update setting';
+                feedbackEl.style.color = '#ff5c5c';
+            }
+        }
+    };
+
+    // Settings Modal: Show / Hide Key Input when updating existing key
+    window.showSettingsGeminiKeyInput = function(show) {
+        const savedView = document.getElementById('settings-gemini-saved-view');
+        const inputView = document.getElementById('settings-gemini-input-view');
+        const cancelBtn = document.getElementById('btn-cancel-settings-gemini-key');
+        if (!savedView || !inputView) return;
+
+        if (show) {
+            savedView.classList.add('hidden');
+            inputView.classList.remove('hidden');
+            if (cancelBtn && window.hasUserGeminiKey) cancelBtn.classList.remove('hidden');
+            setTimeout(() => document.getElementById('settings-gemini-key-input')?.focus(), 50);
+        } else {
+            if (window.hasUserGeminiKey) {
+                savedView.classList.remove('hidden');
+                inputView.classList.add('hidden');
+            }
+        }
+    };
+
+    // Settings Modal: Save User's Personal Gemini API Key
+    window.handleSaveSettingsGeminiKey = async function() {
+        const input = document.getElementById('settings-gemini-key-input');
+        const btn = document.getElementById('btn-save-settings-gemini-key');
+        const feedbackEl = document.getElementById('settings-gemini-feedback');
+        if (!input) return;
+
+        const key = input.value.trim();
+        if (!key || key.length < 15) {
+            if (feedbackEl) {
+                feedbackEl.textContent = '⚠️ Please enter a valid Gemini API key.';
+                feedbackEl.style.color = '#ffbe3d';
+            }
+            return;
+        }
+
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+        }
+
+        try {
+            const res = await fetch('/api/ai/key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ apiKey: key })
+            });
+            const data = await res.json();
+            if (data.success) {
+                input.value = '';
+                updateAllAiUiStates(true, true, data.maskedKey);
+                if (feedbackEl) {
+                    feedbackEl.textContent = '✓ API Key saved & Gemini Chat activated!';
+                    feedbackEl.style.color = '#30ff6a';
+                }
+            } else {
+                if (feedbackEl) {
+                    feedbackEl.textContent = '❌ ' + (data.error || 'Failed to save key');
+                    feedbackEl.style.color = '#ff5c5c';
+                }
+            }
+        } catch (err) {
+            if (feedbackEl) {
+                feedbackEl.textContent = '❌ Error: ' + err.message;
+                feedbackEl.style.color = '#ff5c5c';
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Save Key';
+            }
+        }
+    };
+
+    // Settings Modal: Remove User's Personal Gemini API Key
+    window.handleRemoveSettingsGeminiKey = async function() {
+        if (!confirm('Remove your saved Gemini API key? Gemini Chat will stop working until you add a key again.')) return;
+        const feedbackEl = document.getElementById('settings-gemini-feedback');
+        try {
+            const res = await fetch('/api/ai/key', { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                updateAllAiUiStates(window.isAiCopilotEnabled, false, null);
+                if (feedbackEl) {
+                    feedbackEl.textContent = 'API key removed. Add a key to use Gemini Chat.';
+                    feedbackEl.style.color = '#ffbe3d';
+                }
+            }
+        } catch (err) {
+            alert('Error removing key: ' + err.message);
+        }
+    };
+
+    // Drawer Overlay: Quick Save API Key directly from the chat drawer gate
+    async function handleQuickOverlayKeySave(e) {
+        e.preventDefault();
+        const input = document.getElementById('overlayGeminiKeyInput');
+        const btn = document.getElementById('overlaySaveKeyBtn');
+        if (!input) return;
+
+        const key = input.value.trim();
+        if (!key || key.length < 15) {
+            alert('Please enter a valid Google Gemini API key.');
+            return;
+        }
+
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Activating...';
+        }
+
+        try {
+            const res = await fetch('/api/ai/key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ apiKey: key })
+            });
+            const data = await res.json();
+            if (data.success) {
+                input.value = '';
+                updateAllAiUiStates(true, true, data.maskedKey);
+                setTimeout(() => document.getElementById('aiChatInput')?.focus(), 100);
+            } else {
+                alert(data.error || 'Failed to save API key');
+            }
+        } catch (err) {
+            alert('Error saving key: ' + err.message);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Save Key & Start Gemini Chat';
+            }
+        }
     }
 
     function clearAiChat() {
@@ -180,17 +459,17 @@
         const container = document.getElementById('aiMessagesContainer');
         if (container) {
             container.innerHTML = `
-                <div class="flex items-start gap-3">
+                <div class="flex items-start gap-2.5">
                     <div class="w-7 h-7 rounded-lg bg-[#6d5dfc26] text-[#c084fc] flex items-center justify-center shrink-0 mt-0.5">
                         <i data-lucide="bot" class="w-3.5 h-3.5"></i>
                     </div>
-                    <div class="bg-[#181820] border border-[#ffffff10] rounded-2xl rounded-tl-sm p-3.5 text-white/90 max-w-[85%] space-y-1">
-                        <p class="font-semibold text-white">Chat cleared.</p>
+                    <div class="bg-[#181820] border border-[#ffffff10] rounded-2xl rounded-tl-sm p-3 text-white/90 max-w-[85%] space-y-1">
+                        <p class="font-semibold text-white">Chat history cleared.</p>
                         <p class="text-[#a0a0a5]">How can I help you with your notes or code?</p>
                     </div>
                 </div>
             `;
-            lucide.createIcons();
+            if (window.lucide) lucide.createIcons();
         }
     }
 
@@ -202,41 +481,15 @@
         }
     }
 
-    async function handleSaveGeminiKey(e) {
-        e.preventDefault();
-        const input = document.getElementById('modalGeminiKeyInput');
-        const saveBtn = document.getElementById('saveKeyBtn');
-        const key = input.value.trim();
-        if (!key) return;
-
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving...';
-
-        try {
-            const res = await fetch('/api/ai/key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ apiKey: key })
-            });
-            const data = await res.json();
-            if (data.success) {
-                alert('Gemini API Key saved and encrypted successfully!');
-                toggleAiKeyModal();
-                input.value = '';
-            } else {
-                alert('Failed: ' + (data.error || 'Unknown error'));
-            }
-        } catch (err) {
-            alert('Error saving key: ' + err.message);
-        } finally {
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save Key';
-        }
-    }
-
     async function handleAiSubmit(e) {
         if (e) e.preventDefault();
         if (isStreaming) return;
+
+        // Strict BYOK Check before sending
+        if (!window.hasUserGeminiKey) {
+            updateAllAiUiStates(window.isAiCopilotEnabled, false);
+            return;
+        }
 
         const input = document.getElementById('aiChatInput');
         const message = input.value.trim();
@@ -245,10 +498,8 @@
         input.value = '';
         input.style.height = 'auto';
 
-        // 1. Append User Bubble
         appendUserMessage(message);
 
-        // 2. Prepare Assistant Bubble
         const assistantBubble = appendAssistantPlaceholder();
         const toolBanner = document.getElementById('aiToolBanner');
         const toolStatusText = document.getElementById('aiToolStatusText');
@@ -271,6 +522,10 @@
 
             if (!response.ok) {
                 const errData = await response.json().catch(() => ({}));
+                if (errData.code === 'API_KEY_REQUIRED' || response.status === 403) {
+                    updateAllAiUiStates(window.isAiCopilotEnabled, false);
+                    throw new Error('Please add your own Gemini API key in Settings to use Gemini Chat.');
+                }
                 throw new Error(errData.error || `HTTP ${response.status}`);
             }
 
@@ -284,7 +539,7 @@
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n\n');
-                buffer = lines.pop(); // keep partial chunk
+                buffer = lines.pop();
 
                 for (const block of lines) {
                     if (!block.trim()) continue;
@@ -316,13 +571,15 @@
                         if (payload.fullText) accumulatedText = payload.fullText;
                         updateAssistantBubble(assistantBubble, accumulatedText);
                     } else if (event === 'error') {
+                        if (payload.code === 'API_KEY_REQUIRED') {
+                            updateAllAiUiStates(window.isAiCopilotEnabled, false);
+                        }
                         accumulatedText += `\n\n❌ **Error:** ${payload.error}`;
                         updateAssistantBubble(assistantBubble, accumulatedText);
                     }
                 }
             }
 
-            // Save to local session conversation history
             aiConversationHistory.push({ role: 'user', text: message });
             aiConversationHistory.push({ role: 'model', text: accumulatedText });
 
@@ -356,7 +613,7 @@
         if (!container) return null;
 
         const wrapper = document.createElement('div');
-        wrapper.className = 'flex items-start gap-3';
+        wrapper.className = 'flex items-start gap-2.5';
         wrapper.innerHTML = `
             <div class="w-7 h-7 rounded-lg bg-[#6d5dfc26] text-[#c084fc] flex items-center justify-center shrink-0 mt-0.5">
                 <i data-lucide="bot" class="w-3.5 h-3.5"></i>
@@ -366,7 +623,7 @@
             </div>
         `;
         container.appendChild(wrapper);
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
         scrollAiToBottom();
         return wrapper.querySelector('.ai-bubble-content');
     }

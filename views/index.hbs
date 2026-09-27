@@ -453,6 +453,77 @@
                         default.</p>
                 </div>
 
+                <!-- Gemini AI Copilot (Workspace Chat & Personal API Key) Section -->
+                <div id="settings-gemini-section" style="margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--border-color); text-align: left;">
+                    <div class="theme-toggle-row" style="margin-bottom: 12px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, rgba(109, 93, 252, 0.2), rgba(236, 72, 153, 0.2)); display: flex; align-items: center; justify-content: center; color: #c084fc; flex-shrink: 0;">
+                                <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
+                            </div>
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 14px; font-weight: 700; color: var(--text-main);">Gemini AI Copilot</span>
+                                    <span id="settings-gemini-status-badge" style="font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; {{#if hasGeminiKey}}background: rgba(48, 255, 106, 0.15); color: #30ff6a;{{else}}background: rgba(255, 190, 61, 0.15); color: #ffbe3d;{{/if}}">
+                                        {{#if hasGeminiKey}}Key Active{{else}}API Key Required{{/if}}
+                                    </span>
+                                </div>
+                                <p style="font-size: 11px; color: var(--text-dim); margin: 2px 0 0 0;">Show AI Copilot in workspace (only works with your own Gemini API key)</p>
+                            </div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="setting-ai-copilot-switch" {{#if aiCopilotEnabled}}checked{{/if}} onchange="window.handleSettingsAiToggle && window.handleSettingsAiToggle(this.checked)">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <!-- Personal Gemini API Key Configuration Card -->
+                    <div id="settings-gemini-key-card" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px;">
+                        <!-- View 1: Key already saved -->
+                        <div id="settings-gemini-saved-view" class="{{#unless hasGeminiKey}}hidden{{/unless}}">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <span style="font-size: 11px; text-transform: uppercase; color: var(--text-dim); font-weight: 600;">Your Personal Gemini API Key</span>
+                                <span style="font-size: 10px; color: #30ff6a; font-weight: 600;">AES-256 Encrypted</span>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="text" id="settings-gemini-masked-display" readonly value="{{#if geminiKeyMasked}}{{geminiKeyMasked}}{{else}}••••••••{{/if}}"
+                                    style="flex: 1; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-main); padding: 8px 12px; border-radius: 8px; font-size: 12px; font-family: 'JetBrains Mono', monospace; outline: none;">
+                                <button type="button" onclick="window.showSettingsGeminiKeyInput && window.showSettingsGeminiKeyInput(true)" class="btn-secondary" style="padding: 8px 12px; font-size: 11px; white-space: nowrap;">
+                                    Change Key
+                                </button>
+                                <button type="button" onclick="window.handleRemoveSettingsGeminiKey && window.handleRemoveSettingsGeminiKey()" style="background: rgba(255, 59, 48, 0.12); border: 1px solid rgba(255, 59, 48, 0.3); color: #ff5c5c; padding: 8px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+                                    Remove
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- View 2: No key saved OR changing key -->
+                        <div id="settings-gemini-input-view" class="{{#if hasGeminiKey}}hidden{{/if}}">
+                            <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-main); margin-bottom: 4px;">
+                                Setup Your Gemini API Key
+                            </label>
+                            <p style="font-size: 11px; color: var(--text-dim); margin: 0 0 10px 0;">
+                                Enter your own Google Gemini API key to create and activate your personal Gemini chat. Without your key, AI Copilot will ask you to add one.
+                            </p>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="password" id="settings-gemini-key-input" placeholder="Paste your Gemini API key (AIzaSy... or AQ....)"
+                                    style="flex: 1; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-main); padding: 9px 12px; border-radius: 8px; font-size: 12px; font-family: 'JetBrains Mono', monospace; outline: none;">
+                                <button type="button" id="btn-save-settings-gemini-key" onclick="window.handleSaveSettingsGeminiKey && window.handleSaveSettingsGeminiKey()" class="btn-primary" style="padding: 9px 14px; font-size: 12px; white-space: nowrap; width: auto;">
+                                    Save Key
+                                </button>
+                                <button type="button" id="btn-cancel-settings-gemini-key" onclick="window.showSettingsGeminiKeyInput && window.showSettingsGeminiKeyInput(false)" class="btn-secondary hidden" style="padding: 9px 10px; font-size: 11px; white-space: nowrap;">
+                                    Cancel
+                                </button>
+                            </div>
+                            <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px;">
+                                <a href="https://aistudio.google.com/app/apikey" target="_blank" style="font-size: 11px; color: #c084fc; text-decoration: underline; font-weight: 600;">
+                                    Get a free Gemini API key from Google AI Studio &rarr;
+                                </a>
+                                <span id="settings-gemini-feedback" style="font-size: 11px; font-weight: 600;"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- AI Agent & MCP Access Section -->
                 <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--border-color); text-align: left;">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">

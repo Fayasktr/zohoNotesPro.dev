@@ -700,7 +700,10 @@ app.get('/', isAuthenticated, (req, res) => {
         userEmail: currentUserEmail,
         initialNoteId: req.query.noteId || '',
         isAdmin: req.session.role === 'admin' || (req.user && req.user.role === 'admin'),
-        isAiAllowed: (req.session.role === 'admin' || (req.user && req.user.role === 'admin') || (currentUserEmail && currentUserEmail.toLowerCase() === 'fayaskpktr@gmail.com')),
+        isAiAllowed: true,
+        aiCopilotEnabled: Boolean(res.locals.currentUser?.settings?.aiCopilotEnabled),
+        hasGeminiKey: Boolean(res.locals.currentUser?.geminiApiKey?.encrypted),
+        geminiKeyMasked: res.locals.currentUser?.geminiKeyMasked || '',
         defaultLanguage: res.locals.currentUser?.settings?.defaultLanguage || 'javascript',
         firebaseConfig: {
             apiKey: process.env.FIREBASE_API_KEY || '',

@@ -23,7 +23,7 @@ async function seed() {
     for (const email of targets) {
         const result = await User.updateOne(
             { email },
-            { $set: { geminiApiKey: encrypted, geminiKeyMasked: masked, geminiKeyUpdatedAt: now } }
+            { $set: { geminiApiKey: encrypted, geminiKeyMasked: masked, geminiKeyUpdatedAt: now, 'settings.aiCopilotEnabled': true } }
         );
         console.log(email, '- matched:', result.matchedCount, 'modified:', result.modifiedCount);
     }

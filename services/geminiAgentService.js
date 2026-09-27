@@ -16,17 +16,16 @@ async function streamGeminiChat({
     onToolResult = () => {},
     modelName = DEFAULT_MODEL
 }) {
-    // 1. Resolve decrypted API key
+    // 1. Resolve decrypted API key strictly from the user's own saved key (BYOK only)
     let apiKey = null;
-    if (user && user.geminiApiKey) {
+    if (user && user.geminiApiKey && user.geminiApiKey.encrypted) {
         apiKey = decrypt(user.geminiApiKey);
-    }
-    if (!apiKey) {
-        apiKey = process.env.GEMINI_API_KEY;
     }
 
     if (!apiKey) {
-        throw new Error('Gemini API key is not configured. Please add your key in User Settings.');
+        const err = new Error('Please add your own Gemini API key in Settings to use Gemini Chat.');
+        err.code = 'API_KEY_REQUIRED';
+        throw err;
     }
 
     const isAdmin = user ? (user.role === 'admin' || (user.email && user.email.toLowerCase() === 'fayaskpktr@gmail.com')) : false;
@@ -53,11 +52,12 @@ async function streamGeminiChat({
         parts: [{ text: message }]
     });
 
+    const displayUser = user?.username || 'User';
     const systemInstruction = {
         role: 'system',
         parts: [
             {
-                text: `You are Zoho Notes Pro AI, an intelligent coding assistant, researcher, and pair-programmer built specifically for Zoho Notes Pro and Fayas KP.
+                text: `You are Zoho Notes Pro AI, an intelligent coding assistant, researcher, and pair-programmer assisting ${displayUser}.
 You have direct access to Zoho Notes tools:
 - search_notes: search notes by keywords
 - list_notes: list notes by folder or starred status

@@ -53,7 +53,10 @@ exports.getDashboard = async (req, res) => {
             unreadFeedbackCount: unreadFeedbackCount,
             isLoggingPaused: loggingConfig.value,
             totalMcpRequestsToday,
-            isAiAllowed: true
+            isAiAllowed: true,
+            aiCopilotEnabled: Boolean(adminUser?.settings?.aiCopilotEnabled),
+            hasGeminiKey: Boolean(adminUser?.geminiApiKey?.encrypted),
+            geminiKeyMasked: adminUser?.geminiKeyMasked || ''
         });
     } catch (err) {
         console.error('Dashboard error:', err);
@@ -346,7 +349,10 @@ exports.getApiUsagePage = async (req, res) => {
             totalKeysIssued,
             totalUsersCount: users.length,
             users: enrichedUsers,
-            isAiAllowed: true
+            isAiAllowed: true,
+            aiCopilotEnabled: Boolean(adminUser?.settings?.aiCopilotEnabled),
+            hasGeminiKey: Boolean(adminUser?.geminiApiKey?.encrypted),
+            geminiKeyMasked: adminUser?.geminiKeyMasked || ''
         });
     } catch (err) {
         console.error('Error fetching API usage page:', err);
