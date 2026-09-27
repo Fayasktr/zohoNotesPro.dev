@@ -100,11 +100,15 @@ Provide direct, concise, and helpful responses formatted in clean GitHub-flavore
         let lastError = null;
 
         for (const currentModel of uniqueModels) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/${currentModel}:generateContent?key=${apiKey}`;
+            // Support both AQ.* and AIzaSy* key formats via X-goog-api-key header
+            const url = `https://generativelanguage.googleapis.com/v1beta/${currentModel}:generateContent`;
             try {
                 response = await fetch(url, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-goog-api-key': apiKey
+                    },
                     body: JSON.stringify(requestBody)
                 });
                 data = await response.json();
