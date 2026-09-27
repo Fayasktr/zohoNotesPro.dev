@@ -35,6 +35,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const gameRoutes = require('./routes/gameRoutes');
 const syncRoutes = require('./routes/syncRoutes');
 const mcpRoutes = require('./routes/mcpRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 const cronService = require('./services/cronService');
 
 // Start Cron Jobs
@@ -396,6 +397,7 @@ app.use('/admin', adminRoutes);
 app.use('/', gameRoutes);
 app.use('/api/sync', isAuthenticated, syncRoutes);
 app.use('/api/backup', isAuthenticated, syncRoutes);
+app.use('/api/ai', aiRoutes);
 
 // SEO: Dynamic XML Sitemap Route
 app.get('/sitemap.xml', (req, res) => {
@@ -698,6 +700,7 @@ app.get('/', isAuthenticated, (req, res) => {
         userEmail: currentUserEmail,
         initialNoteId: req.query.noteId || '',
         isAdmin: req.session.role === 'admin' || (req.user && req.user.role === 'admin'),
+        isAiAllowed: (req.session.role === 'admin' || (req.user && req.user.role === 'admin') || (currentUserEmail && currentUserEmail.toLowerCase() === 'fayaskpktr@gmail.com')),
         defaultLanguage: res.locals.currentUser?.settings?.defaultLanguage || 'javascript',
         firebaseConfig: {
             apiKey: process.env.FIREBASE_API_KEY || '',

@@ -19,6 +19,13 @@ const userSchema = new mongoose.Schema({
         dailyCount: { type: Number, default: 0 },
         lastResetDate: { type: String, default: () => new Date().toISOString().slice(0, 10) }
     },
+    geminiApiKey: {
+        encrypted: { type: String },
+        iv: { type: String },
+        tag: { type: String }
+    },
+    geminiKeyMasked: { type: String },
+    geminiKeyUpdatedAt: { type: Date },
     lastLogin: Date,
     lastLogout: Date,
     lastActivity: Date,

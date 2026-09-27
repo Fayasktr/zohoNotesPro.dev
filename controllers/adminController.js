@@ -52,7 +52,8 @@ exports.getDashboard = async (req, res) => {
             users: enrichedUsers,
             unreadFeedbackCount: unreadFeedbackCount,
             isLoggingPaused: loggingConfig.value,
-            totalMcpRequestsToday
+            totalMcpRequestsToday,
+            isAiAllowed: true
         });
     } catch (err) {
         console.error('Dashboard error:', err);
@@ -344,7 +345,8 @@ exports.getApiUsagePage = async (req, res) => {
             limitReachedCount,
             totalKeysIssued,
             totalUsersCount: users.length,
-            users: enrichedUsers
+            users: enrichedUsers,
+            isAiAllowed: true
         });
     } catch (err) {
         console.error('Error fetching API usage page:', err);

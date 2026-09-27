@@ -1,0 +1,401 @@
+<!-- Zoho Notes Pro AI Copilot Assistant Partial -->
+{{#if isAiAllowed}}
+<div id="aiCopilotRoot">
+    <!-- Floating Trigger Button -->
+    <button id="aiTriggerBtn" onclick="toggleAiDrawer()"
+        class="fixed bottom-6 right-6 z-[999] flex items-center gap-2.5 bg-gradient-to-r from-[#6d5dfc] via-[#8b5cf6] to-[#ec4899] text-white px-4 py-3 rounded-2xl shadow-2xl shadow-[#6d5dfc66] hover:scale-105 active:scale-95 transition-all group">
+        <div class="relative flex items-center justify-center">
+            <i data-lucide="bot" class="w-5 h-5 text-white"></i>
+            <span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#30ff6a] ring-2 ring-[#0a0a0c] animate-pulse"></span>
+        </div>
+        <span class="text-xs font-bold tracking-wide hidden sm:inline">AI Copilot</span>
+        <span class="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full font-mono font-semibold">Gemini</span>
+    </button>
+
+    <!-- Floating Chat Window -->
+    <div id="aiChatDrawer"
+        class="fixed bottom-20 right-6 z-[1000] w-[440px] max-w-[calc(100vw-32px)] h-[620px] max-h-[calc(100vh-100px)] flex flex-col rounded-3xl border border-[#ffffff1a] bg-[#101014]/95 backdrop-blur-2xl shadow-2xl overflow-hidden transition-all duration-300 transform scale-95 opacity-0 pointer-events-none">
+        
+        <!-- Drawer Header -->
+        <div class="p-4 border-b border-[#ffffff10] bg-[#16161c]/80 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#6d5dfc] to-[#a855f7] flex items-center justify-center text-white shadow-md shadow-[#6d5dfc33]">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-white">AI Copilot</span>
+                        <span class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#30ff6a1a] text-[#30ff6a] border border-[#30ff6a33]">
+                            Flash · 1.5K RPD
+                        </span>
+                    </div>
+                    <p class="text-[10px] text-[#a0a0a5]">Direct access to notes, sandbox & tools</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1">
+                <button onclick="toggleAiKeyModal()" title="Gemini API Key Settings"
+                    class="p-2 rounded-xl text-[#a0a0a5] hover:text-white hover:bg-[#ffffff0d] transition-all">
+                    <i data-lucide="key" class="w-4 h-4"></i>
+                </button>
+                <button onclick="clearAiChat()" title="Clear Chat History"
+                    class="p-2 rounded-xl text-[#a0a0a5] hover:text-[#ff3b30] hover:bg-[#ffffff0d] transition-all">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+                <button onclick="toggleAiDrawer()" title="Close Copilot"
+                    class="p-2 rounded-xl text-[#a0a0a5] hover:text-white hover:bg-[#ffffff0d] transition-all">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat Messages Container -->
+        <div id="aiMessagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar text-xs leading-relaxed">
+            <!-- Welcome message -->
+            <div class="flex items-start gap-3">
+                <div class="w-7 h-7 rounded-lg bg-[#6d5dfc26] text-[#c084fc] flex items-center justify-center shrink-0 mt-0.5">
+                    <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+                </div>
+                <div class="bg-[#181820] border border-[#ffffff10] rounded-2xl rounded-tl-sm p-3.5 text-white/90 max-w-[85%] space-y-2">
+                    <p>👋 Hello Fayas! I'm your **Zoho Notes Pro AI Copilot** connected to Gemini Flash.</p>
+                    <p class="text-[#a0a0a5]">I can search your notebooks, create or update notes, execute code in the sandbox, inspect candidates, or answer coding questions.</p>
+                    
+                    <!-- Quick Prompt Pills -->
+                    <div class="pt-2 flex flex-wrap gap-1.5">
+                        <button onclick="sendQuickPrompt('Search my notes for Python')"
+                            class="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#ffffff0a] hover:bg-[#6d5dfc33] text-[#c084fc] border border-[#ffffff14] transition-all">
+                            🔍 Search notes for Python
+                        </button>
+                        <button onclick="sendQuickPrompt('Run this Python code: print([x*2 for x in range(5)])')"
+                            class="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#ffffff0a] hover:bg-[#6d5dfc33] text-[#c084fc] border border-[#ffffff14] transition-all">
+                            ⚡ Run sandbox code
+                        </button>
+                        <button onclick="sendQuickPrompt('Who used the most API requests today?')"
+                            class="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#ffffff0a] hover:bg-[#6d5dfc33] text-[#c084fc] border border-[#ffffff14] transition-all">
+                            📊 API usage leaderboard
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tool Call Progress Banner (Hidden by default) -->
+        <div id="aiToolBanner" class="hidden px-4 py-2 bg-[#6d5dfc15] border-t border-[#6d5dfc33] flex items-center justify-between text-[11px] text-[#c084fc]">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-[#c084fc] animate-ping"></span>
+                <span id="aiToolStatusText">Calling tool...</span>
+            </div>
+            <i data-lucide="cpu" class="w-3.5 h-3.5 animate-spin"></i>
+        </div>
+
+        <!-- Chat Input Footer -->
+        <div class="p-3 border-t border-[#ffffff10] bg-[#16161c]/90 shrink-0">
+            <form id="aiChatForm" onsubmit="handleAiSubmit(event)" class="relative flex items-center">
+                <textarea id="aiChatInput" rows="1" placeholder="Ask AI Copilot or run tools..."
+                    class="w-full bg-[#0a0a0c] border border-[#ffffff1a] pl-3.5 pr-12 py-3 rounded-2xl text-xs text-white placeholder-[#a0a0a5] outline-none focus:border-[#6d5dfc] focus:ring-2 focus:ring-[#6d5dfc33] resize-none max-h-28 custom-scrollbar"
+                    onkeydown="if(event.key === 'Enter' && !event.shiftKey){ event.preventDefault(); handleAiSubmit(event); }"></textarea>
+                
+                <button type="submit" id="aiSendBtn"
+                    class="absolute right-2.5 w-8 h-8 rounded-xl bg-gradient-to-r from-[#6d5dfc] to-[#a855f7] text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md shadow-[#6d5dfc4d] disabled:opacity-50">
+                    <i data-lucide="send" id="aiSendIcon" class="w-3.5 h-3.5"></i>
+                </button>
+            </form>
+            <div class="mt-1.5 flex justify-between items-center px-1 text-[10px] text-[#a0a0a5]">
+                <span>Shift + Enter for new line</span>
+                <span>Free Tier: 15 req/min</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gemini Key Config Modal (Inside Drawer) -->
+    <div id="aiKeyModal" class="fixed inset-0 z-[1100] hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div class="bg-[#151518] border border-[#ffffff1a] p-6 rounded-2xl w-full max-w-sm shadow-2xl scale-95 transition-all">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="key" class="w-4 h-4 text-[#c084fc]"></i>
+                    <h3 class="text-sm font-bold text-white">Gemini API Key</h3>
+                </div>
+                <button onclick="toggleAiKeyModal()" class="text-[#a0a0a5] hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            
+            <p class="text-[11px] text-[#a0a0a5] mb-3">
+                Your key is encrypted in MongoDB via **AES-256-GCM**. Get a free key with 1,500 requests/day at <a href="https://aistudio.google.com" target="_blank" class="text-[#c084fc] underline">Google AI Studio</a>.
+            </p>
+
+            <form onsubmit="handleSaveGeminiKey(event)" class="space-y-3">
+                <div>
+                    <label class="text-[10px] font-bold uppercase text-[#a0a0a5] tracking-wider block mb-1">API Key</label>
+                    <input type="password" id="modalGeminiKeyInput" placeholder="AIzaSy..." required
+                        class="w-full bg-[#0a0a0c] border border-[#ffffff1a] px-3 py-2.5 rounded-xl text-xs font-mono text-white outline-none focus:border-[#6d5dfc]">
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="toggleAiKeyModal()" class="flex-1 py-2 rounded-xl border border-[#ffffff1a] text-xs font-semibold text-[#a0a0a5] hover:text-white">Cancel</button>
+                    <button type="submit" id="saveKeyBtn" class="flex-1 py-2 rounded-xl bg-[#6d5dfc] hover:bg-[#5b4be0] text-xs font-bold text-white transition-all">Save Key</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+    let isAiDrawerOpen = false;
+    let aiConversationHistory = [];
+    let isStreaming = false;
+
+    // Ensure icons are rendered on load
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.lucide && typeof lucide.createIcons === 'function') {
+            lucide.createIcons();
+        }
+    });
+
+    function toggleAiDrawer() {
+        const drawer = document.getElementById('aiChatDrawer');
+        if (!drawer) return;
+        isAiDrawerOpen = !isAiDrawerOpen;
+
+        if (isAiDrawerOpen) {
+            drawer.classList.remove('scale-95', 'opacity-0', 'pointer-events-none');
+            drawer.classList.add('scale-100', 'opacity-100', 'pointer-events-auto');
+            if (window.lucide && typeof lucide.createIcons === 'function') {
+                lucide.createIcons();
+            }
+            setTimeout(() => document.getElementById('aiChatInput')?.focus(), 150);
+        } else {
+            drawer.classList.remove('scale-100', 'opacity-100', 'pointer-events-auto');
+            drawer.classList.add('scale-95', 'opacity-0', 'pointer-events-none');
+        }
+    }
+
+    function toggleAiKeyModal() {
+        const modal = document.getElementById('aiKeyModal');
+        if (!modal) return;
+        modal.classList.toggle('hidden');
+        modal.classList.toggle('flex');
+    }
+
+    function clearAiChat() {
+        aiConversationHistory = [];
+        const container = document.getElementById('aiMessagesContainer');
+        if (container) {
+            container.innerHTML = `
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 rounded-lg bg-[#6d5dfc26] text-[#c084fc] flex items-center justify-center shrink-0 mt-0.5">
+                        <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+                    </div>
+                    <div class="bg-[#181820] border border-[#ffffff10] rounded-2xl rounded-tl-sm p-3.5 text-white/90 max-w-[85%] space-y-1">
+                        <p class="font-semibold text-white">Chat cleared.</p>
+                        <p class="text-[#a0a0a5]">How can I help you with your notes or code?</p>
+                    </div>
+                </div>
+            `;
+            lucide.createIcons();
+        }
+    }
+
+    function sendQuickPrompt(text) {
+        const input = document.getElementById('aiChatInput');
+        if (input) {
+            input.value = text;
+            handleAiSubmit(new Event('submit'));
+        }
+    }
+
+    async function handleSaveGeminiKey(e) {
+        e.preventDefault();
+        const input = document.getElementById('modalGeminiKeyInput');
+        const saveBtn = document.getElementById('saveKeyBtn');
+        const key = input.value.trim();
+        if (!key) return;
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+
+        try {
+            const res = await fetch('/api/ai/key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ apiKey: key })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('Gemini API Key saved and encrypted successfully!');
+                toggleAiKeyModal();
+                input.value = '';
+            } else {
+                alert('Failed: ' + (data.error || 'Unknown error'));
+            }
+        } catch (err) {
+            alert('Error saving key: ' + err.message);
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Key';
+        }
+    }
+
+    async function handleAiSubmit(e) {
+        if (e) e.preventDefault();
+        if (isStreaming) return;
+
+        const input = document.getElementById('aiChatInput');
+        const message = input.value.trim();
+        if (!message) return;
+
+        input.value = '';
+        input.style.height = 'auto';
+
+        // 1. Append User Bubble
+        appendUserMessage(message);
+
+        // 2. Prepare Assistant Bubble
+        const assistantBubble = appendAssistantPlaceholder();
+        const toolBanner = document.getElementById('aiToolBanner');
+        const toolStatusText = document.getElementById('aiToolStatusText');
+
+        isStreaming = true;
+        const sendBtn = document.getElementById('aiSendBtn');
+        if (sendBtn) sendBtn.disabled = true;
+
+        let accumulatedText = '';
+
+        try {
+            const response = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message,
+                    history: aiConversationHistory
+                })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || `HTTP ${response.status}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n\n');
+                buffer = lines.pop(); // keep partial chunk
+
+                for (const block of lines) {
+                    if (!block.trim()) continue;
+                    let event = 'message';
+                    let dataStr = '';
+
+                    const sublines = block.split('\n');
+                    for (const s of sublines) {
+                        if (s.startsWith('event: ')) event = s.substring(7).trim();
+                        if (s.startsWith('data: ')) dataStr = s.substring(6).trim();
+                    }
+
+                    if (!dataStr) continue;
+                    let payload = {};
+                    try { payload = JSON.parse(dataStr); } catch (_) {}
+
+                    if (event === 'tool_start') {
+                        if (toolBanner) toolBanner.classList.remove('hidden');
+                        if (toolStatusText) toolStatusText.textContent = `⚡ Executing tool: ${payload.name}...`;
+                    } else if (event === 'tool_end') {
+                        if (toolStatusText) toolStatusText.textContent = `✓ Tool ${payload.name} executed`;
+                        setTimeout(() => {
+                            if (toolBanner) toolBanner.classList.add('hidden');
+                        }, 1200);
+                    } else if (event === 'delta') {
+                        accumulatedText += (payload.text || '');
+                        updateAssistantBubble(assistantBubble, accumulatedText);
+                    } else if (event === 'done') {
+                        if (payload.fullText) accumulatedText = payload.fullText;
+                        updateAssistantBubble(assistantBubble, accumulatedText);
+                    } else if (event === 'error') {
+                        accumulatedText += `\n\n❌ **Error:** ${payload.error}`;
+                        updateAssistantBubble(assistantBubble, accumulatedText);
+                    }
+                }
+            }
+
+            // Save to local session conversation history
+            aiConversationHistory.push({ role: 'user', text: message });
+            aiConversationHistory.push({ role: 'model', text: accumulatedText });
+
+        } catch (err) {
+            updateAssistantBubble(assistantBubble, `❌ **Error:** ${err.message}`);
+        } finally {
+            isStreaming = false;
+            if (sendBtn) sendBtn.disabled = false;
+            if (toolBanner) toolBanner.classList.add('hidden');
+            scrollAiToBottom();
+        }
+    }
+
+    function appendUserMessage(text) {
+        const container = document.getElementById('aiMessagesContainer');
+        if (!container) return;
+
+        const bubble = document.createElement('div');
+        bubble.className = 'flex justify-end';
+        bubble.innerHTML = `
+            <div class="bg-gradient-to-r from-[#6d5dfc] to-[#a855f7] text-white rounded-2xl rounded-tr-sm p-3 max-w-[85%] text-xs shadow-md">
+                ${escapeHtml(text)}
+            </div>
+        `;
+        container.appendChild(bubble);
+        scrollAiToBottom();
+    }
+
+    function appendAssistantPlaceholder() {
+        const container = document.getElementById('aiMessagesContainer');
+        if (!container) return null;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'flex items-start gap-3';
+        wrapper.innerHTML = `
+            <div class="w-7 h-7 rounded-lg bg-[#6d5dfc26] text-[#c084fc] flex items-center justify-center shrink-0 mt-0.5">
+                <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+            </div>
+            <div class="ai-bubble-content bg-[#181820] border border-[#ffffff10] rounded-2xl rounded-tl-sm p-3 text-white/90 max-w-[85%] text-xs space-y-1">
+                <span class="inline-flex items-center gap-1.5 text-[#a0a0a5]"><span class="w-1.5 h-1.5 rounded-full bg-[#c084fc] animate-ping"></span> Thinking...</span>
+            </div>
+        `;
+        container.appendChild(wrapper);
+        lucide.createIcons();
+        scrollAiToBottom();
+        return wrapper.querySelector('.ai-bubble-content');
+    }
+
+    function updateAssistantBubble(bubbleEl, markdownText) {
+        if (!bubbleEl) return;
+        try {
+            if (window.marked && typeof marked.parse === 'function') {
+                bubbleEl.innerHTML = marked.parse(markdownText);
+            } else {
+                bubbleEl.textContent = markdownText;
+            }
+        } catch (_) {
+            bubbleEl.textContent = markdownText;
+        }
+        scrollAiToBottom();
+    }
+
+    function scrollAiToBottom() {
+        const container = document.getElementById('aiMessagesContainer');
+        if (container) {
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+
+    function escapeHtml(str) {
+        return str.replace(/[&<>'"]/g, 
+            tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+        );
+    }
+</script>
+{{/if}}
