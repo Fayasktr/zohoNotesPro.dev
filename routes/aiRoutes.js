@@ -10,12 +10,13 @@ const { streamGeminiChat } = require('../services/geminiAgentService');
  * (while Admin / Fayas KP retain full admin tools).
  */
 const requireAuthenticatedUser = async (req, res, next) => {
-    if (!req.session || !req.session.userId) {
+    const userId = (req.session && req.session.userId) || (req.user && req.user._id);
+    if (!userId) {
         return res.status(401).json({ error: 'Authentication required. Please log in.' });
     }
 
     try {
-        const user = await User.findById(req.session.userId).lean();
+        const user = await User.findById(userId).lean();
         if (!user) {
             return res.status(401).json({ error: 'User not found.' });
         }

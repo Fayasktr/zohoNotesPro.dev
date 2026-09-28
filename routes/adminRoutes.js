@@ -4,7 +4,9 @@ const adminController = require('../controllers/adminController');
 
 // Middleware: Check if Admin
 const isAdmin = (req, res, next) => {
-    if (req.session.userId && req.session.role === 'admin') {
+    const userId = (req.session && req.session.userId) || (req.user && req.user._id);
+    const role = (req.session && req.session.role) || (req.user && req.user.role);
+    if (userId && role === 'admin') {
         return next();
     }
     res.status(403).redirect('/login');
