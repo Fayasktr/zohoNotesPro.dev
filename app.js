@@ -64,6 +64,10 @@ hbs.registerHelper('eq', function (a, b) {
     return a === b;
 });
 
+hbs.registerHelper('and', function (a, b) {
+    return Boolean(a && b);
+});
+
 hbs.registerHelper('add', function (a, b) {
     return (a || 0) + b;
 });
@@ -144,8 +148,33 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Helper to resolve exact Google OAuth callback URL for both Render (HTTPS) and localhost (HTTP)
+function getGoogleCallbackURL(req) {
+    if (process.env.GOOGLE_CALLBACK_URL) {
+        return process.env.GOOGLE_CALLBACK_URL.replace(/\/$/, '');
+    }
+    if (req && req.headers) {
+        const rawHost = (req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+        if (rawHost) {
+            const isLocal = rawHost.startsWith('localhost') || rawHost.startsWith('127.0.0.1');
+            if (isLocal) {
+                return `http://${rawHost}/auth/google/callback`;
+            }
+            if (process.env.APP_URL) {
+                return `${process.env.APP_URL.replace(/\/$/, '')}/auth/google/callback`;
+            }
+            if (process.env.RENDER_EXTERNAL_URL) {
+                return `${process.env.RENDER_EXTERNAL_URL.replace(/\/$/, '')}/auth/google/callback`;
+            }
+            return `https://${rawHost}/auth/google/callback`;
+        }
+    }
+    const base = (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+    return `${base}/auth/google/callback`;
+}
+
 // Passport Serialization
-passport.serializeUser((user, done) => done(null, user.id));
+passport.serializeUser((user, done) => done(null, user._id || user.id));
 passport.deserializeUser(async (id, done) => {
     try {
         const user = await User.findById(id).lean();
@@ -159,12 +188,19 @@ passport.deserializeUser(async (id, done) => {
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: (process.env.APP_URL || 'http://localhost:4321') + '/auth/google/callback',
+    callbackURL: (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL)
+        ? `${(process.env.APP_URL || process.env.RENDER_EXTERNAL_URL).replace(/\/$/, '')}/auth/google/callback`
+        : '/auth/google/callback',
     proxy: true,
     passReqToCallback: true
 }, async (req, accessToken, refreshToken, profile, done) => {
     try {
-        const email = profile.emails[0].value.toLowerCase().trim().toLowerCase();
+        const rawEmail = profile.emails && profile.emails[0] ? profile.emails[0].value : '';
+        if (!rawEmail) {
+            return done(new Error('No email address returned from Google account'), null);
+        }
+        const email = rawEmail.toLowerCase().trim();
+        const avatarUrl = (profile.photos && profile.photos[0] && profile.photos[0].value) ? profile.photos[0].value : '';
         console.log(`[Google Auth] Attempting login for email: ${email}`);
 
         let user = await User.findOne({ googleId: profile.id });
@@ -177,7 +213,7 @@ passport.use(new GoogleStrategy({
             if (user) {
                 console.log(`[Google Auth] Existing user found with email: ${email}. Merging accounts...`);
                 user.googleId = profile.id;
-                user.avatar = profile.photos[0].value;
+                if (avatarUrl) user.avatar = avatarUrl;
                 user.isGoogleAuth = true;
                 await user.save();
                 console.log(`[Google Auth] Account successfully merged for: ${email}`);
@@ -244,10 +280,10 @@ passport.use(new GoogleStrategy({
             } else {
                 console.log(`[Google Auth] No existing user found for: ${email}. Creating new account...`);
                 user = await User.create({
-                    username: profile.displayName,
+                    username: profile.displayName || email.split('@')[0],
                     email: email,
                     googleId: profile.id,
-                    avatar: profile.photos[0].value,
+                    avatar: avatarUrl,
                     isGoogleAuth: true
                 });
                 console.log(`[Google Auth] New account created for: ${email}`);
@@ -282,26 +318,27 @@ app.use((req, res, next) => {
 
 // Middleware: Sync User Data & Check Block Status
 app.use(async (req, res, next) => {
-    if (req.session.userId) {
+    const activeUserId = req.session.userId || (req.isAuthenticated && req.isAuthenticated() && req.user ? req.user._id : null);
+    if (activeUserId) {
         try {
-            const user = await User.findById(req.session.userId).lean();
+            const user = await User.findById(activeUserId).lean();
             if (!user || user.isBlocked) {
                 const message = user && user.isBlocked ? 'Blocked by Admin' : 'Account deleted';
                 return req.session.destroy(() => {
                     res.clearCookie('connect.sid');
-                    // Add a query param to tell login why they were kicked
                     res.redirect(`/login?error=${encodeURIComponent(message)}`);
                 });
             }
+            // Ensure session variables stay synchronized for all routes (including Google OAuth sessions)
+            if (!req.session.userId) req.session.userId = user._id;
+            if (!req.session.username) req.session.username = user.username;
+            if (!req.session.role) req.session.role = user.role;
+
             res.locals.currentUser = user;
             res.locals.username = user.username; // Priority over session data
         } catch (err) {
             console.error('User sync error:', err);
         }
-    } else if (req.isAuthenticated()) {
-        // Sync Passport user to res.locals
-        res.locals.currentUser = req.user;
-        res.locals.username = req.user.username;
     }
     next();
 });
@@ -341,17 +378,17 @@ app.use('/forgot-password', authLimiter);
 // Mount Model Context Protocol (MCP) endpoints for remote AI agents (SSE & Messages)
 app.use('/mcp', mcpRoutes);
 
-// Apply CSRF Protection to all routes after session is initialized (strictly exempting /mcp routes)
+// Apply CSRF Protection to all routes after session is initialized (exempting /mcp and /api/ai JSON/SSE routes)
 app.use((req, res, next) => {
-    if (req.path.startsWith('/mcp') || req.originalUrl.startsWith('/mcp')) {
+    if (req.path.startsWith('/mcp') || req.originalUrl.startsWith('/mcp') || req.path.startsWith('/api/ai') || req.originalUrl.startsWith('/api/ai')) {
         return next();
     }
     csrfProtection(req, res, next);
 });
 
-// Pass CSRF token to all views
+// Pass CSRF token to all views (safe fallback when exempted)
 app.use((req, res, next) => {
-    res.locals.csrfToken = req.csrfToken();
+    res.locals.csrfToken = typeof req.csrfToken === 'function' ? req.csrfToken() : '';
     next();
 });
 
@@ -448,7 +485,7 @@ app.get('/sitemap.xml', (req, res) => {
 
 // Auth Routes
 app.get('/signup', (req, res) => {
-    if (req.session.userId) return res.redirect('/');
+    if (req.session.userId || (req.isAuthenticated && req.isAuthenticated())) return res.redirect('/');
     res.render('signup', {
         title: 'Sign Up - Zoho Notes',
         metaTitle: 'Sign Up - Zoho Notes',
@@ -479,22 +516,68 @@ app.post('/signup', async (req, res) => {
     }
 });
 
-// Google Auth Routes (Directly in app.js for now or separate file)
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+// Google Auth Routes
+app.get('/auth/google', (req, res, next) => {
+    const callbackURL = getGoogleCallbackURL(req);
+    passport.authenticate('google', {
+        scope: ['profile', 'email'],
+        callbackURL: callbackURL,
+        prompt: 'select_account'
+    })(req, res, next);
+});
 
-app.get('/auth/google/callback',
-    passport.authenticate('google', { failureRedirect: '/login' }),
-    (req, res) => {
-        // Successful authentication
-        const returnUrl = req.session.returnTo || '/';
-        delete req.session.returnTo;
-        res.redirect(returnUrl);
-    }
-);
+app.get('/auth/google/callback', (req, res, next) => {
+    const savedReturnTo = req.session ? req.session.returnTo : null;
+    const callbackURL = getGoogleCallbackURL(req);
+
+    passport.authenticate('google', {
+        callbackURL: callbackURL,
+        failureRedirect: '/login?error=' + encodeURIComponent('Google sign-in failed. Please try again.'),
+        keepSessionInfo: true
+    }, async (err, user, info) => {
+        if (err) {
+            console.error('[Google Auth] Callback error:', err);
+            return res.redirect('/login?error=' + encodeURIComponent('Google authentication failed. Please try again.'));
+        }
+        if (!user) {
+            const msg = (info && info.message) ? info.message : 'Google sign-in was cancelled or failed.';
+            return res.redirect('/login?error=' + encodeURIComponent(msg));
+        }
+        if (user.isBlocked) {
+            return res.redirect('/login?error=' + encodeURIComponent('Your account has been blocked by an administrator.'));
+        }
+
+        req.logIn(user, { keepSessionInfo: true }, async (loginErr) => {
+            if (loginErr) {
+                console.error('[Google Auth] Session logIn error:', loginErr);
+                return res.redirect('/login?error=' + encodeURIComponent('Failed to initialize login session.'));
+            }
+
+            // Populate session fields expected across all app routes
+            req.session.userId = user._id;
+            req.session.username = user.username;
+            req.session.role = user.role;
+
+            try {
+                await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
+            } catch (updateErr) {
+                console.error('[Google Auth] Failed to update lastLogin:', updateErr);
+            }
+
+            const returnUrl = savedReturnTo || req.session.returnTo || (user.role === 'admin' ? '/admin/dashboard' : '/');
+            delete req.session.returnTo;
+
+            req.session.save(() => {
+                res.redirect(returnUrl);
+            });
+        });
+    })(req, res, next);
+});
 
 app.get('/login', (req, res) => {
-    if (req.session.userId) {
-        return req.session.role === 'admin' ? res.redirect('/admin/dashboard') : res.redirect('/');
+    if (req.session.userId || (req.isAuthenticated && req.isAuthenticated() && req.user)) {
+        const role = req.session.role || (req.user && req.user.role);
+        return role === 'admin' ? res.redirect('/admin/dashboard') : res.redirect('/');
     }
     const error = req.query.error;
     const notice = req.query.notice;
@@ -529,7 +612,7 @@ app.post('/login', async (req, res) => {
     try {
         const normalizedEmail = email.toLowerCase().trim();
         const user = await User.findOne({ email: normalizedEmail });
-        if (user && await bcrypt.compare(password, user.password)) {
+        if (user && user.password && await bcrypt.compare(password, user.password)) {
             if (user.isBlocked) {
                 return res.render('login', { error: 'Your account has been blocked by an administrator.' });
             }
@@ -558,7 +641,9 @@ app.post('/login', async (req, res) => {
             req.session.failedAttempts = (req.session.failedAttempts || 0) + 1;
             req.session.lastAttemptTime = Date.now();
 
-            let message = 'Invalid email or password';
+            let message = (user && user.isGoogleAuth && !user.password)
+                ? 'This account uses Google Sign-In. Please click "Sign in with Google".'
+                : 'Invalid email or password';
             if (req.session.failedAttempts >= MAX_ATTEMPTS) {
                 message = 'Too many failed attempts. Please wait 30 seconds.';
             }
@@ -571,8 +656,9 @@ app.post('/login', async (req, res) => {
 
 app.get('/logout', async (req, res) => {
     try {
-        if (req.session.userId) {
-            await User.findByIdAndUpdate(req.session.userId, { lastLogout: new Date() });
+        const userId = req.session.userId || (req.user && req.user._id);
+        if (userId) {
+            await User.findByIdAndUpdate(userId, { lastLogout: new Date() });
         }
     } catch (err) {
         console.error('Logout log error:', err);
