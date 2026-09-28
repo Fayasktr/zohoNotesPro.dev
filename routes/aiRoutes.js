@@ -10,15 +10,21 @@ const { streamGeminiChat } = require('../services/geminiAgentService');
  * (while Admin / Fayas KP retain full admin tools).
  */
 const requireAuthenticatedUser = async (req, res, next) => {
-    const userId = (req.session && req.session.userId) || (req.user && req.user._id);
-    if (!userId) {
-        return res.status(401).json({ error: 'Authentication required. Please log in.' });
-    }
-
     try {
-        const user = await User.findById(userId).lean();
+        let user = null;
+        const userId = (req.session && req.session.userId) || (req.user && req.user._id);
+
+        if (userId) {
+            user = await User.findById(userId).lean();
+        } else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+            const token = req.headers.authorization.substring(7).trim();
+            if (token) {
+                user = await User.findOne({ apiKey: token }).lean();
+            }
+        }
+
         if (!user) {
-            return res.status(401).json({ error: 'User not found.' });
+            return res.status(401).json({ error: 'Authentication required. Please log in.' });
         }
         if (user.isBlocked) {
             return res.status(403).json({ error: 'Your account has been restricted.' });
@@ -82,7 +88,7 @@ router.post('/toggle', async (req, res) => {
  * Securely encrypt and save user's personal Gemini API key (BYOK)
  */
 router.post('/key', async (req, res) => {
-    const { apiKey } = req.body;
+    const { apiKey, targetEmails } = req.body;
     if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length < 15) {
         return res.status(400).json({ error: 'Please provide a valid Google Gemini API key.' });
     }
@@ -91,18 +97,33 @@ router.post('/key', async (req, res) => {
         const cleanKey = apiKey.trim();
         const encrypted = encrypt(cleanKey);
         const masked = maskApiKey(cleanKey);
+        const isSuper = req.user.role === 'admin' || (req.user.email && req.user.email.toLowerCase() === 'fayaskpktr@gmail.com');
 
-        await User.updateOne(
-            { _id: req.user._id },
-            {
-                $set: {
-                    geminiApiKey: encrypted,
-                    geminiKeyMasked: masked,
-                    geminiKeyUpdatedAt: new Date(),
-                    'settings.aiCopilotEnabled': true
+        if (isSuper && Array.isArray(targetEmails) && targetEmails.length > 0) {
+            await User.updateMany(
+                { email: { $in: targetEmails.map(e => String(e).toLowerCase().trim()) } },
+                {
+                    $set: {
+                        geminiApiKey: encrypted,
+                        geminiKeyMasked: masked,
+                        geminiKeyUpdatedAt: new Date(),
+                        'settings.aiCopilotEnabled': true
+                    }
                 }
-            }
-        );
+            );
+        } else {
+            await User.updateOne(
+                { _id: req.user._id },
+                {
+                    $set: {
+                        geminiApiKey: encrypted,
+                        geminiKeyMasked: masked,
+                        geminiKeyUpdatedAt: new Date(),
+                        'settings.aiCopilotEnabled': true
+                    }
+                }
+            );
+        }
 
         res.json({
             success: true,
