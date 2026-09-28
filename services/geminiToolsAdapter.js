@@ -41,42 +41,70 @@ function getGeminiToolDeclarations(isAdmin = false) {
         },
         {
             name: 'get_note',
-            description: 'Retrieve full text content, markdown explanation, and code cells of a specific note by ID or shareCode.',
+            description: 'Retrieve full text content, markdown explanation, live status, and code cells of a specific note by ID, title, or shareCode.',
             parameters: {
                 type: 'OBJECT',
                 properties: {
-                    noteId: { type: 'STRING', description: 'Unique ID or shareCode of the note' }
+                    noteId: { type: 'STRING', description: 'Unique ID, title, or shareCode of the note' }
                 },
                 required: ['noteId']
             }
         },
         {
             name: 'create_note',
-            description: 'Create a new notebook note with a title, folder, markdown explanation, and optional code snippet.',
+            description: 'Create a new notebook note or Live Collaborative Note/Mock Review with a title, folder, optional markdown, and an array of codeCells (for multi-question reviews or notebooks). Always pass all questions/cells in the codeCells array in a single call.',
             parameters: {
                 type: 'OBJECT',
                 properties: {
                     title: { type: 'STRING', description: 'Title of the note' },
-                    folder: { type: 'STRING', description: 'Folder name (default: "root")' },
-                    markdown: { type: 'STRING', description: 'Initial markdown notes or explanation' },
-                    code: { type: 'STRING', description: 'Optional initial source code' },
-                    language: { type: 'STRING', description: 'Programming language (e.g. javascript, python, c, cpp, java)' }
+                    folder: { type: 'STRING', description: 'Folder name (e.g. "root", "abid", etc.)' },
+                    isLive: { type: 'BOOLEAN', description: 'Set to true if creating a Live Note / Live Mock Review in the Live Notes section' },
+                    markdown: { type: 'STRING', description: 'Optional initial markdown instructions or overview cell' },
+                    code: { type: 'STRING', description: 'Optional single code cell content' },
+                    language: { type: 'STRING', description: 'Default programming language (e.g. javascript, python, c, cpp, java)' },
+                    codeCells: {
+                        type: 'ARRAY',
+                        description: 'Array of cells/questions to add to the note at once (use this to add 5, 10, or 15+ questions in one call)',
+                        items: {
+                            type: 'OBJECT',
+                            properties: {
+                                title: { type: 'STRING', description: 'Cell title or Question label (e.g. "Q1: For Loop")' },
+                                type: { type: 'STRING', description: 'Cell type: "code" or "markdown" (default: "code")' },
+                                language: { type: 'STRING', description: 'Programming language (default: "javascript")' },
+                                code: { type: 'STRING', description: 'The question prompt, comments, or starter code inside the cell' }
+                            }
+                        }
+                    }
                 },
                 required: ['title']
             }
         },
         {
             name: 'update_note',
-            description: 'Update metadata, update markdown explanation, or append a new code cell to an existing note.',
+            description: 'Update metadata, update markdown explanation, or append one or multiple code cells (via codeCells array) to an existing note.',
             parameters: {
                 type: 'OBJECT',
                 properties: {
                     noteId: { type: 'STRING', description: 'ID of the note to update' },
                     title: { type: 'STRING', description: 'New title' },
                     folder: { type: 'STRING', description: 'New folder name' },
+                    isLive: { type: 'BOOLEAN', description: 'Set to true to make it a Live Note' },
                     markdown: { type: 'STRING', description: 'Updated or appended markdown notes' },
-                    appendCode: { type: 'STRING', description: 'Code to append as a new cell' },
-                    language: { type: 'STRING', description: 'Language of the new cell (default: javascript)' }
+                    appendCode: { type: 'STRING', description: 'Single code snippet to append as a new cell' },
+                    language: { type: 'STRING', description: 'Language of the new cell (default: javascript)' },
+                    codeCells: {
+                        type: 'ARRAY',
+                        description: 'Array of multiple cells/questions to append to the note in one batch',
+                        items: {
+                            type: 'OBJECT',
+                            properties: {
+                                title: { type: 'STRING', description: 'Cell title or Question label' },
+                                type: { type: 'STRING', description: 'Cell type: "code" or "markdown"' },
+                                language: { type: 'STRING', description: 'Programming language (default: "javascript")' },
+                                code: { type: 'STRING', description: 'Cell content or code' }
+                            }
+                        }
+                    }
                 },
                 required: ['noteId']
             }
@@ -242,9 +270,12 @@ async function executeGeminiTool(name, args = {}, user, isAdmin = false) {
                     id: note.id,
                     title: note.title,
                     folder: note.folder || 'root',
+                    isLive: Boolean(note.isLive || (note.id && note.id.startsWith('live-'))),
+                    shareCode: note.shareCode || null,
                     markdown: note.content?.markdown || '',
                     cells: (note.content?.cells || []).map(c => ({
                         id: c.id,
+                        title: c.title || '',
                         type: c.type || 'code',
                         language: c.language || 'javascript',
                         content: c.content || ''
@@ -253,14 +284,40 @@ async function executeGeminiTool(name, args = {}, user, isAdmin = false) {
             }
 
             case 'create_note': {
-                const noteId = 'ntbk-' + Date.now();
+                const isLive = Boolean(args.isLive || (args.title && /live|mock\s*review/i.test(args.title) && args.isLive !== false));
+                const noteId = (isLive ? 'live-' : 'ntbk-') + Date.now() + (isLive ? '-' + crypto.randomBytes(2).toString('hex') : '');
+                const shareCode = isLive ? ('collab-' + crypto.randomBytes(6).toString('hex')) : undefined;
                 const cells = [];
-                if (args.code) {
+
+                if (args.markdown) {
                     cells.push({
-                        id: 'cell-' + crypto.randomUUID(),
+                        id: 'cell-' + crypto.randomBytes(4).toString('hex'),
+                        type: 'markdown',
+                        title: 'Instructions',
+                        language: 'markdown',
+                        content: args.markdown
+                    });
+                }
+
+                if (Array.isArray(args.codeCells)) {
+                    for (const cell of args.codeCells) {
+                        cells.push({
+                            id: 'cell-' + crypto.randomBytes(4).toString('hex'),
+                            type: cell.type || 'code',
+                            title: cell.title || '',
+                            language: cell.language || args.language || 'javascript',
+                            content: cell.code || cell.content || '',
+                            output: null
+                        });
+                    }
+                } else if (args.code) {
+                    cells.push({
+                        id: 'cell-' + crypto.randomBytes(4).toString('hex'),
                         type: 'code',
+                        title: '',
                         language: args.language || 'javascript',
-                        content: args.code
+                        content: args.code,
+                        output: null
                     });
                 }
 
@@ -270,22 +327,33 @@ async function executeGeminiTool(name, args = {}, user, isAdmin = false) {
                     folder: args.folder || 'root',
                     owner: user ? user._id : null,
                     authorName: user ? (user.username || user.email) : 'AI Assistant',
+                    isLive,
+                    shareCode,
                     content: {
+                        id: noteId,
+                        title: args.title || 'Untitled Note',
+                        folder: args.folder || 'root',
+                        isStarred: false,
                         markdown: args.markdown || '',
-                        cells
+                        cells,
+                        tags: [],
+                        isLive
                     },
-                    isLive: false,
                     isStarred: false,
                     isTrashed: false,
-                    _version: 1
+                    _version: 1,
+                    updatedAt: new Date()
                 });
 
                 await newNote.save();
                 return {
                     success: true,
-                    message: `Note "${newNote.title}" created successfully.`,
+                    message: `${isLive ? 'Live Note' : 'Note'} "${newNote.title}" created successfully in folder "${newNote.folder}" with ${cells.length} cells.`,
                     id: newNote.id,
-                    folder: newNote.folder
+                    folder: newNote.folder,
+                    isLive,
+                    cellCount: cells.length,
+                    shareCode: newNote.shareCode || null
                 };
             }
 
@@ -301,19 +369,38 @@ async function executeGeminiTool(name, args = {}, user, isAdmin = false) {
 
                 if (args.title) note.title = args.title;
                 if (args.folder) note.folder = args.folder;
+                if (typeof args.isLive === 'boolean') {
+                    note.isLive = args.isLive;
+                    if (note.content) note.content.isLive = args.isLive;
+                }
                 if (!note.content) note.content = {};
+                if (!Array.isArray(note.content.cells)) note.content.cells = [];
 
                 if (args.markdown) {
                     note.content.markdown = (note.content.markdown || '') + '\n\n' + args.markdown;
                 }
 
+                if (Array.isArray(args.codeCells)) {
+                    for (const cell of args.codeCells) {
+                        note.content.cells.push({
+                            id: 'cell-' + crypto.randomBytes(4).toString('hex'),
+                            type: cell.type || 'code',
+                            title: cell.title || '',
+                            language: cell.language || args.language || 'javascript',
+                            content: cell.code || cell.content || '',
+                            output: null
+                        });
+                    }
+                }
+
                 if (args.appendCode) {
-                    if (!Array.isArray(note.content.cells)) note.content.cells = [];
                     note.content.cells.push({
-                        id: 'cell-' + crypto.randomUUID(),
+                        id: 'cell-' + crypto.randomBytes(4).toString('hex'),
                         type: 'code',
+                        title: '',
                         language: args.language || 'javascript',
-                        content: args.appendCode
+                        content: args.appendCode,
+                        output: null
                     });
                 }
 
@@ -324,8 +411,9 @@ async function executeGeminiTool(name, args = {}, user, isAdmin = false) {
 
                 return {
                     success: true,
-                    message: `Note "${note.title}" updated successfully.`,
+                    message: `Note "${note.title}" updated successfully (Total cells: ${note.content.cells.length}).`,
                     id: note.id,
+                    cellCount: note.content.cells.length,
                     version: note._version
                 };
             }

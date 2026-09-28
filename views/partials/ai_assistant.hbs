@@ -470,6 +470,8 @@
         if (sendBtn) sendBtn.disabled = true;
 
         let accumulatedText = '';
+        let toolSteps = [];
+        let lastCreatedNote = null;
 
         try {
             const response = await fetch('/api/ai/chat', {
@@ -503,7 +505,7 @@
                 buffer = lines.pop();
 
                 for (const block of lines) {
-                    if (!block.trim()) continue;
+                    if (!block.trim() || block.trim().startsWith(':')) continue;
                     let event = 'message';
                     let dataStr = '';
 
@@ -520,29 +522,60 @@
                     if (event === 'tool_start') {
                         if (toolBanner) toolBanner.classList.remove('hidden');
                         if (toolStatusText) toolStatusText.textContent = `⚡ Executing tool: ${payload.name}...`;
+                        if (!accumulatedText && assistantBubble) {
+                            assistantBubble.innerHTML = `
+                                <div class="space-y-1.5 text-[11px] text-[#c084fc]">
+                                    ${toolSteps.map(s => `<div class="text-[#30ff6a]">✓ ${escapeHtml(s)}</div>`).join('')}
+                                    <div class="inline-flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-[#c084fc] animate-ping"></span> Running <b>${escapeHtml(payload.name)}</b>...</div>
+                                </div>
+                            `;
+                            scrollAiToBottom();
+                        }
                     } else if (event === 'tool_end') {
-                        if (toolStatusText) toolStatusText.textContent = `✓ Tool ${payload.name} executed`;
+                        const stepSummary = payload.summary ? `${payload.name}: ${payload.summary}` : `${payload.name} executed`;
+                        toolSteps.push(stepSummary);
+                        if (payload.mutatedNote) {
+                            lastCreatedNote = payload.mutatedNote;
+                        }
+                        if (toolStatusText) toolStatusText.textContent = `✓ ${stepSummary}`;
+                        if (!accumulatedText && assistantBubble) {
+                            assistantBubble.innerHTML = `
+                                <div class="space-y-1.5 text-[11px]">
+                                    ${toolSteps.map(s => `<div class="text-[#30ff6a]">✓ ${escapeHtml(s)}</div>`).join('')}
+                                    <div class="inline-flex items-center gap-1.5 text-[#a0a0a5]"><span class="w-1.5 h-1.5 rounded-full bg-[#c084fc] animate-ping"></span> Generating final response...</div>
+                                </div>
+                            `;
+                            scrollAiToBottom();
+                        }
                         setTimeout(() => {
                             if (toolBanner) toolBanner.classList.add('hidden');
                         }, 1200);
                     } else if (event === 'delta') {
                         accumulatedText += (payload.text || '');
-                        updateAssistantBubble(assistantBubble, accumulatedText);
+                        if (accumulatedText.trim()) {
+                            updateAssistantBubble(assistantBubble, accumulatedText, lastCreatedNote);
+                        }
                     } else if (event === 'done') {
-                        if (payload.fullText) accumulatedText = payload.fullText;
-                        updateAssistantBubble(assistantBubble, accumulatedText);
+                        if (payload.fullText && payload.fullText.trim()) {
+                            accumulatedText = payload.fullText;
+                        } else if (!accumulatedText.trim() && toolSteps.length > 0) {
+                            accumulatedText = `✅ **Completed!**\n\n${toolSteps.map(s => `- ${s}`).join('\n')}`;
+                        }
+                        updateAssistantBubble(assistantBubble, accumulatedText || '✅ Done.', lastCreatedNote);
                     } else if (event === 'error') {
                         if (payload.code === 'API_KEY_REQUIRED') {
                             updateAllAiUiStates(false, false);
                         }
                         accumulatedText += `\n\n❌ **Error:** ${payload.error}`;
-                        updateAssistantBubble(assistantBubble, accumulatedText);
+                        updateAssistantBubble(assistantBubble, accumulatedText, lastCreatedNote);
                     }
                 }
             }
 
-            aiConversationHistory.push({ role: 'user', text: message });
-            aiConversationHistory.push({ role: 'model', text: accumulatedText });
+            if (accumulatedText.trim()) {
+                aiConversationHistory.push({ role: 'user', text: message });
+                aiConversationHistory.push({ role: 'model', text: accumulatedText });
+            }
 
         } catch (err) {
             updateAssistantBubble(assistantBubble, `❌ **Error:** ${err.message}`);
@@ -589,13 +622,23 @@
         return wrapper.querySelector('.ai-bubble-content');
     }
 
-    function updateAssistantBubble(bubbleEl, markdownText) {
-        if (!bubbleEl) return;
+    function updateAssistantBubble(bubbleEl, markdownText, mutatedNote = null) {
+        if (!bubbleEl || !markdownText || !markdownText.trim()) return;
         try {
             if (window.marked && typeof marked.parse === 'function') {
                 bubbleEl.innerHTML = marked.parse(markdownText);
             } else {
                 bubbleEl.textContent = markdownText;
+            }
+            if (mutatedNote && mutatedNote.id) {
+                const actionDiv = document.createElement('div');
+                actionDiv.className = 'mt-2.5 pt-2 border-t border-[#ffffff14] flex gap-2';
+                actionDiv.innerHTML = `
+                    <a href="/?noteId=${encodeURIComponent(mutatedNote.id)}" class="px-3 py-1.5 rounded-xl bg-[#6d5dfc] hover:bg-[#5b4be0] text-white font-bold text-[11px] no-underline inline-flex items-center gap-1.5">
+                        📂 Open Created Note
+                    </a>
+                `;
+                bubbleEl.appendChild(actionDiv);
             }
         } catch (_) {
             bubbleEl.textContent = markdownText;

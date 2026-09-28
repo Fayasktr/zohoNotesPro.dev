@@ -197,6 +197,13 @@ router.post('/chat', async (req, res) => {
         res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
     };
 
+    // Keep SSE connection alive across Render/Cloudflare proxies during long multi-step generations
+    const heartbeat = setInterval(() => {
+        try {
+            res.write(': keep-alive\n\n');
+        } catch (_) {}
+    }, 4000);
+
     try {
         const fullOutput = await streamGeminiChat({
             user: req.user,
@@ -206,16 +213,23 @@ router.post('/chat', async (req, res) => {
                 sendEvent('tool_start', { name: call.name, args: call.args });
             },
             onToolResult: (toolRes) => {
-                sendEvent('tool_end', { name: toolRes.name, summary: toolRes.result?.count !== undefined ? `${toolRes.result.count} items found` : 'Executed' });
+                const isMutation = (toolRes.name === 'create_note' || toolRes.name === 'update_note') && toolRes.result?.success;
+                sendEvent('tool_end', {
+                    name: toolRes.name,
+                    summary: toolRes.result?.message || (toolRes.result?.count !== undefined ? `${toolRes.result.count} items found` : 'Executed'),
+                    mutatedNote: isMutation ? toolRes.result : null
+                });
             },
             onDelta: (chunk) => {
                 sendEvent('delta', { text: chunk });
             }
         });
 
+        clearInterval(heartbeat);
         sendEvent('done', { fullText: fullOutput });
         res.end();
     } catch (err) {
+        clearInterval(heartbeat);
         console.error('[AI Chat] Error during agent stream:', err);
         sendEvent('error', { error: err.message, code: err.code || 'STREAM_ERROR' });
         res.end();

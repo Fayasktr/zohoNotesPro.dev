@@ -2,7 +2,7 @@ const { decrypt } = require('./encryptionService');
 const { getGeminiToolDeclarations, executeGeminiTool } = require('./geminiToolsAdapter');
 
 const DEFAULT_MODEL = 'models/gemini-3.5-flash';
-const MAX_TURNS = 5;
+const MAX_TURNS = 12;
 
 /**
  * Execute an agentic conversation with Gemini, automatically resolving function calls
@@ -34,7 +34,6 @@ async function streamGeminiChat({
     // 2. Prepare initial message history
     const contents = [];
     
-    // Add past history if provided
     if (Array.isArray(history)) {
         for (const item of history) {
             if (item.role && item.text) {
@@ -46,7 +45,6 @@ async function streamGeminiChat({
         }
     }
 
-    // Add current user prompt
     contents.push({
         role: 'user',
         parts: [{ text: message }]
@@ -61,46 +59,35 @@ async function streamGeminiChat({
 You have direct access to Zoho Notes tools:
 - search_notes: search notes by keywords
 - list_notes: list notes by folder or starred status
-- get_note: retrieve full markdown and code cells
-- create_note: create a new note
-- update_note: update markdown or append a code cell
+- get_note: retrieve full markdown, live status, and code cells of a note
+- create_note: create a new note or Live Note/Mock Review (set isLive: true for live notes/reviews, and pass ALL questions/cells together in the codeCells array in a single call!)
+- update_note: update markdown or append multiple cells via codeCells array
 - run_code_cell: securely execute JavaScript, Python, C, C++, or Java code in the Antigravity sandbox
 ${isAdmin ? '- list_users: view registered students and candidates\n- get_api_usage: view the daily MCP API usage leaderboard' : ''}
 
-When asked to search, query, inspect notes, or run code, ALWAYS call the appropriate tool.
-Provide direct, concise, and helpful responses formatted in clean GitHub-flavored markdown with code syntax highlighting.`
+IMPORTANT RULES:
+1. When asked to create a note or mock review with multiple questions (e.g., 10 or 15 questions), ALWAYS pass ALL questions at once inside the "codeCells" array of a SINGLE "create_note" call (with "isLive": true if it is a live note or live mock review). Do NOT call update_note 15 separate times.
+2. Always provide a clear final confirmation response in Markdown summarizing what you found, created, or updated.`
             }
         ]
     };
 
-    let turnCount = 0;
-    let finalAnswer = '';
+    const candidateModels = [
+        modelName,
+        'models/gemini-3.5-flash',
+        'models/gemini-flash-lite-latest',
+        'models/gemini-3-flash-preview',
+        'models/gemini-flash-latest',
+        'models/gemini-3.8-flash'
+    ];
+    const uniqueModels = [...new Set(candidateModels)];
 
-    while (turnCount < MAX_TURNS) {
-        turnCount++;
-
-        const requestBody = {
-            contents,
-            systemInstruction,
-            tools
-        };
-
-        const candidateModels = [
-            modelName,
-            'models/gemini-3.5-flash',
-            'models/gemini-flash-lite-latest',
-            'models/gemini-3-flash-preview',
-            'models/gemini-flash-latest',
-            'models/gemini-3.8-flash'
-        ];
-        const uniqueModels = [...new Set(candidateModels)];
-
+    async function callGeminiApi(reqBody) {
         let response = null;
         let data = null;
         let lastError = null;
 
         for (const currentModel of uniqueModels) {
-            // Support both AQ.* and AIzaSy* key formats via X-goog-api-key header
             const url = `https://generativelanguage.googleapis.com/v1beta/${currentModel}:generateContent`;
             try {
                 response = await fetch(url, {
@@ -109,13 +96,12 @@ Provide direct, concise, and helpful responses formatted in clean GitHub-flavore
                         'Content-Type': 'application/json',
                         'X-goog-api-key': apiKey
                     },
-                    body: JSON.stringify(requestBody)
+                    body: JSON.stringify(reqBody)
                 });
                 data = await response.json();
 
                 if (response.status === 429) {
                     lastError = new Error('⚠️ Gemini Free Tier Rate Limit (15 RPM / 1,500 RPD) reached. Please wait a few seconds before trying again.');
-                    // Try next model or wait briefly
                     await new Promise(r => setTimeout(r, 1500));
                     continue;
                 }
@@ -131,7 +117,6 @@ Provide direct, concise, and helpful responses formatted in clean GitHub-flavore
                     continue;
                 }
 
-                // Success!
                 lastError = null;
                 break;
             } catch (netErr) {
@@ -142,62 +127,137 @@ Provide direct, concise, and helpful responses formatted in clean GitHub-flavore
         if (lastError || !data || !response?.ok) {
             throw (lastError || new Error('Failed to obtain response from Gemini API'));
         }
+        return data;
+    }
 
+    let turnCount = 0;
+    let finalAnswer = '';
+    const executedActionLogs = [];
+
+    while (turnCount < MAX_TURNS) {
+        turnCount++;
+
+        const requestBody = {
+            contents,
+            systemInstruction,
+            tools,
+            generationConfig: {
+                maxOutputTokens: 8192
+            }
+        };
+
+        const data = await callGeminiApi(requestBody);
         const candidate = data.candidates?.[0];
-        if (!candidate || !candidate.content || !candidate.content.parts) {
+        if (!candidate || !candidate.content || !Array.isArray(candidate.content.parts)) {
             break;
         }
 
         const parts = candidate.content.parts;
-        const functionCallPart = parts.find(p => p.functionCall);
+        // Find ALL functionCall parts in this turn (Gemini can emit multiple parallel tool calls)
+        const functionCallParts = parts.filter(p => p.functionCall);
 
-        if (functionCallPart) {
-            // Model wants to call a tool
-            const fnCall = functionCallPart.functionCall;
-            const toolName = fnCall.name;
-            const toolArgs = fnCall.args || {};
-
-            onToolCall({ name: toolName, args: toolArgs });
-
-            // Execute tool locally
-            const toolResult = await executeGeminiTool(toolName, toolArgs, user, isAdmin);
-            onToolResult({ name: toolName, result: toolResult });
-
-            // Push model's tool call turn to contents
+        if (functionCallParts.length > 0) {
+            // Preserve the exact model turn (including any thought/thoughtSignature parts)
             contents.push({
                 role: 'model',
-                parts: [functionCallPart]
+                parts: parts
             });
 
-            // Push function response back to Gemini
-            const fnRespPayload = {
-                name: toolName,
-                response: toolResult
-            };
-            if (fnCall.id) {
-                fnRespPayload.id = fnCall.id;
+            const functionResponseParts = [];
+
+            for (const fcPart of functionCallParts) {
+                const fnCall = fcPart.functionCall;
+                const toolName = fnCall.name;
+                const toolArgs = fnCall.args || {};
+
+                onToolCall({ name: toolName, args: toolArgs });
+
+                const toolResult = await executeGeminiTool(toolName, toolArgs, user, isAdmin);
+                onToolResult({ name: toolName, result: toolResult });
+
+                if (toolResult && toolResult.message) {
+                    executedActionLogs.push(`- **${toolName}**: ${toolResult.message}`);
+                } else if (toolResult && toolResult.count !== undefined) {
+                    executedActionLogs.push(`- **${toolName}**: Found ${toolResult.count} item(s)`);
+                } else {
+                    executedActionLogs.push(`- **${toolName}**: Completed`);
+                }
+
+                const fnRespPayload = {
+                    name: toolName,
+                    response: toolResult
+                };
+                if (fnCall.id) {
+                    fnRespPayload.id = fnCall.id;
+                }
+
+                functionResponseParts.push({
+                    functionResponse: fnRespPayload
+                });
             }
 
+            // Push all function responses in a single user turn to match Gemini's multi-call requirement
             contents.push({
                 role: 'user',
-                parts: [
-                    {
-                        functionResponse: fnRespPayload
-                    }
-                ]
+                parts: functionResponseParts
             });
 
-            // Continue orchestration loop to let Gemini generate the next answer with tool results
             continue;
         }
 
-        // Model returned normal text content
-        const textParts = parts.filter(p => p.text).map(p => p.text).join('\n');
-        if (textParts) {
-            finalAnswer += textParts;
-            onDelta(textParts);
+        // Extract visible text (excluding internal thought blocks)
+        const visibleTextParts = parts
+            .filter(p => typeof p.text === 'string' && !p.thought)
+            .map(p => p.text)
+            .join('\n')
+            .trim();
+
+        const fallbackTextParts = !visibleTextParts
+            ? parts.filter(p => typeof p.text === 'string').map(p => p.text).join('\n').trim()
+            : '';
+
+        const chosenText = visibleTextParts || fallbackTextParts;
+        if (chosenText) {
+            finalAnswer += chosenText;
+            onDelta(chosenText);
         }
         break;
+    }
+
+    // Safety net: If tool calls ran and exhausted turns (or returned empty final text), generate a final summary so the bubble is NEVER empty!
+    if (!finalAnswer.trim()) {
+        if (executedActionLogs.length > 0) {
+            try {
+                // Request a final text summary without tools
+                const summaryData = await callGeminiApi({
+                    contents: [
+                        ...contents,
+                        {
+                            role: 'user',
+                            parts: [{ text: 'Please summarize the actions you just completed for the user in clear Markdown.' }]
+                        }
+                    ],
+                    systemInstruction,
+                    generationConfig: { maxOutputTokens: 2048 }
+                });
+                const sumParts = summaryData.candidates?.[0]?.content?.parts || [];
+                const sumText = sumParts.filter(p => typeof p.text === 'string' && !p.thought).map(p => p.text).join('\n').trim();
+                if (sumText) {
+                    finalAnswer = sumText;
+                    onDelta(finalAnswer);
+                }
+            } catch (_) {
+                // Fallback to deterministic action log summary
+            }
+
+            if (!finalAnswer.trim()) {
+                finalAnswer = `✅ **Completed your request!** Here is what I executed:\n\n${executedActionLogs.join('\n')}`;
+                onDelta(finalAnswer);
+            }
+        } else {
+            finalAnswer = '⚠️ Gemini completed the turn without returning text. Please try rephrasing or breaking down your prompt.';
+            onDelta(finalAnswer);
+        }
     }
 
     return finalAnswer;
