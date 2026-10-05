@@ -55,3 +55,12 @@ desktop.ini
 implementation_plan_for_cluodeToWasm*
 implementation_plan*
 scratch/
+
+# Second project & full project
+Full Project/
+second project/
+second project planning/
+
+# Local database data
+.data/
+learn-service-worker/

@@ -105,7 +105,7 @@ function resolvePushItem(existing, incoming, options = {}) {
                 cells: clientCells,
                 tags: Array.isArray(note.tags) ? note.tags : (note.content && Array.isArray(note.content.tags) ? note.content.tags : [])
             },
-            updatedAt: new Date(safeClientTs)
+            updatedAt: isLive ? new Date() : new Date(safeClientTs)
         }
     };
 }

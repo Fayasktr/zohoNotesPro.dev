@@ -812,6 +812,7 @@
         }
     }
 
-    // Export singleton
+    // Export singleton with forward-compatible Zigo alias
     window.ZohoLocalDB = new ZohoLocalDatabase();
+    window.ZigoLocalDB = window.ZohoLocalDB;
 })(window);

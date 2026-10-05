@@ -3116,12 +3116,20 @@ class NotebookApp {
         try {
             let data = null;
 
+            const isLiveId = typeof id === 'string' && (id.startsWith('live-') || id.startsWith('collab-'));
             if (this.db) {
                 data = await this.db.getNote(id);
-                // If data is missing locally and we are online, try pulling from cloud
-                if ((!data || !data._hasFullContent || !data.cells) && navigator.onLine) {
+                // If data is missing locally OR this is a live collaboration note, pull fresh from cloud when online
+                if ((!data || !data._hasFullContent || !data.cells || isLiveId || (data && (data.isLive || data.shareCode))) && navigator.onLine) {
                     if (this.sync) {
-                        data = await this.sync.pullNote(id);
+                        try {
+                            const fresh = await this.sync.pullNote(id);
+                            if (fresh && fresh.cells && fresh.cells.length > 0) {
+                                data = fresh;
+                            }
+                        } catch (e) {
+                            console.warn('[NotebookApp] Failed to pull fresh live note, falling back to local cache:', e);
+                        }
                     }
                 }
             }

@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Drawing
 
-$srcPath = 'C:\Users\FAYAS\.gemini\antigravity\brain\5a6d427a-657a-405c-9e88-dbe881797754\zoho_notes_light_logo_1786519896657.jpg'
-$outDir = 'c:\Users\FAYAS\Desktop\zoho note compailor\public\images'
+$srcPath = 'C:\Users\FAYAS\.gemini\antigravity\brain\92545350-cafa-44b5-aaf8-e3391b6f4aeb\zigo_notes_logo_1791130826007.jpg'
+$outDir = Join-Path $PSScriptRoot '..\public\images'
 
 $src = [System.Drawing.Image]::FromFile($srcPath)
 
@@ -30,6 +30,7 @@ Resize-ImageParam -Width 192 -Height 192 -OutFileName 'favicon.png'
 Resize-ImageParam -Width 180 -Height 180 -OutFileName 'apple-touch-icon.png'
 Resize-ImageParam -Width 192 -Height 192 -OutFileName 'icon-maskable-192.png'
 Resize-ImageParam -Width 512 -Height 512 -OutFileName 'icon-maskable-512.png'
+Resize-ImageParam -Width 1024 -Height 1024 -OutFileName 'zigo-logo.png'
 Resize-ImageParam -Width 1024 -Height 1024 -OutFileName 'zoho-logo.png'
 
 $src.Dispose()

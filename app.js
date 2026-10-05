@@ -229,13 +229,13 @@ passport.use(new GoogleStrategy({
 
                 const mailOptions = {
                     to: user.email,
-                    from: `"Zoho Notes Security" <${process.env.EMAIL_USER}>`,
-                    subject: '🔒 Google Account Linked - Zoho Notes',
+                    from: `"Zigo Notes Security" <${process.env.EMAIL_USER}>`,
+                    subject: '🔒 Google Account Linked - Zigo Notes',
                     text: `Hello ${user.username},\n\n` +
-                        `Your Zoho Notes account has been linked to your Google account (${email}).\n\n` +
+                        `Your Zigo Notes account has been linked to your Google account (${email}).\n\n` +
                         `You can now use "Sign in with Google" to access your account.\n\n` +
                         `If you did not authorize this, please contact support.\n\n` +
-                        `Best regards,\nThe Zoho Notes Team`,
+                        `Best regards,\nThe Zigo Notes Team`,
                     html: `
                         <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a; padding: 40px 20px; color: #f8fafc; text-align: center;">
                             <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
@@ -245,7 +245,7 @@ passport.use(new GoogleStrategy({
                                 <div style="padding: 40px 30px; text-align: left;">
                                     <h2 style="color: #f8fafc; font-size: 20px; font-weight: 700; margin-bottom: 20px;">Hello ${user.username},</h2>
                                     <p style="color: #cbd5e1; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-                                        This is a notification to let you know that your Zoho Notes account has been successfully linked to your Google account:
+                                        This is a notification to let you know that your Zigo Notes account has been successfully linked to your Google account:
                                     </p>
                                     <div style="background-color: #0f172a; border-radius: 12px; padding: 16px; border: 1px solid #334155; margin-bottom: 30px; display: inline-block; width: 100%; box-sizing: border-box;">
                                         <div style="display: flex; align-items: center;">
@@ -256,14 +256,14 @@ passport.use(new GoogleStrategy({
                                     <p style="color: #cbd5e1; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
                                         From now on, you can skip the password and access your notes instantly using the <b>Sign in with Google</b> button.
                                     </p>
-                                    <a href="https://${req.headers.host}/login" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; text-decoration: none; border-radius: 10px; font-weight: 700; font-size: 16px; box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);">Go to Zoho Notes</a>
+                                    <a href="https://${req.headers.host}/login" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; text-decoration: none; border-radius: 10px; font-weight: 700; font-size: 16px; box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);">Go to Zigo Notes</a>
                                 </div>
                                 <div style="padding: 30px; background-color: #0f172a; border-top: 1px solid #334155; text-align: center;">
                                     <p style="color: #64748b; font-size: 14px; margin: 0;">
                                         If you did not authorize this change, please contact our security team immediately.
                                     </p>
                                     <div style="margin-top: 20px; color: #94a3b8; font-size: 13px; font-weight: 600;">
-                                        &copy; 2026 Zoho Notes &bull; Advanced Agentic Coding
+                                        &copy; 2026 Zigo Notes &bull; Advanced Agentic Coding
                                     </div>
                                 </div>
                             </div>
@@ -487,10 +487,10 @@ app.get('/sitemap.xml', (req, res) => {
 app.get('/signup', (req, res) => {
     if (req.session.userId || (req.isAuthenticated && req.isAuthenticated())) return res.redirect('/');
     res.render('signup', {
-        title: 'Sign Up - Zoho Notes',
-        metaTitle: 'Sign Up - Zoho Notes',
-        metaDescription: 'Create a free Zoho Notes account to write markdown documentation and execute JavaScript, Python, C, C++, and Java code directly in your browser.',
-        metaKeywords: 'zoho notes signup, create notebook account, online python compiler signup, code editor registration',
+        title: 'Sign Up - Zigo Notes',
+        metaTitle: 'Sign Up - Zigo Notes',
+        metaDescription: 'Create a free Zigo Notes account to write markdown documentation and execute JavaScript, Python, C, C++, and Java code directly in your browser.',
+        metaKeywords: 'zigo notes signup, create notebook account, online python compiler signup, code editor registration',
         canonicalUrl: `${req.protocol}://${req.get('host')}/signup`
     });
 });
@@ -509,7 +509,7 @@ app.post('/signup', async (req, res) => {
         res.redirect(returnUrl);
     } catch (err) {
         res.render('signup', {
-            title: 'Sign Up - Zoho Notes',
+            title: 'Sign Up - Zigo Notes',
             error: 'Email already exists',
             canonicalUrl: `${req.protocol}://${req.get('host')}/signup`
         });
@@ -582,10 +582,10 @@ app.get('/login', (req, res) => {
     const error = req.query.error;
     const notice = req.query.notice;
     res.render('login', {
-        title: 'Login - Zoho Notes',
-        metaTitle: 'Login - Zoho Notes',
-        metaDescription: 'Sign in to Zoho Notes to access your interactive polyglot notebooks, run code snippets, and collaborate with your team.',
-        metaKeywords: 'zoho notes login, interactive notebook login, python runner login, code editor sign in',
+        title: 'Login - Zigo Notes',
+        metaTitle: 'Login - Zigo Notes',
+        metaDescription: 'Sign in to Zigo Notes to access your interactive polyglot notebooks, run code snippets, and collaborate with your team.',
+        metaKeywords: 'zigo notes login, interactive notebook login, python runner login, code editor sign in',
         canonicalUrl: `${req.protocol}://${req.get('host')}/login`,
         error,
         notice
@@ -672,7 +672,7 @@ app.get('/logout', async (req, res) => {
 // --- FORGOT PASSWORD ROUTES ---
 
 app.get('/forgot-password', (req, res) => {
-    res.render('forgot', { title: 'Forgot Password - Zoho Notes' });
+    res.render('forgot', { title: 'Forgot Password - Zigo Notes' });
 });
 
 app.post('/forgot-password', async (req, res) => {
@@ -702,8 +702,8 @@ app.post('/forgot-password', async (req, res) => {
 
         const mailOptions = {
             to: user.email,
-            from: `"Zoho Notes" <${process.env.EMAIL_USER}>`,
-            subject: 'Password Reset - Zoho Notes',
+            from: `"Zigo Notes" <${process.env.EMAIL_USER}>`,
+            subject: 'Password Reset - Zigo Notes',
             text: `You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n` +
                 `Please click on the following link, or paste this into your browser to complete the process:\n\n` +
                 `http://${req.headers.host}/reset-password/${token}\n\n` +
@@ -737,7 +737,7 @@ app.get('/reset-password/:token', async (req, res) => {
             resetPasswordExpires: { $gt: Date.now() }
         });
         if (!user) return res.render('forgot', { error: 'Password reset token is invalid or has expired.' });
-        res.render('reset', { title: 'Reset Password - Zoho Notes', token: req.params.token });
+        res.render('reset', { title: 'Reset Password - Zigo Notes', token: req.params.token });
     } catch (err) {
         res.render('forgot', { error: 'Something went wrong.' });
     }
@@ -776,10 +776,10 @@ app.get('/', isAuthenticated, (req, res) => {
     const currentUserEmail = req.user?.email || res.locals.currentUser?.email || '';
 
     res.render('index', {
-        title: 'Zoho Notes',
-        metaTitle: 'Zoho Notes',
+        title: 'Zigo Notes',
+        metaTitle: 'Zigo Notes',
         metaDescription: 'Interactive web-based polyglot notebook application. Write rich Markdown notes and execute JavaScript, Python, Java, C, and C++ directly in Monaco Editor powered notebook cells.',
-        metaKeywords: 'zoho notes, online code runner, polyglot compiler, javascript python java compiler, monaco editor notebook, developer documentation',
+        metaKeywords: 'zigo notes, online code runner, polyglot compiler, javascript python java compiler, monaco editor notebook, developer documentation',
         canonicalUrl: `${req.protocol}://${req.get('host')}/`,
         username: res.locals.username,
         userId: currentUserId,
@@ -1175,7 +1175,7 @@ app.post('/api/notes/:noteId/revoke-share', isAuthenticated, async (req, res) =>
 // --- LIVE SPECTATOR / BROADCAST VIEW ---
 app.get('/live/:sessionId', (req, res) => {
     res.render('live_viewer', {
-        title: 'Live Spectator Screen - Zoho Notes',
+        title: 'Live Spectator Screen - Zigo Notes',
         sessionId: req.params.sessionId,
         firebaseConfig: {
             apiKey: process.env.FIREBASE_API_KEY || '',
@@ -1827,9 +1827,9 @@ app.delete(/^\/api\/trash\/(.+)$/, isAuthenticated, async (req, res) => {
 
 app.get('/sharing-notes', isAuthenticated, async (req, res) => {
     res.render('sharingNotes', {
-        title: 'Collaborative Shared Notebooks - Zoho Notes',
-        metaTitle: 'Collaborative Shared Notebooks - Zoho Notes',
-        metaDescription: 'Collaborate and share interactive notebooks with team members on Zoho Notes.',
+        title: 'Collaborative Shared Notebooks - Zigo Notes',
+        metaTitle: 'Collaborative Shared Notebooks - Zigo Notes',
+        metaDescription: 'Collaborate and share interactive notebooks with team members on Zigo Notes.',
         canonicalUrl: `${req.protocol}://${req.get('host')}/sharing-notes`
     });
 });

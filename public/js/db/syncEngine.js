@@ -812,4 +812,6 @@
     const instance = new ZohoBackupEngine();
     window.ZohoBackupEngine = instance;
     window.ZohoSyncEngine = instance;
+    window.ZigoBackupEngine = instance;
+    window.ZigoSyncEngine = instance;
 })(window);

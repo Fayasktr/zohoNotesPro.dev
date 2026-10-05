@@ -1,7 +1,7 @@
 {
-  "id": "zoho-notes-pwa",
-  "short_name": "Zoho Notes",
-  "name": "Zoho Notes",
+  "id": "zigo-notes-pwa",
+  "short_name": "Zigo",
+  "name": "Zigo Notes",
   "description": "Write markdown documentation and execute JavaScript, Python, C, C++, and Java code side-by-side directly in your browser.",
   "start_url": "/",
   "scope": "/",

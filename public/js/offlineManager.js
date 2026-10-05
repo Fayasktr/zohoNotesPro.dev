@@ -377,4 +377,5 @@
 
     // Export singleton
     window.ZohoOfflineManager = new OfflineManager();
+    window.ZigoOfflineManager = window.ZohoOfflineManager;
 })(window);
