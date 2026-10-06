@@ -522,7 +522,7 @@ app.get('/auth/google', (req, res, next) => {
     passport.authenticate('google', {
         scope: ['profile', 'email'],
         callbackURL: callbackURL,
-        prompt: 'select_account'
+        prompt: 'select_account consent'
     })(req, res, next);
 });
 
