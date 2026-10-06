@@ -1,4 +1,4 @@
-# Robots.txt for Zoho Notes
+# Robots.txt for Zigo Notes
 # https://zohonotespro.dev
 
 User-agent: *

@@ -1,5 +1,5 @@
 /**
- * Zoho Notes - Live Broadcast Engine (Host Side)
+ * Zigo Notes - Live Broadcast Engine (Host Side)
  * 
  * Synchronizes local editor state and local execution outputs to Firebase Realtime Database.
  * Runs 100% locally on the host machine and streams updates to spectators in real time.
@@ -28,8 +28,8 @@
                 return window.FIREBASE_CONFIG;
             }
 
-            // 2. Check localStorage for user-overridden keys
-            const localStored = localStorage.getItem('zoho_firebase_config');
+            // 2. Check localStorage for user-overridden keys (Zigo with Zoho fallback)
+            const localStored = localStorage.getItem('zigo_firebase_config') || localStorage.getItem('zoho_firebase_config');
             if (localStored) {
                 try {
                     const parsed = JSON.parse(localStored);
@@ -60,6 +60,7 @@
          * Save user-provided Firebase config to localStorage
          */
         saveConfig(config) {
+            localStorage.setItem('zigo_firebase_config', JSON.stringify(config));
             localStorage.setItem('zoho_firebase_config', JSON.stringify(config));
             this.config = config;
         }
@@ -315,4 +316,5 @@
 
     // Expose global instance
     window.ZohoBroadcastEngine = new BroadcastEngine();
+    window.ZigoBroadcastEngine = window.ZohoBroadcastEngine;
 })();

@@ -33,7 +33,7 @@ function createZohoNotesMcpServer(config = {}) {
 
     const server = new Server(
         {
-            name: config.name || 'zoho-notes',
+            name: config.name || 'zigo-notes',
             version: config.version || '2.0.0'
         },
         {
@@ -635,7 +635,7 @@ function createZohoNotesMcpServer(config = {}) {
                                     type: 'text',
                                     text: JSON.stringify(
                                         {
-                                            server: 'Zoho Notes MCP (Multi-Tenant Admin)',
+                                            server: 'Zigo Notes MCP (Multi-Tenant Admin)',
                                             version: '2.0.0',
                                             database: {
                                                 totalUsers,
@@ -663,7 +663,7 @@ function createZohoNotesMcpServer(config = {}) {
                                     type: 'text',
                                     text: JSON.stringify(
                                         {
-                                            server: 'Zoho Notes MCP (User Sandbox)',
+                                            server: 'Zigo Notes MCP (User Sandbox)',
                                             user: currentUser.username,
                                             email: currentUser.email,
                                             myNotesCount: userNotes,
@@ -917,8 +917,8 @@ function createZohoNotesMcpServer(config = {}) {
         return {
             resources: [
                 {
-                    uri: 'zohonotes://notes/recent',
-                    name: 'Recent Zoho Notes',
+                    uri: 'zigonotes://notes/recent',
+                    name: 'Recent Zigo Notes',
                     mimeType: 'application/json',
                     description: isAdmin ? '20 most recently updated notes platform-wide' : 'Your 20 most recent personal notes'
                 }
@@ -930,7 +930,7 @@ function createZohoNotesMcpServer(config = {}) {
         await connectToDatabase(config.mongoUri);
         const { uri } = request.params;
 
-        if (uri === 'zohonotes://notes/recent') {
+        if (uri === 'zigonotes://notes/recent' || uri === 'zohonotes://notes/recent') {
             const query = { isTrashed: false };
             if (!isAdmin && currentUser) {
                 query.owner = currentUser._id;
@@ -953,8 +953,8 @@ function createZohoNotesMcpServer(config = {}) {
             };
         }
 
-        if (uri.startsWith('zohonotes://note/')) {
-            const noteId = uri.replace('zohonotes://note/', '');
+        if (uri.startsWith('zigonotes://note/') || uri.startsWith('zohonotes://note/')) {
+            const noteId = uri.replace(/^zigonotes:\/\/note\//, '').replace(/^zohonotes:\/\/note\//, '');
             const note = await Note.findOne({ id: noteId }).lean();
             if (!note) {
                 throw new Error(`Note not found: ${noteId}`);
@@ -982,6 +982,7 @@ function createZohoNotesMcpServer(config = {}) {
 }
 
 module.exports = {
+    createZigoNotesMcpServer: createZohoNotesMcpServer,
     createZohoNotesMcpServer,
     connectToDatabase
 };

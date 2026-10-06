@@ -1,5 +1,5 @@
 {
-  "name": "zoho-notes-pro",
+  "name": "zigo-notes",
   "version": "1.0.0",
   "description": "An interactive, web-based polyglot notebook application for writing notes, code documentation, and live execution.",
   "main": "app.js",
@@ -16,7 +16,7 @@
     "node": ">=18.0.0"
   },
   "keywords": [
-    "zoho-notes",
+    "zigo-notes",
     "notebook",
     "polyglot",
     "code-runner",

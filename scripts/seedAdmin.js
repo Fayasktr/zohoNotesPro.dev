@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 
-const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/zoho_notes';
+const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/zigo_notes';
 
 async function seedAdmin() {
     try {

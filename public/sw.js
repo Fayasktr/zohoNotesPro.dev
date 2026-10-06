@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zoho-notes-v21-promise-microtask-flush';
+const CACHE_NAME = 'zigo-notes-v22-rebrand';
 const OFFLINE_URL = '/offline.html';
 
 // Static Shell & Local-First Engine Assets to Pre-cache
@@ -30,7 +30,7 @@ const PRECACHE_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Pre-caching Local-First Engine for Zoho Notes');
+      console.log('[SW] Pre-caching Local-First Engine for Zigo Notes');
       return cache.addAll(PRECACHE_ASSETS).catch((err) => {
         console.warn('[SW] Some precache assets failed to load:', err);
       });

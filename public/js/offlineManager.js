@@ -1,5 +1,5 @@
 /**
- * Zoho Notes Pro - Offline Manager & Cloud Backup Status Badge
+ * Zigo Notes Pro - Offline Manager & Cloud Backup Status Badge
  * 
  * Provides:
  * - Live Cloud Backup Badge UI (Saved & Backed up / Backing up... / Saved Locally / Offline / Auth Required)
@@ -15,8 +15,8 @@
 
     class OfflineManager {
         constructor() {
-            this.db = window.ZohoLocalDB;
-            this.sync = window.ZohoBackupEngine || window.ZohoSyncEngine;
+            this.db = window.ZigoLocalDB || window.ZohoLocalDB;
+            this.sync = window.ZigoBackupEngine || window.ZigoSyncEngine || window.ZohoBackupEngine || window.ZohoSyncEngine;
             this.badgeElement = null;
             this.modalElement = null;
             this.init();

@@ -55,8 +55,8 @@ async function streamGeminiChat({
         role: 'system',
         parts: [
             {
-                text: `You are Zoho Notes Pro AI, an intelligent coding assistant, researcher, and pair-programmer assisting ${displayUser}.
-You have direct access to Zoho Notes tools:
+                text: `You are Zigo Notes Pro AI, an intelligent coding assistant, researcher, and pair-programmer assisting ${displayUser}.
+You have direct access to Zigo Notes tools:
 - search_notes: search notes by keywords
 - list_notes: list notes by folder or starred status
 - get_note: retrieve full markdown, live status, and code cells of a note

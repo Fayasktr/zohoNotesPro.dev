@@ -1,5 +1,5 @@
 /**
- * Zoho Notes - Live Viewer Screen Script
+ * Zigo Notes - Live Viewer Screen Script
  * 
  * Subscribes to Firebase Realtime Database and live-reflects host typing,
  * cell focus, and local execution outputs with zero compilation needed on the viewer device.
@@ -41,8 +41,8 @@
         }
 
         if (!config || !config.apiKey || !config.databaseURL) {
-            // Check localStorage
-            const localStored = localStorage.getItem('zoho_firebase_config');
+            // Check localStorage (Zigo with Zoho fallback)
+            const localStored = localStorage.getItem('zigo_firebase_config') || localStorage.getItem('zoho_firebase_config');
             if (localStored) {
                 try { config = JSON.parse(localStored); } catch (e) { }
             }
@@ -299,7 +299,7 @@
                 <i data-lucide="alert-circle" class="w-10 h-10 mx-auto mb-3 text-rose-400"></i>
                 <h3 class="text-base font-bold mb-1">Session Error</h3>
                 <p class="text-xs text-rose-200/80 leading-relaxed">${escapeHtml(msg)}</p>
-                <a href="/" class="inline-block mt-4 text-xs font-semibold px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 rounded-xl transition-all">Go to Zoho Notes</a>
+                <a href="/" class="inline-block mt-4 text-xs font-semibold px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 rounded-xl transition-all">Go to Zigo Notes</a>
             </div>
         `;
         if (window.lucide) lucide.createIcons();
@@ -327,6 +327,7 @@
             try {
                 const parsed = JSON.parse(raw);
                 if (parsed.apiKey && parsed.databaseURL) {
+                    localStorage.setItem('zigo_firebase_config', JSON.stringify(parsed));
                     localStorage.setItem('zoho_firebase_config', JSON.stringify(parsed));
                     window.location.reload();
                 } else {

@@ -1664,8 +1664,9 @@ class NotebookApp {
     }
 
     showToast(message, type = 'info') {
-        if (window.ZohoOfflineManager && typeof window.ZohoOfflineManager.showToast === 'function') {
-            window.ZohoOfflineManager.showToast(message, type);
+        const offlineMgr = window.ZigoOfflineManager || window.ZohoOfflineManager;
+        if (offlineMgr && typeof offlineMgr.showToast === 'function') {
+            offlineMgr.showToast(message, type);
             return;
         }
         const toast = document.getElementById('toast');
@@ -4143,7 +4144,7 @@ class NotebookApp {
             this.collab.broadcastExecutionStart(cellId, currentUsername);
         }
 
-        const activeEngine = this.engine || window.ZohoBrowserEngine;
+        const activeEngine = this.engine || window.ZigoBrowserEngine || window.ZohoBrowserEngine;
 
         // ── Interactive Terminal Mode ──
         // Activates only for server-executed languages with stdin-reading code
@@ -4819,7 +4820,9 @@ class NotebookApp {
         if (!cell) return;
         this.draggedCellId = cell.id.replace('container-', '');
         cell.classList.add('dragging');
+        e.dataTransfer.setData('application/zigo-item-type', 'cell');
         e.dataTransfer.setData('application/zoho-item-type', 'cell');
+        e.dataTransfer.setData('application/zigo-cell-id', this.draggedCellId);
         e.dataTransfer.setData('application/zoho-cell-id', this.draggedCellId);
         e.dataTransfer.setData('text/plain', this.draggedCellId);
         e.dataTransfer.effectAllowed = 'move';
@@ -4944,7 +4947,9 @@ class NotebookApp {
         };
 
         noteItem.classList.add('dragging-sidebar-note');
+        e.dataTransfer.setData('application/zigo-item-type', isLive ? 'live-note' : 'normal-note');
         e.dataTransfer.setData('application/zoho-item-type', isLive ? 'live-note' : 'normal-note');
+        e.dataTransfer.setData('application/zigo-note-id', noteId);
         e.dataTransfer.setData('application/zoho-note-id', noteId);
         e.dataTransfer.setData('text/plain', noteId);
         e.dataTransfer.effectAllowed = 'move';
@@ -5023,7 +5028,7 @@ class NotebookApp {
         const item = e.target.closest('.notebook-item');
         if (item) {
             const targetNotebookId = item.getAttribute('data-id');
-            const cellId = e.dataTransfer.getData('application/zoho-cell-id') || e.dataTransfer.getData('text/plain');
+            const cellId = e.dataTransfer.getData('application/zigo-cell-id') || e.dataTransfer.getData('application/zoho-cell-id') || e.dataTransfer.getData('text/plain');
             if (cellId && targetNotebookId && (!this.notebook || targetNotebookId !== this.notebook.id)) {
                 await this.moveCellToNotebook(cellId, targetNotebookId);
             }
@@ -5093,7 +5098,7 @@ class NotebookApp {
         const item = e.target.closest('.live-note-item');
         if (item) {
             const targetNotebookId = item.getAttribute('data-id');
-            const cellId = e.dataTransfer.getData('application/zoho-cell-id') || e.dataTransfer.getData('text/plain');
+            const cellId = e.dataTransfer.getData('application/zigo-cell-id') || e.dataTransfer.getData('application/zoho-cell-id') || e.dataTransfer.getData('text/plain');
             if (cellId && targetNotebookId && (!this.notebook || targetNotebookId !== this.notebook.id)) {
                 await this.moveCellToNotebook(cellId, targetNotebookId);
             }

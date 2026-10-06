@@ -40,8 +40,8 @@ exports.getDashboard = async (req, res) => {
         }
 
         res.render('admin/dashboard', {
-            title: 'Admin Dashboard - Zoho Notes',
-            metaTitle: 'Admin Dashboard - Zoho Notes',
+            title: 'Admin Dashboard - Zigo Notes',
+            metaTitle: 'Admin Dashboard - Zigo Notes',
             metaRobots: 'noindex, nofollow',
             adminName: req.session.username,
             adminUser: adminUser,
@@ -335,8 +335,8 @@ exports.getApiUsagePage = async (req, res) => {
         });
 
         res.render('admin/api-usage', {
-            title: 'MCP API Usage & Quota Leaderboard - Zoho Notes',
-            metaTitle: 'MCP API Usage Leaderboard - Zoho Notes',
+            title: 'MCP API Usage & Quota Leaderboard - Zigo Notes',
+            metaTitle: 'MCP API Usage Leaderboard - Zigo Notes',
             metaRobots: 'noindex, nofollow',
             adminName: req.session.username,
             adminUser,

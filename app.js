@@ -1307,26 +1307,26 @@ app.get('/api/user/mcp-credentials', isAuthenticated, async (req, res) => {
             configs: {
                 antigravity: {
                     mcpServers: {
-                        "zoho-notes": {
+                        "zigo-notes": {
                             serverUrl: sseUrl
                         }
                     }
                 },
                 cursor: {
-                    name: "zoho-notes",
+                    name: "zigo-notes",
                     type: "SSE",
                     url: sseUrl
                 },
                 windsurf: {
                     mcpServers: {
-                        "zoho-notes": {
+                        "zigo-notes": {
                             serverUrl: sseUrl
                         }
                     }
                 },
                 claudeDesktop: {
                     mcpServers: {
-                        "zoho-notes": {
+                        "zigo-notes": {
                             command: "npx",
                             args: ["-y", "mcp-remote", sseUrl]
                         }

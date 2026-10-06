@@ -1,5 +1,5 @@
 /**
- * Zoho Notes Pro - Client-Side Polyglot Browser Execution Engine
+ * Zigo Notes Pro - Client-Side Polyglot Browser Execution Engine
  * 
  * Execution Matrix:
  * - JavaScript  -> 100% Local (True Web Worker Sandbox + Infinite Loop Killer + Async Serializer)
@@ -1068,4 +1068,5 @@
 
     // Export singleton
     window.ZohoBrowserEngine = new BrowserExecutionEngine();
+    window.ZigoBrowserEngine = window.ZohoBrowserEngine;
 })(window);

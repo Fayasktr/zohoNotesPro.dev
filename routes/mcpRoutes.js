@@ -163,7 +163,7 @@ async function mcpAuth(req, res, next) {
 router.get('/status', (req, res) => {
     res.json({
         status: 'online',
-        service: 'Zoho Notes MCP Server (Multi-Tenant)',
+        service: 'Zigo Notes MCP Server (Multi-Tenant)',
         version: '2.0.0',
         transport: 'SSE',
         activeSessions: activeTransports.size,

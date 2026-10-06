@@ -1,5 +1,5 @@
 /**
- * Zoho Notes - Real-Time Collaboration Engine (Multi-User Live Coding)
+ * Zigo Notes - Real-Time Collaboration Engine (Multi-User Live Coding)
  * 
  * Powered by:
  * 1. Native High-Speed WebSocket Server (/ws/collab) for instant sub-millisecond local & LAN sync
@@ -16,7 +16,7 @@
 
 (function () {
     const COLLAB_COLORS = [
-        '#6d5dfc', // Zoho Purple
+        '#6d5dfc', // Zigo Purple
         '#00d2ff', // Neon Cyan
         '#30ff6a', // Electric Green
         '#ff9f43', // Warm Amber
@@ -981,4 +981,5 @@
 
     // Expose global instance
     window.ZohoCollabEngine = new CollabEngine();
+    window.ZigoCollabEngine = window.ZohoCollabEngine;
 })();
