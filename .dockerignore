@@ -6,3 +6,15 @@ db_diagnostic.json
 test_languages.js
 notebooks/
 trash/
+.data/
+second project planning/
+learn-service-worker/
+*.xlsx
+*.csv
+*.log
+*.tmp
+student_answers_dump.txt
+batch_411_*.json
+batch_411_*.md
+.gemini/
+.agent/

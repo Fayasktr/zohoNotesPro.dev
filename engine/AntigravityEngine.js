@@ -364,7 +364,7 @@ class AntigravityEngine {
                 }
 
                 try {
-                    const execResult = await this._runBinaryWithStdin('java', ['-cp', execDir, className], stdin, this.timeout);
+                    const execResult = await this._runBinaryWithStdin('java', ['-Xmx96m', '-Xms16m', '-cp', execDir, className], stdin, this.timeout);
                     resolve({
                         id,
                         ...execResult
@@ -443,7 +443,7 @@ class AntigravityEngine {
                         }
                         resolve({
                             binaryPath: 'java',
-                            args: ['-cp', execDir, className],
+                            args: ['-Xmx96m', '-Xms16m', '-cp', execDir, className],
                             cleanupPaths: [],
                             execDir
                         });

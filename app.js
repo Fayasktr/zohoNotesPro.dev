@@ -20,7 +20,6 @@ const crypto = require('crypto');
 const helmet = require('helmet');
 const csrf = require('csurf');
 const rateLimit = require('express-rate-limit');
-const cron = require('node-cron');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 
@@ -36,10 +35,6 @@ const gameRoutes = require('./routes/gameRoutes');
 const syncRoutes = require('./routes/syncRoutes');
 const mcpRoutes = require('./routes/mcpRoutes');
 const aiRoutes = require('./routes/aiRoutes');
-const cronService = require('./services/cronService');
-
-// Start Cron Jobs
-cronService.start();
 
 // Handlebars Helpers
 hbs.registerHelper('substring', function (str, start, len) {
@@ -116,7 +111,7 @@ app.use(helmet({
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1d' }));
 app.set('view engine', 'hbs');
 app.set('views', path.join(__dirname, 'views'));
 hbs.registerPartials(path.join(__dirname, 'views/partials'));
@@ -2096,50 +2091,7 @@ app.delete('/api/trash-all', isAuthenticated, async (req, res) => {
     }
 });
 
-// --- BACKGROUND CRON JOBS ---
 
-// Run every 10 minutes
-cron.schedule('*/10 * * * *', async () => {
-    try {
-        // 0. Check if logging is paused
-        const config = await SystemConfig.findOne({ key: 'isLoggingPaused' }).lean();
-        if (config && config.value === true) {
-            console.log('[Cron] System logging is currently paused.');
-            return;
-        }
-
-        // 1. Cleanup expired password reset tokens
-        const result = await User.updateMany(
-            { resetPasswordExpires: { $lt: Date.now() } },
-            { $unset: { resetPasswordToken: 1, resetPasswordExpires: 1 } }
-        );
-
-        let maintenanceMsg = "System maintenance completed.";
-        if (result.modifiedCount > 0) {
-            maintenanceMsg += ` Cleaned up ${result.modifiedCount} expired reset tokens.`;
-        }
-
-        // 2. System Heartbeat
-        const userCount = await User.countDocuments({ role: { $ne: 'admin' } });
-        const noteCount = await Note.countDocuments();
-        const feedbackCount = await Feedback.countDocuments();
-
-        const mem = process.memoryUsage();
-        const memMsg = `Memory: RSS=${(mem.rss / 1024 / 1024).toFixed(2)}MB, Heap=${(mem.heapUsed / 1024 / 1024).toFixed(2)}/${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB`;
-
-        await SystemLog.create({
-            type: 'info',
-            message: `${maintenanceMsg} System Status: ${userCount} Users, ${noteCount} Notes, ${feedbackCount} Feedbacks. ${memMsg}`
-        });
-        console.log(`[Cron] Maintenance: ${maintenanceMsg} (${memMsg})`);
-    } catch (err) {
-        console.error('[Cron] Maintenance Error:', err);
-        await SystemLog.create({
-            type: 'error',
-            message: `Background Maintenance Error: ${err.message}`
-        });
-    }
-});
 
 // =====================================================
 // WebSocket Servers: Terminal + Real-Time Collaboration

@@ -1,8 +1,8 @@
 # Use Node.js base image
 FROM node:18-slim
 
-# Install system dependencies (Python and C/C++ compilers)
-RUN apt-get update && apt-get install -y \
+# Install system dependencies (Python, C/C++ compilers, and headless Java)
+RUN apt-get update && apt-get install --no-install-recommends -y \
     python3 \
     gcc \
     g++ \
@@ -15,7 +15,7 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
+# Install production dependencies
 RUN npm install
 
 # Copy application code
@@ -24,5 +24,5 @@ COPY . .
 # Expose the application port
 EXPOSE 3000
 
-# Start the application
-CMD ["node", "--max-old-space-size=400", "app.js"]
+# Start the application with a safe memory heap allocation for 512MB containers
+CMD ["node", "--max-old-space-size=350", "app.js"]
