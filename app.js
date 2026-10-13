@@ -378,9 +378,11 @@ app.use('/forgot-password', authLimiter);
 // Mount Model Context Protocol (MCP) endpoints for remote AI agents (SSE & Messages)
 app.use('/mcp', mcpRoutes);
 
-// Apply CSRF Protection to all routes after session is initialized (exempting /mcp and /api/ai JSON/SSE routes)
+// Apply CSRF Protection to all routes after session is initialized (exempting /mcp, /api/ai, and /api/internal JSON routes)
 app.use((req, res, next) => {
-    if (req.path.startsWith('/mcp') || req.originalUrl.startsWith('/mcp') || req.path.startsWith('/api/ai') || req.originalUrl.startsWith('/api/ai')) {
+    if (req.path.startsWith('/mcp') || req.originalUrl.startsWith('/mcp') ||
+        req.path.startsWith('/api/ai') || req.originalUrl.startsWith('/api/ai') ||
+        req.path.startsWith('/api/internal') || req.originalUrl.startsWith('/api/internal')) {
         return next();
     }
     csrfProtection(req, res, next);
@@ -990,7 +992,9 @@ app.delete('/api/notes/live/:noteId', isAuthenticated, async (req, res) => {
             id: noteId,
             $or: [
                 { owner: { $in: [currentUserId, userObjId] } },
-                { 'collaborators.user': { $in: [currentUserId, userObjId] } }
+                { 'collaborators.user': { $in: [currentUserId, userObjId] } },
+                { 'collaborators.userId': { $in: [currentUserId, userObjId] } },
+                { 'collaborators.email': req.user?.email?.toLowerCase() }
             ]
         });
 
@@ -1009,7 +1013,8 @@ app.delete('/api/notes/live/:noteId', isAuthenticated, async (req, res) => {
                         isTrashed: true,
                         trashedAt: new Date(),
                         isLive: false,
-                        'content.isLive': false
+                        'content.isLive': false,
+                        updatedAt: new Date()
                     },
                     $unset: { shareCode: 1 }
                 }
@@ -1027,11 +1032,21 @@ app.delete('/api/notes/live/:noteId', isAuthenticated, async (req, res) => {
 
             return res.json({ success: true, action: 'deleted', noteId });
         } else {
-            // Guest: remove self from collaborators
-            note.collaborators = (note.collaborators || []).filter(c => 
-                String(c.user?._id || c.user) !== String(currentUserId)
+            // Guest: remove self from collaborators atomically without modifying owner's note
+            await Note.updateOne(
+                { _id: note._id },
+                {
+                    $pull: {
+                        collaborators: {
+                            $or: [
+                                { user: { $in: [currentUserId, userObjId] } },
+                                { userId: { $in: [currentUserId, userObjId] } },
+                                { email: req.user?.email?.toLowerCase() }
+                            ]
+                        }
+                    }
+                }
             );
-            await note.save();
 
             // Notify room of departure
             broadcastToCollabRoom(noteId, {
@@ -1039,7 +1054,7 @@ app.delete('/api/notes/live/:noteId', isAuthenticated, async (req, res) => {
                 userId: String(currentUserId)
             });
 
-            return res.json({ success: true, action: 'removed', noteId });
+            return res.json({ success: true, action: 'left', noteId });
         }
     } catch (err) {
         console.error('[LiveNotes] Error deleting/leaving live note:', err);
@@ -1080,6 +1095,51 @@ app.get('/api/notes/shared', isAuthenticated, async (req, res) => {
     } catch (err) {
         console.error('[CollabNotes] Error fetching shared notes:', err);
         res.status(500).json({ error: 'Failed to fetch shared notes' });
+    }
+});
+
+// --- API: REMOVE SELF FROM SHARED NOTE (COLLABORATOR LEAVE/DELETE) ---
+app.delete('/api/notes/shared/:noteId', isAuthenticated, async (req, res) => {
+    try {
+        const currentUserId = req.session.userId || (req.user ? req.user._id : null);
+        const { noteId } = req.params;
+
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(currentUserId) ? new mongoose.Types.ObjectId(currentUserId) : currentUserId;
+
+        const note = await Note.findOne({
+            id: noteId,
+            $or: [
+                { 'collaborators.user': { $in: [currentUserId, userObjId] } },
+                { 'collaborators.userId': { $in: [currentUserId, userObjId] } },
+                { 'collaborators.email': req.user?.email?.toLowerCase() }
+            ]
+        });
+
+        if (!note) {
+            return res.status(404).json({ error: 'Shared note not found or you are not a collaborator' });
+        }
+
+        // Pull collaborator from note - does NOT delete the note or change owner's copy
+        await Note.updateOne(
+            { _id: note._id },
+            {
+                $pull: {
+                    collaborators: {
+                        $or: [
+                            { user: { $in: [currentUserId, userObjId] } },
+                            { userId: { $in: [currentUserId, userObjId] } },
+                            { email: req.user?.email?.toLowerCase() }
+                        ]
+                    }
+                }
+            }
+        );
+
+        res.json({ success: true, action: 'removed_from_shared', noteId });
+    } catch (err) {
+        console.error('[CollabNotes] Error removing shared note:', err);
+        res.status(500).json({ error: 'Failed to remove shared note' });
     }
 });
 
@@ -1668,7 +1728,7 @@ app.delete('/api/trash/cell/:id', isAuthenticated, async (req, res) => {
 });
 
 app.delete(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
-    const notebookId = req.params[0];
+    const notebookId = decodeURIComponent(req.params[0]);
     try {
         const userId = req.session.userId || (req.user ? req.user._id : null);
         const mongoose = require('mongoose');
@@ -1676,28 +1736,72 @@ app.delete(/^\/api\/notebooks\/(.+)$/, isAuthenticated, async (req, res) => {
 
         const note = await Note.findOne({
             id: notebookId,
-            $or: [{ owner: userId }, { owner: userObjId }]
+            $or: [
+                { owner: { $in: [userId, userObjId] } },
+                { 'collaborators.user': { $in: [userId, userObjId] } },
+                { 'collaborators.userId': { $in: [userId, userObjId] } },
+                { 'collaborators.email': req.user?.email?.toLowerCase() }
+            ]
         });
 
-        if (!note) return res.status(404).json({ error: 'Notebook not found' });
+        if (!note) return res.status(404).json({ error: 'Notebook not found or access denied' });
 
-        note.isTrashed = true;
-        note.trashedAt = new Date();
+        const isOwner = Boolean(
+            String(note.owner?._id || note.owner) === String(userId)
+        );
+
+        if (!isOwner) {
+            // Collaborator removing shared note -> remove ONLY from their own account, DO NOT delete owner's copy!
+            await Note.updateOne(
+                { _id: note._id },
+                {
+                    $pull: {
+                        collaborators: {
+                            $or: [
+                                { user: { $in: [userId, userObjId] } },
+                                { userId: { $in: [userId, userObjId] } },
+                                { email: req.user?.email?.toLowerCase() }
+                            ]
+                        }
+                    }
+                }
+            );
+
+            if (note.isLive) {
+                broadcastToCollabRoom(notebookId, {
+                    type: 'user_left',
+                    userId: String(userId)
+                });
+            }
+
+            return res.json({ success: true, action: 'removed_from_shared', notebookId });
+        }
+
+        // Host / Owner trashing the note:
+        const updateDoc = {
+            $set: {
+                isTrashed: true,
+                trashedAt: new Date(),
+                updatedAt: new Date()
+            }
+        };
+
         if (note.isLive) {
-            note.isLive = false;
-            note.shareCode = null;
-            if (note.content) note.content.isLive = false;
+            updateDoc.$set.isLive = false;
+            if (note.content) updateDoc.$set['content.isLive'] = false;
+            updateDoc.$unset = { shareCode: 1 }; // Use $unset, NEVER set shareCode = null!
+
             broadcastToCollabRoom(notebookId, {
                 type: 'session_deleted',
                 noteId: notebookId,
-                message: 'This session has been deleted.'
+                message: 'This live session has been deleted by the host.'
             });
             collabRooms.delete(notebookId);
             collabCellsCache.delete(notebookId);
         }
-        await note.save();
 
-        res.json({ success: true });
+        await Note.updateOne({ _id: note._id }, updateDoc);
+        res.json({ success: true, action: 'deleted', notebookId });
     } catch (err) {
         console.error('Failed to move note to trash:', err);
         res.status(500).json({ error: 'Failed to move to trash' });
@@ -1777,21 +1881,70 @@ app.put('/api/folders/rename', isAuthenticated, async (req, res) => {
 });
 
 app.delete(/^\/api\/folders\/(.+)$/, isAuthenticated, async (req, res) => {
-    const folderName = req.params[0];
+    const folderName = decodeURIComponent(req.params[0]);
     try {
         const userId = req.session.userId || (req.user ? req.user._id : null);
+        const mongoose = require('mongoose');
+        const userObjId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
         const escapeRegex = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         const folderNameEscaped = escapeRegex(folderName);
+        const folderRegex = new RegExp('^' + folderNameEscaped + '(?:/|$)');
 
-        // Move all notes in this folder or any nested subfolders to trash
+        // 1. Find all hosted notes in this folder or any nested subfolders
+        const hostedNotes = await Note.find({
+            owner: { $in: [userId, userObjId] },
+            folder: { $regex: folderRegex }
+        });
+
+        for (const note of hostedNotes) {
+            if (note.isLive) {
+                broadcastToCollabRoom(note.id, {
+                    type: 'session_deleted',
+                    noteId: note.id,
+                    message: 'The host has deleted this live session folder.'
+                });
+                collabRooms.delete(note.id);
+                collabCellsCache.delete(note.id);
+            }
+            await Note.updateOne(
+                { _id: note._id },
+                {
+                    $set: {
+                        isTrashed: true,
+                        trashedAt: new Date(),
+                        isLive: false,
+                        'content.isLive': false,
+                        updatedAt: new Date()
+                    },
+                    $unset: { shareCode: 1 }
+                }
+            );
+        }
+
+        // 2. Also remove user from collaborators for any joined notes in this folder
         await Note.updateMany(
             {
-                owner: userId,
-                folder: { $regex: '^' + folderNameEscaped + '(?:/|$)' }
+                folder: { $regex: folderRegex },
+                $or: [
+                    { 'collaborators.user': { $in: [userId, userObjId] } },
+                    { 'collaborators.userId': { $in: [userId, userObjId] } },
+                    { 'collaborators.email': req.user?.email?.toLowerCase() }
+                ]
             },
-            { isTrashed: true, trashedAt: new Date(), updatedAt: new Date() }
+            {
+                $pull: {
+                    collaborators: {
+                        $or: [
+                            { user: { $in: [userId, userObjId] } },
+                            { userId: { $in: [userId, userObjId] } },
+                            { email: req.user?.email?.toLowerCase() }
+                        ]
+                    }
+                }
+            }
         );
-        res.json({ success: true });
+
+        res.json({ success: true, count: hostedNotes.length });
     } catch (err) {
         console.error('Delete folder error:', err);
         res.status(500).json({ error: 'Failed to delete folder' });
@@ -2166,6 +2319,50 @@ function broadcastToCollabRoom(noteId, message, senderWs = null) {
     }
 }
 
+// --- INTERNAL API: BROADCAST TO COLLAB ROOM (USED BY MCP / BACKGROUND AI TO SYNC REAL-TIME TO STUDENTS) ---
+app.post('/api/internal/collab-broadcast', async (req, res) => {
+    try {
+        const clientIp = req.ip || req.connection.remoteAddress;
+        const isLocal = clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === '::ffff:127.0.0.1' || req.headers['x-internal-key'] === 'zoho-internal-collab';
+        if (!isLocal) {
+            return res.status(403).json({ error: 'Internal endpoint accessible only locally' });
+        }
+
+        const { noteId, type, message, cells, title, metadata } = req.body;
+        if (!noteId) return res.status(400).json({ error: 'Missing noteId' });
+
+        const payload = {
+            type: type || 'note_updated_remote',
+            noteId: noteId,
+            message: message || 'Note has been updated remotely',
+            cells: cells || null,
+            title: title || null,
+            metadata: metadata || null,
+            timestamp: Date.now()
+        };
+
+        // Cache cells if provided
+        if (Array.isArray(cells)) {
+            if (!collabCellsCache.has(noteId)) {
+                collabCellsCache.set(noteId, new Map());
+            }
+            const roomCache = collabCellsCache.get(noteId);
+            cells.forEach(c => {
+                if (c && c.id && typeof c.content === 'string') {
+                    roomCache.set(c.id, c.content);
+                }
+            });
+        }
+
+        broadcastToCollabRoom(noteId, payload);
+        const room = collabRooms.get(noteId);
+        res.json({ success: true, delivered: Boolean(room && room.size > 0), connectedPeers: room ? room.size : 0 });
+    } catch (err) {
+        console.error('[CollabInternal] Broadcast error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 function getCollabRoomPresence(noteId) {
     const room = collabRooms.get(noteId);
     if (!room) return { users: [], count: 0, isHostOnline: false };
@@ -2466,6 +2663,10 @@ collabWss.on('connection', (ws) => {
     ws.on('error', cleanup);
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server on http://localhost:${PORT}`);
+    });
+}
+
+module.exports = { app, server };

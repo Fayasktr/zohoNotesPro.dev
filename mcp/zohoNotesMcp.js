@@ -22,6 +22,42 @@ async function connectToDatabase(customUri) {
 }
 
 /**
+ * Notify the active Zoho Notes web server to broadcast live updates to connected peers in real time
+ */
+async function notifyCollabServer(noteId, payload = {}) {
+    try {
+        const http = require('http');
+        const port = process.env.PORT || 4321;
+        const postData = JSON.stringify({
+            noteId,
+            type: 'note_updated_remote',
+            ...payload
+        });
+
+        const req = http.request({
+            hostname: '127.0.0.1',
+            port: port,
+            path: '/api/internal/collab-broadcast',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData),
+                'x-internal-key': 'zoho-internal-collab'
+            },
+            timeout: 1500
+        }, (res) => {
+            res.resume();
+        });
+
+        req.on('error', () => {
+            // Silently ignore if web app is not running
+        });
+        req.write(postData);
+        req.end();
+    } catch (_) {}
+}
+
+/**
  * Factory to create and configure a Scoped Zoho Notes MCP Server
  * @param {Object} config
  * @param {Object} config.user Authenticated user object ({ _id, username, email, role })
@@ -121,7 +157,7 @@ function createZohoNotesMcpServer(config = {}) {
             },
             {
                 name: 'update_note',
-                description: 'Update metadata or append new cells to an existing note.',
+                description: 'Update metadata or append/replace cells on an existing note with real-time live sync.',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -129,16 +165,39 @@ function createZohoNotesMcpServer(config = {}) {
                         title: { type: 'string', description: 'New title' },
                         folder: { type: 'string', description: 'New folder name' },
                         isStarred: { type: 'boolean', description: 'Star or unstar note' },
-                        markdown: { type: 'string', description: 'Update or replace the markdown explanation' },
+                        markdown: { type: 'string', description: 'Markdown instructions or content for the note' },
                         appendCell: {
                             type: 'object',
-                            description: 'Append a new code cell to the note',
+                            description: 'Append a single new cell to the note',
                             properties: {
+                                title: { type: 'string', description: 'Cell label or question header' },
                                 type: { type: 'string', enum: ['code', 'markdown'], default: 'code' },
                                 language: { type: 'string', default: 'javascript' },
                                 content: { type: 'string' }
                             },
                             required: ['content']
+                        },
+                        appendCells: {
+                            type: 'array',
+                            description: 'Append multiple structured cells at once',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    title: { type: 'string', description: 'Cell title or question header' },
+                                    type: { type: 'string', enum: ['code', 'markdown'], default: 'code' },
+                                    language: { type: 'string', default: 'javascript' },
+                                    content: { type: 'string' }
+                                },
+                                required: ['content']
+                            }
+                        },
+                        cells: {
+                            type: 'array',
+                            description: 'Directly replace all cells with this list of cells'
+                        },
+                        replaceInitialPlaceholder: {
+                            type: 'boolean',
+                            description: 'If true, removes default "Live Cell 1" placeholder before adding new cells'
                         }
                     },
                     required: ['noteId']
@@ -479,6 +538,12 @@ function createZohoNotesMcpServer(config = {}) {
 
                     await note.save();
 
+                    // Real-time broadcast notification
+                    await notifyCollabServer(note.id, {
+                        title: note.title,
+                        cells: note.content.cells
+                    });
+
                     return {
                         content: [
                             {
@@ -526,23 +591,76 @@ function createZohoNotesMcpServer(config = {}) {
                     if (!note.content) note.content = {};
                     if (!Array.isArray(note.content.cells)) note.content.cells = [];
 
-                    if (args.markdown !== undefined) {
-                        note.content.markdown = args.markdown;
+                    // Remove initial default placeholder cell if requested
+                    if (args.replaceInitialPlaceholder) {
+                        if (note.content.cells.length === 1 && (note.content.cells[0].title === 'Live Cell 1' || (note.content.cells[0].content && note.content.cells[0].content.includes('Welcome to live collaborative coding')))) {
+                            note.content.cells = [];
+                        }
                     }
 
+                    // Handle complete replacement of cells
+                    if (Array.isArray(args.cells)) {
+                        note.content.cells = args.cells.map(c => ({
+                            id: c.id || ('cell-' + crypto.randomUUID()),
+                            type: c.type || 'code',
+                            title: c.title || '',
+                            language: c.language || c.lang || 'javascript',
+                            content: c.content || c.code || '',
+                            output: c.output || null
+                        }));
+                    }
+
+                    // Handle markdown: add/update as a clean labeled Instructions cell if provided
+                    if (args.markdown !== undefined) {
+                        note.content.markdown = args.markdown;
+                        const existingMdCell = note.content.cells.find(c => c.type === 'markdown' || c.title === 'Instructions');
+                        if (existingMdCell) {
+                            existingMdCell.content = args.markdown;
+                        } else if (args.markdown && args.markdown.trim().length > 0) {
+                            note.content.cells.unshift({
+                                id: 'cell-' + crypto.randomUUID(),
+                                type: 'markdown',
+                                title: 'Instructions',
+                                language: 'markdown',
+                                content: args.markdown
+                            });
+                        }
+                    }
+
+                    // Handle single appendCell
                     if (args.appendCell) {
                         note.content.cells.push({
                             id: 'cell-' + crypto.randomUUID(),
                             type: args.appendCell.type || 'code',
+                            title: args.appendCell.title || '',
                             language: args.appendCell.language || 'javascript',
                             content: args.appendCell.content || ''
                         });
-                        note.markModified('content');
                     }
 
+                    // Handle multiple appendCells
+                    if (Array.isArray(args.appendCells)) {
+                        for (const cell of args.appendCells) {
+                            note.content.cells.push({
+                                id: 'cell-' + crypto.randomUUID(),
+                                type: cell.type || 'code',
+                                title: cell.title || '',
+                                language: cell.language || 'javascript',
+                                content: cell.content || cell.code || ''
+                            });
+                        }
+                    }
+
+                    note.markModified('content');
                     note._version = (note._version || 1) + 1;
                     note.updatedAt = new Date();
                     await note.save();
+
+                    // Real-time broadcast to all connected students and host via WebSocket bridge
+                    await notifyCollabServer(note.id, {
+                        title: note.title,
+                        cells: note.content.cells
+                    });
 
                     return {
                         content: [
@@ -551,8 +669,9 @@ function createZohoNotesMcpServer(config = {}) {
                                 text: JSON.stringify(
                                     {
                                         success: true,
-                                        message: `Note "${note.title}" updated successfully`,
+                                        message: `Note "${note.title}" updated successfully with real-time broadcast delivered`,
                                         id: note.id,
+                                        cellCount: note.content.cells.length,
                                         version: note._version
                                     },
                                     null,

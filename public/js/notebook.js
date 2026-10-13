@@ -284,6 +284,15 @@ class NotebookApp {
         // Event Delegation for Live Notes Section
         document.getElementById('live-notes-list')?.addEventListener('click', (e) => {
             // 1. Live Folder Actions
+            const addLiveSubfolderBtn = e.target.closest('.btn-add-live-subfolder');
+            if (addLiveSubfolderBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const parentPath = addLiveSubfolderBtn.getAttribute('data-parent-path');
+                this.createLiveSubfolderPrompt(parentPath);
+                return;
+            }
+
             const addLiveFileBtn = e.target.closest('.btn-add-live-file');
             if (addLiveFileBtn) {
                 e.preventDefault();
@@ -1313,6 +1322,29 @@ class NotebookApp {
         document.getElementById('live-share-modal-input')?.addEventListener('click', (e) => {
             e.target.select();
         });
+
+        // 6. Remote note updated via MCP / background AI: live sync cells and title
+        this.collab.onRemoteNoteUpdated = async (msg) => {
+            console.log('[NotebookApp] Remote note updated notification received:', msg);
+            if (this.notebook && this.notebook.id === msg.noteId) {
+                if (Array.isArray(msg.cells) && msg.cells.length > 0) {
+                    this.notebook.cells = msg.cells;
+                    if (msg.title) {
+                        this.notebook.title = msg.title;
+                        const titleEl = document.getElementById('notebook-title');
+                        if (titleEl) titleEl.value = msg.title;
+                    }
+                    if (this.db) {
+                        await this.db.putNote(this.notebook, { hasFullContent: true });
+                    }
+                    this.renderAllCells();
+                } else {
+                    await this.loadNotebook(msg.noteId);
+                }
+                this.showToast('Note updated by instructor in real-time!', 'info');
+            }
+            await this.fetchAndRenderLiveNotes();
+        };
 
         // Wire Toggle Shared Notes section accordion
         document.getElementById('toggle-shared-section')?.addEventListener('click', () => {
@@ -2382,14 +2414,25 @@ class NotebookApp {
             if (isActive) item.classList.add('active');
 
             item.innerHTML = `
-                <div class="flex items-center gap-2 overflow-hidden flex-1">
+                <div class="flex items-center gap-2 overflow-hidden flex-1 select-none">
                     <i data-lucide="file-code" class="tree-icon w-3.5 h-3.5 text-[#00d2ff] flex-shrink-0"></i>
                     <span class="tree-label truncate text-xs text-[var(--text-main)]" title="${note.title}">${note.title || 'Untitled'}</span>
                 </div>
-                <span class="shared-note-author-tag" title="Created by @${note.authorName}">by @${note.authorName}</span>
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                    <span class="shared-note-author-tag" title="Created by @${note.authorName}">by @${note.authorName}</span>
+                    <button class="tree-action-btn danger btn-delete-shared-note opacity-0 group-hover:opacity-100 hover:text-rose-400 p-1 rounded transition-all cursor-pointer" title="Remove from Shared Notes" data-id="${note.id}">
+                        <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+                    </button>
+                </div>
             `;
 
-            item.onclick = () => {
+            item.onclick = (e) => {
+                if (e.target.closest('.btn-delete-shared-note')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.removeSharedNote(note.id, note.title);
+                    return;
+                }
                 note.isShared = true;
                 this.loadNotebook(note.id);
             };
@@ -2398,6 +2441,36 @@ class NotebookApp {
         });
 
         if (window.lucide) lucide.createIcons();
+    }
+
+    async removeSharedNote(noteId, title = 'Shared Note') {
+        this.confirmAction(
+            'Remove Shared Note?',
+            `Remove "${title}" from your account? The owner's original copy will remain completely untouched.`,
+            async () => {
+                try {
+                    const res = await this.safeFetch(`/api/notes/shared/${noteId}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        if (this.db) {
+                            await this.db.permanentlyDeleteNote(noteId);
+                        }
+                        if (this.notebook && this.notebook.id === noteId) {
+                            localStorage.removeItem('zoho-notebook-current-id');
+                            await this.init();
+                        } else {
+                            await this.fetchAndRenderSharedNotes();
+                        }
+                        this.showToast(`Removed "${title}" from your shared notes.`);
+                    } else {
+                        const err = await res.json().catch(() => ({}));
+                        this.showToast(err.error || 'Failed to remove shared note', 'error');
+                    }
+                } catch (e) {
+                    console.error('Failed to remove shared note:', e);
+                    this.showToast('Could not remove shared note', 'error');
+                }
+            }
+        );
     }
 
     async fetchAndRenderLiveNotes() {
@@ -2568,18 +2641,59 @@ class NotebookApp {
         });
     }
 
+    async createLiveSubfolderPrompt(parentPath) {
+        const parentParts = parentPath.split('/');
+        const parentDisplayName = parentParts[parentParts.length - 1];
+
+        this.inputAction('New Subfolder', `Enter a name for the subfolder inside "${parentDisplayName}":`, 'New Subfolder', async (subName) => {
+            const clean = (subName || '').trim();
+            if (!clean) return;
+            const fullSubPath = `${parentPath}/${clean}`;
+            this.addPersistedLiveFolder(fullSubPath);
+            if (this.expandedLiveFolders) {
+                this.expandedLiveFolders.add(parentPath);
+                this.expandedLiveFolders.add(fullSubPath);
+                localStorage.setItem('zoho-expanded-live-folders', JSON.stringify([...this.expandedLiveFolders]));
+            }
+            if (this.liveNotebooks) {
+                this.renderLiveNotesList(this.liveNotebooks);
+            } else {
+                await this.fetchAndRenderLiveNotes();
+            }
+            this.showToast(`Created subfolder "${clean}" inside "${parentDisplayName}"`);
+        });
+    }
+
     async deleteLiveFolder(folderName) {
-        this.confirmAction('Delete Live Folder?', `Move all live notes in "${folderName}" to trash?`, async () => {
+        this.confirmAction('Delete Live Folder?', `Move all live notes and subfolders in "${folderName}" to trash?`, async () => {
             try {
                 const allLive = [
                     ...((this.liveNotebooks && this.liveNotebooks.hosted) || []),
                     ...((this.liveNotebooks && this.liveNotebooks.joined) || [])
                 ];
-                for (const n of allLive) {
-                    if (n.folder === folderName || (n.folder && n.folder.startsWith(folderName + '/'))) {
-                        await this.deleteLiveNote(n.id, n.title, n.isHosted !== false);
+                const notesToDelete = allLive.filter(n => n.folder === folderName || (n.folder && n.folder.startsWith(folderName + '/')));
+
+                for (const n of notesToDelete) {
+                    try {
+                        await this.safeFetch(`/api/notes/live/${n.id}`, { method: 'DELETE' });
+                    } catch (netErr) {
+                        console.warn('[NotebookApp] Failed to delete remote live note:', n.id, netErr);
+                    }
+                    if (this.db) {
+                        await this.db.permanentlyDeleteNote(n.id);
+                    }
+                    if (this.notebook && this.notebook.id === n.id) {
+                        if (this.collab) await this.collab.disconnect();
+                        const topBar = document.getElementById('collab-top-bar');
+                        if (topBar) topBar.classList.add('hidden');
+                        localStorage.removeItem('zoho-notebook-current-id');
                     }
                 }
+
+                // Call remote folder delete route
+                try {
+                    await this.safeFetch(`/api/folders/${encodeURIComponent(folderName)}`, { method: 'DELETE' });
+                } catch (_) {}
 
                 for (const path of [...this.expandedLiveFolders]) {
                     if (path === folderName || path.startsWith(folderName + '/')) {
@@ -2598,8 +2712,13 @@ class NotebookApp {
                 }
 
                 await this.fetchAndRenderLiveNotes();
+                if (!localStorage.getItem('zoho-notebook-current-id')) {
+                    await this.init();
+                }
+                this.showToast(`Live folder "${folderName}" and contents deleted.`);
             } catch (e) {
                 console.error('Live folder delete failed', e);
+                this.showToast('Failed to delete live folder', 'error');
             }
         });
     }
@@ -2778,6 +2897,9 @@ class NotebookApp {
                         <i data-lucide="folder" class="tree-icon" style="color: #fb7185;"></i>
                         <span class="tree-label" title="${child.fullPath}">${child.name}</span>
                         <div class="tree-actions">
+                            <button class="tree-action-btn btn-add-live-subfolder" title="New Subfolder" data-parent-path="${child.fullPath}">
+                                <i data-lucide="folder-plus" style="width:12px;"></i>
+                            </button>
                             <button class="tree-action-btn btn-add-live-file" title="Create Live Note in Folder" data-folder="${child.fullPath}">
                                 <i data-lucide="plus-square" style="width:12px;"></i>
                             </button>
@@ -3725,7 +3847,7 @@ class NotebookApp {
                     <button class="btn-reorder move-down" title="Move Down"><i data-lucide="chevron-down" style="width:12px;"></i></button>
                 </div>
                 <div class="cell-heading-wrapper">
-                    <input type="text" class="cell-title-input" placeholder="Set note label..." value="${cell.title || ''}">
+                    <input type="text" class="cell-title-input" placeholder="${isMark ? 'Markdown Note / Instructions...' : 'Set note label...'}" value="${cell.title || (isMark ? 'Instructions' : '')}">
                     <div class="cell-coding-indicator hidden" id="cell-coding-${cell.id}">
                         <span class="w-1.5 h-1.5 rounded-full bg-[#30ff6a] inline-block animate-pulse flex-shrink-0"></span>
                         <span class="cell-coding-text"></span>
@@ -3740,11 +3862,16 @@ class NotebookApp {
                     <option value="c" ${cell.lang === 'c' ? 'selected' : ''}>C</option>
                     <option value="cpp" ${cell.lang === 'cpp' ? 'selected' : ''}>C++</option>
                 </select>
-                ` : `<div style="text-align: right; margin-right: 8px; font-size: 9px; opacity: 0.5; flex-shrink: 0;">MARKDOWN</div>`}
+                ` : `<div style="text-align: right; margin-right: 8px; font-size: 9px; opacity: 0.5; flex-shrink: 0; font-weight: 600; letter-spacing: 0.5px;">MARKDOWN</div>`}
                 <div class="cell-actions">
                     <button class="btn-icon btn-star-cell" title="Star Note">
                         <i data-lucide="star" ${cell.isStarred ? 'style="fill: #ffcc00; color: #ffcc00;"' : ''}></i>
                     </button>
+                    ${isMark ? `
+                    <button class="btn-icon btn-toggle-markdown" id="toggle-md-${cell.id}" title="Toggle Edit / Preview">
+                        <i data-lucide="eye" style="width: 14px;"></i>
+                    </button>
+                    ` : ''}
                     ${!isMark ? `
                     <button class="btn-icon btn-toggle-stdin ${cell.stdin || cell.showStdin ? 'active' : ''}" id="stdin-btn-${cell.id}" title="Toggle Terminal Input (stdin / scanf / cin)">
                         <i data-lucide="terminal" style="width: 14px;"></i>
@@ -3986,29 +4113,56 @@ class NotebookApp {
 
             if (isMark) {
                 const preview = document.getElementById(`preview-${cell.id}`);
+                const editorDiv = document.getElementById(`editor-${cell.id}`);
+                const toggleBtn = document.getElementById(`toggle-md-${cell.id}`);
+
                 const updatePreview = () => {
-                    preview.innerHTML = marked.parse(editor.getValue());
-                };
-
-                editor.onDidBlurEditorWidget(() => {
-                    if (editor.getValue().trim()) {
-                        document.getElementById(`editor-${cell.id}`).classList.add('hidden');
-                        preview.classList.remove('hidden');
-                        updatePreview();
+                    try {
+                        preview.innerHTML = marked.parse(editor.getValue() || '');
+                    } catch (_) {
+                        preview.textContent = editor.getValue();
                     }
-                });
-
-                preview.onclick = () => {
-                    preview.classList.add('hidden');
-                    document.getElementById(`editor-${cell.id}`).classList.remove('hidden');
-                    editor.focus();
                 };
 
-                if (cell.content) {
-                    document.getElementById(`editor-${cell.id}`).classList.add('hidden');
+                let showingPreview = Boolean(cell.content && cell.content.trim());
+                if (showingPreview) {
+                    editorDiv.classList.add('hidden');
                     preview.classList.remove('hidden');
                     updatePreview();
+                    if (toggleBtn) toggleBtn.innerHTML = '<i data-lucide="edit-3" style="width: 14px;"></i>';
+                } else {
+                    editorDiv.classList.remove('hidden');
+                    preview.classList.add('hidden');
+                    if (toggleBtn) toggleBtn.innerHTML = '<i data-lucide="eye" style="width: 14px;"></i>';
                 }
+
+                const toggleMode = () => {
+                    showingPreview = !showingPreview;
+                    if (showingPreview) {
+                        editorDiv.classList.add('hidden');
+                        preview.classList.remove('hidden');
+                        updatePreview();
+                        if (toggleBtn) toggleBtn.innerHTML = '<i data-lucide="edit-3" style="width: 14px;"></i>';
+                    } else {
+                        preview.classList.add('hidden');
+                        editorDiv.classList.remove('hidden');
+                        updateHeight();
+                        editor.focus();
+                        if (toggleBtn) toggleBtn.innerHTML = '<i data-lucide="eye" style="width: 14px;"></i>';
+                    }
+                    if (window.lucide) lucide.createIcons();
+                };
+
+                if (toggleBtn) {
+                    toggleBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        toggleMode();
+                    };
+                }
+
+                preview.onclick = () => {
+                    toggleMode();
+                };
             } else {
                 // Language selection handling for code cells
                 const langSelect = cellElem.querySelector('.cell-lang-select');
@@ -4684,11 +4838,24 @@ class NotebookApp {
     }
 
     async deleteNotebook(id) {
-        this.confirmAction('Move to Trash?', 'This notebook will be moved to the trash.', async () => {
+        const isShared = Boolean(
+            (this.notebook?.id === id && this.notebook?.isShared) ||
+            (this.sharedNotebooks && this.sharedNotebooks.some(n => n.id === id))
+        );
+        const modalTitle = isShared ? 'Remove Shared Note?' : 'Move to Trash?';
+        const modalDesc = isShared 
+            ? 'Remove this shared note from your account? The owner’s original copy will remain untouched.'
+            : 'This notebook will be moved to the trash.';
+
+        this.confirmAction(modalTitle, modalDesc, async () => {
             try {
                 if (this.db) {
-                    await this.db.trashNote(id);
-                    if (this.sync) this.sync.notifyLocalChange(id, 'TRASH');
+                    if (isShared) {
+                        await this.db.permanentlyDeleteNote(id);
+                    } else {
+                        await this.db.trashNote(id);
+                        if (this.sync) this.sync.notifyLocalChange(id, 'TRASH');
+                    }
                 }
                 // Also issue remote delete so cloud is synchronized
                 await this.safeFetch(`/api/notebooks/${id}`, { method: 'DELETE' }).catch(() => {});
@@ -4700,9 +4867,9 @@ class NotebookApp {
                 } else {
                     await this.refreshNotebookList();
                 }
-                this.showToast('Notebook moved to trash');
+                this.showToast(isShared ? 'Removed from your shared notes' : 'Notebook moved to trash');
             } catch (e) {
-                console.error('Move to trash failed', e);
+                console.error('Delete notebook failed', e);
                 this.showToast('Failed to delete notebook', 'error');
             }
         });

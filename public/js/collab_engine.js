@@ -69,6 +69,7 @@
             this.onRemoteInitSync = null; // (cachedCells) => {}
             this.onRemoteTyping = null; // ({ peerId, username, cellId }) => {}
             this.onRemoteStudentFocus = null; // (data) => {}
+            this.onRemoteNoteUpdated = null; // (msg) => {}
 
             this.proctorSummary = [];
             this._focusListenersAttached = false;
@@ -202,6 +203,13 @@
                         case 'session_ended': {
                             if (typeof this.onSessionEnded === 'function') {
                                 this.onSessionEnded(msg);
+                            }
+                            break;
+                        }
+
+                        case 'note_updated_remote': {
+                            if (typeof this.onRemoteNoteUpdated === 'function') {
+                                this.onRemoteNoteUpdated(msg);
                             }
                             break;
                         }
