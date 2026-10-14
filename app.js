@@ -373,11 +373,12 @@ app.use('/forgot-password', authLimiter);
 // Mount Model Context Protocol (MCP) endpoints for remote AI agents (SSE & Messages)
 app.use('/mcp', mcpRoutes);
 
-// Apply CSRF Protection to all routes after session is initialized (exempting /mcp, /api/ai, and /api/internal JSON routes)
+// Apply CSRF Protection to all routes after session is initialized (exempting /mcp, /api/ai, /api/internal, and /api/live/force-save JSON routes)
 app.use((req, res, next) => {
     if (req.path.startsWith('/mcp') || req.originalUrl.startsWith('/mcp') ||
         req.path.startsWith('/api/ai') || req.originalUrl.startsWith('/api/ai') ||
-        req.path.startsWith('/api/internal') || req.originalUrl.startsWith('/api/internal')) {
+        req.path.startsWith('/api/internal') || req.originalUrl.startsWith('/api/internal') ||
+        req.path.startsWith('/api/live/force-save') || req.originalUrl.startsWith('/api/live/force-save')) {
         return next();
     }
     csrfProtection(req, res, next);
@@ -2257,6 +2258,172 @@ const collabCellsCache = new Map();    // noteId -> Map<cellId, string>
 const collabMetadataCache = new Map(); // noteId -> { title?: string, cells?: Map<cellId, { title?: string, lang?: string, isStarred?: boolean }> }
 const collabProctorCache = new Map();  // noteId -> Map<peerId, { peerId, username, status, switchCount, totalAwaySeconds, lastEvent, history }>
 
+// Concurrency mutex and debounced dirty room trackers
+const collabFlushInFlight = new Map(); // noteId -> Promise
+const collabDirtyRooms = new Map();    // noteId -> { timer: Timeout, firstDirtyAt: number }
+const COLLAB_FLUSH_DEBOUNCE_MS = 3000;
+const COLLAB_FLUSH_MAX_WAIT_MS = 10000;
+
+/**
+ * Flushes in-memory collaboration room state directly to MongoDB Note document.
+ * Thread-safe with mutex/in-flight promise deduplication per noteId.
+ *
+ * @param {string} noteId - ID of the notebook session
+ * @param {Object} options - { force?: boolean, reason?: string }
+ * @returns {Promise<{ success: boolean, cellsCount: number, updatedAt: Date, version?: number }>}
+ */
+async function flushCollabRoomToDatabase(noteId, options = {}) {
+    if (!noteId) return { success: false, reason: 'missing_noteId' };
+
+    // Concurrency deduplication: if flush for this noteId is already in flight, return that promise
+    if (collabFlushInFlight.has(noteId)) {
+        return collabFlushInFlight.get(noteId);
+    }
+
+    const flushPromise = (async () => {
+        try {
+            const cellsMap = collabCellsCache.get(noteId);
+            const metadata = collabMetadataCache.get(noteId);
+
+            // If neither has data and force is not set, no-op
+            if ((!cellsMap || cellsMap.size === 0) && (!metadata || Object.keys(metadata).length === 0) && !options.force) {
+                return { success: true, cellsCount: 0, reason: 'empty_cache' };
+            }
+
+            const note = await Note.findOne({ id: noteId });
+            if (!note) {
+                console.warn(`[CollabPersistence] Note not found in MongoDB for flush: ${noteId}`);
+                return { success: false, reason: 'note_not_found' };
+            }
+
+            // Deep merge cells
+            const currentCells = Array.isArray(note.content?.cells)
+                ? note.content.cells.map(c => ({ ...c }))
+                : (Array.isArray(note.cells) ? note.cells.map(c => ({ ...c })) : []);
+
+            const cellIdMap = new Map();
+            currentCells.forEach((c, idx) => {
+                if (c && c.id) cellIdMap.set(c.id, idx);
+            });
+
+            // Update existing or add new cells from in-memory cache
+            if (cellsMap && cellsMap.size > 0) {
+                for (const [cId, content] of cellsMap.entries()) {
+                    if (cellIdMap.has(cId)) {
+                        const idx = cellIdMap.get(cId);
+                        currentCells[idx].content = typeof content === 'string' ? content : '';
+                    } else {
+                        // Dynamically added cell during live session
+                        const newCell = {
+                            id: cId,
+                            type: 'code',
+                            lang: 'javascript',
+                            content: typeof content === 'string' ? content : '',
+                            title: 'Cell'
+                        };
+                        currentCells.push(newCell);
+                        cellIdMap.set(cId, currentCells.length - 1);
+                    }
+                }
+            }
+
+            // Apply cell-level metadata (title, lang, isStarred)
+            if (metadata && metadata.cells) {
+                const cellEntries = metadata.cells instanceof Map ? metadata.cells.entries() : Object.entries(metadata.cells);
+                for (const [cId, cellMeta] of cellEntries) {
+                    if (cellIdMap.has(cId) && cellMeta) {
+                        const idx = cellIdMap.get(cId);
+                        if (cellMeta.title !== undefined) currentCells[idx].title = cellMeta.title;
+                        if (cellMeta.lang !== undefined) currentCells[idx].lang = cellMeta.lang;
+                        if (cellMeta.isStarred !== undefined) currentCells[idx].isStarred = Boolean(cellMeta.isStarred);
+                    }
+                }
+            }
+
+            let updatedTitle = note.title || 'Untitled';
+            if (metadata && metadata.title) {
+                updatedTitle = metadata.title;
+            }
+
+            const updateTime = new Date();
+            const currentVer = typeof note._version === 'number' ? note._version : 1;
+            const nextVersion = currentVer + 1;
+
+            const updateDoc = {
+                title: updatedTitle,
+                'content.cells': currentCells,
+                'content.title': updatedTitle,
+                'content.updatedAt': updateTime,
+                updatedAt: updateTime,
+                _version: nextVersion
+            };
+
+            await Note.updateOne({ id: noteId }, { $set: updateDoc });
+
+            console.log(`[CollabPersistence] Persisted note ${noteId} to MongoDB (${currentCells.length} cells, ver ${nextVersion}, reason: ${options.reason || 'debounced_auto_flush'})`);
+
+            // Broadcast flush confirmation to room
+            broadcastToCollabRoom(noteId, {
+                type: 'server_flushed',
+                noteId: noteId,
+                updatedAt: updateTime.getTime(),
+                version: nextVersion,
+                cellsCount: currentCells.length
+            });
+
+            return {
+                success: true,
+                cellsCount: currentCells.length,
+                updatedAt: updateTime,
+                version: nextVersion
+            };
+        } catch (err) {
+            console.error(`[CollabPersistence] Error flushing note ${noteId} to MongoDB:`, err);
+            return { success: false, error: err.message };
+        } finally {
+            collabFlushInFlight.delete(noteId);
+        }
+    })();
+
+    collabFlushInFlight.set(noteId, flushPromise);
+    return flushPromise;
+}
+
+function scheduleCollabFlush(noteId) {
+    if (!noteId) return;
+    const now = Date.now();
+    let state = collabDirtyRooms.get(noteId);
+
+    if (!state) {
+        state = { timer: null, firstDirtyAt: now };
+        collabDirtyRooms.set(noteId, state);
+    }
+
+    if (state.timer) {
+        clearTimeout(state.timer);
+    }
+
+    const timeSinceFirstDirty = now - state.firstDirtyAt;
+    if (timeSinceFirstDirty >= COLLAB_FLUSH_MAX_WAIT_MS) {
+        collabDirtyRooms.delete(noteId);
+        flushCollabRoomToDatabase(noteId, { reason: 'max_wait_forced_flush' });
+    } else {
+        state.timer = setTimeout(() => {
+            collabDirtyRooms.delete(noteId);
+            flushCollabRoomToDatabase(noteId, { reason: 'debounced_idle_flush' });
+        }, COLLAB_FLUSH_DEBOUNCE_MS);
+    }
+}
+
+function cancelCollabFlush(noteId) {
+    if (!noteId) return;
+    const state = collabDirtyRooms.get(noteId);
+    if (state && state.timer) {
+        clearTimeout(state.timer);
+    }
+    collabDirtyRooms.delete(noteId);
+}
+
 function broadcastToCollabRoom(noteId, message, senderWs = null) {
     const room = collabRooms.get(noteId);
     if (!room) return;
@@ -2337,6 +2504,44 @@ function getCollabRoomPresence(noteId) {
     return { users, count: users.length, isHostOnline };
 }
 
+// --- LIVE CODING PERSISTENCE: FORCE IMMEDIATE CLOUD FLUSH ---
+app.post('/api/live/force-save', isAuthenticated, async (req, res) => {
+    try {
+        const { noteId, cells, title } = req.body;
+        if (!noteId) return res.status(400).json({ error: 'Missing noteId' });
+
+        // 1. Update in-memory caches immediately
+        if (Array.isArray(cells)) {
+            if (!collabCellsCache.has(noteId)) collabCellsCache.set(noteId, new Map());
+            const cellsMap = collabCellsCache.get(noteId);
+            cells.forEach(c => {
+                if (c && c.id) cellsMap.set(c.id, typeof c.content === 'string' ? c.content : '');
+            });
+        }
+        if (title) {
+            if (!collabMetadataCache.has(noteId)) collabMetadataCache.set(noteId, {});
+            collabMetadataCache.get(noteId).title = title;
+        }
+
+        // 2. Cancel debounced flush timer since we are flushing now
+        cancelCollabFlush(noteId);
+
+        // 3. Perform direct database flush
+        const result = await flushCollabRoomToDatabase(noteId, { force: true, reason: 'student_manual_submit' });
+
+        return res.json({
+            success: true,
+            message: 'Note saved to MongoDB',
+            updatedAt: result.updatedAt,
+            cellsCount: result.cellsCount,
+            version: result.version
+        });
+    } catch (err) {
+        console.error('[LiveForceSave] Error:', err);
+        return res.status(500).json({ error: err.message || 'Failed to save note' });
+    }
+});
+
 collabWss.on('connection', (ws) => {
     let currentNoteId = null;
     let currentPeerId = null;
@@ -2364,6 +2569,54 @@ collabWss.on('connection', (ws) => {
                     collabCellsCache.set(noteId, new Map());
                 }
 
+                const cellsMap = collabCellsCache.get(noteId);
+
+                // Auto-pre-seed in-memory cache from database if memory cache is empty
+                if (cellsMap.size === 0) {
+                    Note.findOne({ id: noteId }).lean().then(storedNote => {
+                        if (storedNote) {
+                            const noteCells = Array.isArray(storedNote.content?.cells)
+                                ? storedNote.content.cells
+                                : (Array.isArray(storedNote.cells) ? storedNote.cells : []);
+                            noteCells.forEach(c => {
+                                if (c && c.id && !cellsMap.has(c.id)) {
+                                    cellsMap.set(c.id, typeof c.content === 'string' ? c.content : '');
+                                }
+                            });
+                        }
+                    }).catch(err => {
+                        console.warn('[Collab] Failed to pre-seed cellsCache from MongoDB:', err.message);
+                    });
+                }
+
+                // Auto-register authenticated student as collaborator on the live note
+                if (user && user.id && !String(user.id).startsWith('anon_')) {
+                    Note.findOne({ id: noteId }).then(targetNote => {
+                        if (targetNote) {
+                            const isOwner = String(targetNote.owner) === String(user.id);
+                            const alreadyCollab = Array.isArray(targetNote.collaborators) &&
+                                targetNote.collaborators.some(c => String(c.user) === String(user.id));
+                            if (!isOwner && !alreadyCollab) {
+                                const uObjId = mongoose.Types.ObjectId.isValid(user.id)
+                                    ? new mongoose.Types.ObjectId(user.id)
+                                    : user.id;
+                                Note.updateOne(
+                                    { id: noteId },
+                                    {
+                                        $push: {
+                                            collaborators: {
+                                                user: uObjId,
+                                                status: 'accepted',
+                                                joinedAt: new Date()
+                                            }
+                                        }
+                                    }
+                                ).catch(e => console.warn('[Collab] Auto-add collaborator error:', e.message));
+                            }
+                        }
+                    }).catch(() => {});
+                }
+
                 const room = collabRooms.get(noteId);
                 room.set(peerId, {
                     ws,
@@ -2372,7 +2625,6 @@ collabWss.on('connection', (ws) => {
                 });
 
                 const presence = getCollabRoomPresence(noteId);
-                const cellsMap = collabCellsCache.get(noteId);
                 const cachedCells = Array.from(cellsMap.entries()).map(([cellId, content]) => ({ cellId, content }));
 
                 let cachedMetadata = null;
@@ -2416,13 +2668,20 @@ collabWss.on('connection', (ws) => {
                 break;
             }
 
-            case 'edit': {
+            case 'edit':
+            case 'cell_content_sync': {
                 if (!currentNoteId) return;
-                if (msg.cellId && typeof msg.fullContent === 'string') {
-                    const cellsMap = collabCellsCache.get(currentNoteId);
-                    if (cellsMap) cellsMap.set(msg.cellId, msg.fullContent);
+                const cellText = typeof msg.fullContent === 'string'
+                    ? msg.fullContent
+                    : (typeof msg.content === 'string' ? msg.content : null);
+                if (msg.cellId && cellText !== null) {
+                    if (!collabCellsCache.has(currentNoteId)) {
+                        collabCellsCache.set(currentNoteId, new Map());
+                    }
+                    collabCellsCache.get(currentNoteId).set(msg.cellId, cellText);
                 }
                 broadcastToCollabRoom(currentNoteId, msg, ws);
+                scheduleCollabFlush(currentNoteId);
                 break;
             }
 
@@ -2437,6 +2696,7 @@ collabWss.on('connection', (ws) => {
                 cellMeta.title = msg.title;
                 meta.cells.set(msg.cellId, cellMeta);
                 broadcastToCollabRoom(currentNoteId, msg, ws);
+                scheduleCollabFlush(currentNoteId);
                 break;
             }
 
@@ -2448,6 +2708,7 @@ collabWss.on('connection', (ws) => {
                     collabMetadataCache.get(currentNoteId).title = msg.title;
                 }
                 broadcastToCollabRoom(currentNoteId, msg, ws);
+                scheduleCollabFlush(currentNoteId);
                 break;
             }
 
@@ -2462,6 +2723,7 @@ collabWss.on('connection', (ws) => {
                 cellMeta.lang = msg.lang;
                 meta.cells.set(msg.cellId, cellMeta);
                 broadcastToCollabRoom(currentNoteId, msg, ws);
+                scheduleCollabFlush(currentNoteId);
                 break;
             }
 
@@ -2476,14 +2738,21 @@ collabWss.on('connection', (ws) => {
                 cellMeta.isStarred = Boolean(msg.isStarred);
                 meta.cells.set(msg.cellId, cellMeta);
                 broadcastToCollabRoom(currentNoteId, msg, ws);
+                scheduleCollabFlush(currentNoteId);
+                break;
+            }
+
+            case 'cell_add':
+            case 'cell_delete':
+            case 'cell_reorder': {
+                if (!currentNoteId) return;
+                broadcastToCollabRoom(currentNoteId, msg, ws);
+                scheduleCollabFlush(currentNoteId);
                 break;
             }
 
             case 'typing':
-            case 'cell_reorder':
             case 'cursor':
-            case 'cell_add':
-            case 'cell_delete':
             case 'exec_start':
             case 'exec_log':
             case 'exec_done': {
@@ -2574,6 +2843,7 @@ collabWss.on('connection', (ws) => {
                 const cellsMap = collabCellsCache.get(currentNoteId);
                 if (cellsMap) cellsMap.set(msg.cellId, msg.content);
                 broadcastToCollabRoom(currentNoteId, msg, ws);
+                scheduleCollabFlush(currentNoteId);
                 break;
             }
 
@@ -2584,18 +2854,34 @@ collabWss.on('connection', (ws) => {
         }
     });
 
-    const cleanup = () => {
+    const cleanup = async () => {
         if (currentNoteId && currentPeerId) {
             const room = collabRooms.get(currentNoteId);
             if (room) {
                 room.delete(currentPeerId);
                 if (room.size === 0) {
-                    setTimeout(() => {
+                    // CRITICAL: When the LAST client disconnects, flush in-memory state to MongoDB immediately
+                    console.log(`[CollabTeardown] Last peer disconnected from ${currentNoteId}. Performing GUARANTEED flush to MongoDB...`);
+                    cancelCollabFlush(currentNoteId);
+                    try {
+                        await flushCollabRoomToDatabase(currentNoteId, { force: true, reason: 'last_peer_disconnect' });
+                        console.log(`[CollabTeardown] Flushed note ${currentNoteId} successfully to MongoDB.`);
+                    } catch (err) {
+                        console.error(`[CollabTeardown] Error flushing note ${currentNoteId} on teardown:`, err);
+                    }
+
+                    setTimeout(async () => {
                         const r = collabRooms.get(currentNoteId);
                         if (r && r.size === 0) {
+                            // Final safety flush before purging from memory
+                            try {
+                                await flushCollabRoomToDatabase(currentNoteId, { force: true, reason: 'room_memory_purge' });
+                            } catch (_) {}
                             collabRooms.delete(currentNoteId);
                             collabCellsCache.delete(currentNoteId);
                             collabMetadataCache.delete(currentNoteId);
+                            collabProctorCache.delete(currentNoteId);
+                            console.log(`[CollabTeardown] Purged room memory for note ${currentNoteId}`);
                         }
                     }, 60000);
                 } else {
@@ -2615,10 +2901,38 @@ collabWss.on('connection', (ws) => {
     ws.on('error', cleanup);
 });
 
+// Process Exit / Termination Drain: Save all active collaboration rooms to MongoDB before server stops
+async function gracefulCollabShutdown(signal) {
+    console.log(`[Shutdown] Received ${signal}. Draining all active live collaboration rooms to MongoDB...`);
+    const activeNoteIds = Array.from(collabRooms.keys());
+    await Promise.allSettled(activeNoteIds.map(noteId =>
+        flushCollabRoomToDatabase(noteId, { force: true, reason: `server_${signal.toLowerCase()}` })
+    ));
+    console.log('[Shutdown] All live rooms drained successfully to MongoDB.');
+}
+
+process.on('SIGTERM', async () => {
+    await gracefulCollabShutdown('SIGTERM');
+    process.exit(0);
+});
+process.on('SIGINT', async () => {
+    await gracefulCollabShutdown('SIGINT');
+    process.exit(0);
+});
+
 if (require.main === module) {
     server.listen(PORT, '0.0.0.0', () => {
         console.log(`Server on http://localhost:${PORT}`);
     });
 }
 
-module.exports = { app, server };
+module.exports = {
+    app,
+    server,
+    flushCollabRoomToDatabase,
+    scheduleCollabFlush,
+    cancelCollabFlush,
+    collabRooms,
+    collabCellsCache,
+    collabMetadataCache
+};

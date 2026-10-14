@@ -244,18 +244,58 @@
         }
 
         setupLifecycleListeners() {
+            const handleExit = () => {
+                if (this.unsyncedCount > 0 && navigator.onLine) {
+                    console.log('[BackupEngine] Page visibility hidden / unloading. Executing high-priority exit flush...');
+                    this.flushPendingSyncs({ keepalive: true, reason: 'page_exit' });
+                }
+            };
+
             // When tab is hidden/closed, attempt a clean flush of pending changes
             document.addEventListener('visibilitychange', () => {
-                if (document.visibilityState === 'hidden' && this.unsyncedCount > 0 && navigator.onLine) {
-                    this.flushPendingSyncs();
+                if (document.visibilityState === 'hidden') {
+                    handleExit();
                 }
             });
 
             window.addEventListener('beforeunload', () => {
-                if (this.unsyncedCount > 0 && navigator.onLine) {
-                    this.flushPendingSyncs();
-                }
+                handleExit();
             });
+        }
+
+        /**
+         * Enables fast live coding mode (2-second idle backup) or standard mode (60-second idle backup).
+         * @param {boolean} isLiveSession
+         */
+        setLiveMode(isLiveSession) {
+            if (isLiveSession) {
+                this.idleTimeoutMs = 2000;  // 2 seconds for live coding
+                this.maxWaitMs = 5000;     // 5 seconds max continuous ceiling
+                console.log('[BackupEngine] Live session mode active: Cloud backup idle timer set to 2000ms.');
+            } else {
+                this.idleTimeoutMs = 60000; // Restore standard 60 seconds
+                this.maxWaitMs = 120000;
+                console.log('[BackupEngine] Standard mode active: Cloud backup idle timer set to 60000ms.');
+            }
+        }
+
+        /**
+         * Removes any pending sync queue entries for a given noteId.
+         * Used during cloud-first hydration to prevent stale local changes from overwriting fresh cloud data.
+         */
+        async clearPendingForNote(noteId) {
+            if (!this.db || !noteId) return;
+            try {
+                const queue = await this.db.getSyncQueue();
+                for (const item of queue) {
+                    if (item.entityId === noteId) {
+                        await this.db.removeFromSyncQueue(item.autoId || item.id);
+                    }
+                }
+                await this.updateUnsyncedCount();
+            } catch (err) {
+                console.warn('[BackupEngine] Error clearing pending sync queue for note:', noteId, err);
+            }
         }
 
         startBackgroundPoll() {
@@ -393,7 +433,7 @@
         /**
          * Immediately flushes all queued items to cloud backup.
          */
-        async flushPendingSyncs() {
+        async flushPendingSyncs(options = {}) {
             if (this.idleDebounceTimer) {
                 clearTimeout(this.idleDebounceTimer);
                 this.idleDebounceTimer = null;
@@ -402,7 +442,7 @@
                 clearTimeout(this.maxWaitTimer);
                 this.maxWaitTimer = null;
             }
-            return this.backupNow({ immediate: true, keepalive: true, reason: 'flush_lifecycle' });
+            return this.backupNow({ immediate: true, keepalive: true, reason: options.reason || 'flush_lifecycle', ...options });
         }
 
         /**
@@ -569,9 +609,24 @@
                 return;
             }
 
+            const bodyJson = JSON.stringify({ batch: pushBatch });
+            const isLargePayload = bodyJson.length > 60000;
+
+            if (options.keepalive && isLargePayload && navigator.sendBeacon) {
+                const blob = new Blob([bodyJson], { type: 'application/json' });
+                const beaconSent = navigator.sendBeacon('/api/sync/push', blob);
+                console.log('[BackupEngine] Large exit payload dispatched via navigator.sendBeacon:', beaconSent);
+                for (const entry of entityMap.values()) {
+                    for (const qId of entry.queueIds) {
+                        await this.db.removeFromSyncQueue(qId);
+                    }
+                }
+                return;
+            }
+
             const response = await this.safeFetch('/api/sync/push', {
                 method: 'POST',
-                body: JSON.stringify({ batch: pushBatch }),
+                body: bodyJson,
                 ...(options.keepalive ? { keepalive: true } : {})
             });
 

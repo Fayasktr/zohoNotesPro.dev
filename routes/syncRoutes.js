@@ -334,9 +334,53 @@ router.post('/push', async (req, res) => {
             if (!existing && note && note.id) {
                 const foreignNote = await Note.findOne({ id: note.id }).lean();
                 if (foreignNote) {
-                    targetNoteId = `ntbk-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-                    resolution.updateDoc.id = targetNoteId;
-                    if (resolution.updateDoc.content) resolution.updateDoc.content.id = targetNoteId;
+                    const isForeignLive = Boolean(
+                        foreignNote.isLive ||
+                        (foreignNote.id && foreignNote.id.startsWith('live-')) ||
+                        foreignNote.content?.isLive ||
+                        foreignNote.shareCode
+                    );
+
+                    if (isForeignLive) {
+                        // 🛡️ Live Collaboration Pass-Through: DO NOT fork into orphaned notebook!
+                        // Auto-add student as accepted collaborator so future queries resolve normally
+                        const mongoose = require('mongoose');
+                        const userObjId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+                        await Note.updateOne(
+                            { id: note.id },
+                            {
+                                $addToSet: {
+                                    collaborators: {
+                                        user: userObjId,
+                                        status: 'accepted',
+                                        joinedAt: new Date()
+                                    }
+                                }
+                            }
+                        );
+
+                        // Collaborator safety: cannot delete host note or alter live status
+                        delete resolution.updateDoc.isTrashed;
+                        delete resolution.updateDoc.trashedAt;
+                        delete resolution.updateDoc.isLive;
+                        delete resolution.updateDoc.shareCode;
+                        delete resolution.updateDoc.owner;
+                        if (resolution.updateDoc.content) {
+                            resolution.updateDoc.content.isLive = true;
+                        }
+
+                        await Note.updateOne(
+                            { id: note.id },
+                            { $set: resolution.updateDoc }
+                        );
+
+                        if (allItemQueueIds.length > 0) processedQueueIds.push(...allItemQueueIds);
+                        continue;
+                    } else {
+                        targetNoteId = `ntbk-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+                        resolution.updateDoc.id = targetNoteId;
+                        if (resolution.updateDoc.content) resolution.updateDoc.content.id = targetNoteId;
+                    }
                 }
             }
 

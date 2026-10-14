@@ -70,6 +70,7 @@
             this.onRemoteTyping = null; // ({ peerId, username, cellId }) => {}
             this.onRemoteStudentFocus = null; // (data) => {}
             this.onRemoteNoteUpdated = null; // (msg) => {}
+            this.onServerFlushed = null; // (data) => {}
 
             this.proctorSummary = [];
             this._focusListenersAttached = false;
@@ -210,6 +211,13 @@
                         case 'note_updated_remote': {
                             if (typeof this.onRemoteNoteUpdated === 'function') {
                                 this.onRemoteNoteUpdated(msg);
+                            }
+                            break;
+                        }
+
+                        case 'server_flushed': {
+                            if (typeof this.onServerFlushed === 'function') {
+                                this.onServerFlushed(msg);
                             }
                             break;
                         }

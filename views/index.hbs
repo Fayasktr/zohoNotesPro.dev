@@ -296,6 +296,16 @@
                     </div>
 
                     <div class="collab-actions">
+                        <!-- Submit Mock Review / Save All Cells Button & Status Badge -->
+                        <button id="btn-collab-save-all" class="btn-collab-save-all flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all shadow-sm active:scale-95 cursor-pointer" title="Save all Monaco editor cells and guarantee cloud submission to database">
+                            <i data-lucide="cloud-upload" style="width: 13px; height: 13px;"></i>
+                            <span id="btn-collab-save-text">Submit Review / Save All</span>
+                        </button>
+                        <div id="collab-save-status-badge" class="collab-save-status-badge hidden flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-emerald-950/60 border border-emerald-500/40 text-emerald-300">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span id="collab-save-status-text">All Cells Saved to Cloud ✅</span>
+                        </div>
+
                         <!-- Student review badge: shows "Review Mode Active" when student is connected -->
                         <div id="collab-review-badge" class="collab-review-badge hidden" title="Real-time focus and integrity monitoring is active">
                             <span class="proctor-shield-icon">🛡️</span>

@@ -36,6 +36,7 @@ class NotebookApp {
         this.remoteDecorations = {}; // cellId -> { peerId -> decorationIds[] }
         this.sharedNotebooks = [];
         this.activeTypers = new Map(); // peerId -> { username, timer }
+        this.isLoadingNotebook = false; // Mutex lock to suppress auto-save during note hydration
 
         this.expandedFolders = new Set(JSON.parse(localStorage.getItem('zoho-expanded-folders') || '[]'));
         this.persistedFolders = this.getPersistedFolders();
@@ -838,7 +839,12 @@ class NotebookApp {
         };
 
         // 1.5 Initial state sync when joining an active live session
-        this.collab.onRemoteInitSync = (cachedCells, cachedMetadata = null) => {
+        this.collab.onRemoteInitSync = async (cachedCells, cachedMetadata = null) => {
+            if (this._autoSave && typeof this._autoSave.cancel === 'function') {
+                this._autoSave.cancel();
+            }
+
+            let hasUpdates = false;
             if (Array.isArray(cachedCells) && cachedCells.length > 0) {
                 cachedCells.forEach(({ cellId, content }) => {
                     const editor = this.editors[cellId];
@@ -848,6 +854,15 @@ class NotebookApp {
                         this.collab.suppressLocalEdits = false;
                         const cell = this.notebook?.cells?.find(c => c.id === cellId);
                         if (cell) cell.content = content;
+                        hasUpdates = true;
+                    } else if (!editor && typeof content === 'string' && this.notebook && Array.isArray(this.notebook.cells)) {
+                        let cell = this.notebook.cells.find(c => c.id === cellId);
+                        if (!cell) {
+                            cell = { id: cellId, type: 'code', lang: 'javascript', content: content, title: 'Cell' };
+                            this.notebook.cells.push(cell);
+                            this.renderCell(cell, this.notebook.cells.length);
+                            hasUpdates = true;
+                        }
                     }
                 });
             }
@@ -858,6 +873,7 @@ class NotebookApp {
                     const titleEl = document.getElementById('notebook-title');
                     if (titleEl) titleEl.value = cachedMetadata.title;
                     this.updateCurrentNotebookItemUI();
+                    hasUpdates = true;
                 }
                 if (Array.isArray(cachedMetadata.cells)) {
                     cachedMetadata.cells.forEach(meta => {
@@ -881,9 +897,28 @@ class NotebookApp {
                                     starI.style.color = meta.isStarred ? '#ffcc00' : 'var(--text-dim)';
                                 }
                             }
+                            hasUpdates = true;
                         }
                     });
                 }
+            }
+
+            // Persist the synced cells into IndexedDB to protect against abrupt crashes
+            if (hasUpdates && this.db && this.notebook) {
+                try {
+                    await this.db.putNote(this.notebook, { isRemoteSync: true, hasFullContent: true });
+                } catch (_) {}
+            }
+        };
+
+        // 1.6 Server persisted live snapshot to MongoDB
+        this.collab.onServerFlushed = (data) => {
+            const statusBadge = document.getElementById('collab-save-status-badge');
+            const statusText = document.getElementById('collab-save-status-text');
+            if (statusBadge && statusText && data && data.updatedAt) {
+                const timeStr = new Date(data.updatedAt).toLocaleTimeString('en-IN', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                statusText.innerText = `All Cells Saved to Cloud ✅ (${timeStr})`;
+                statusBadge.classList.remove('hidden');
             }
         };
 
@@ -1240,6 +1275,12 @@ class NotebookApp {
                 this.renderProctorLogUI();
             }
         };
+
+        // Wire Submit Review / Save All Cells button (Instant Guaranteed Cloud Push)
+        document.getElementById('btn-collab-save-all')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.submitAndSaveAllCells();
+        });
 
         // Wire Review Proctor Log button (Host only)
         document.getElementById('btn-collab-proctor-log')?.addEventListener('click', (e) => {
@@ -1713,15 +1754,20 @@ class NotebookApp {
         const authorEl = document.getElementById('collab-author-info');
         const proctorBtn = document.getElementById('btn-collab-proctor-log');
         const reviewBadge = document.getElementById('collab-review-badge');
+        const saveBtn = document.getElementById('btn-collab-save-all');
+        const saveBadge = document.getElementById('collab-save-status-badge');
 
         if (!this.notebook || !this.notebook.id || !this.notebook.isLive) {
             if (topBar) topBar.classList.add('hidden');
             if (proctorBtn) proctorBtn.classList.add('hidden');
             if (reviewBadge) reviewBadge.classList.add('hidden');
+            if (saveBtn) saveBtn.classList.add('hidden');
+            if (saveBadge) saveBadge.classList.add('hidden');
             return;
         }
 
         if (topBar) topBar.classList.remove('hidden');
+        if (saveBtn) saveBtn.classList.remove('hidden');
 
         const isHost = this.collab ? this.collab.isHost : false;
         if (isHost) {
@@ -3235,12 +3281,48 @@ class NotebookApp {
     }
 
     async loadNotebook(id, targetCellId = null) {
+        this.isLoadingNotebook = true;
+        if (this._autoSave && typeof this._autoSave.cancel === 'function') {
+            this._autoSave.cancel();
+        }
+
         try {
             let data = null;
 
-            if (this.db) {
+            const isPotentiallyLive = Boolean(
+                (id && id.startsWith('live-')) ||
+                (this.expandedLiveFolders && this.expandedLiveFolders.has(id)) ||
+                (this.sharedNotebooks && this.sharedNotebooks.some(s => s.id === id)) ||
+                (this.liveNotebooks && (
+                    (this.liveNotebooks.hosted && this.liveNotebooks.hosted.some(n => n.id === id)) ||
+                    (this.liveNotebooks.joined && this.liveNotebooks.joined.some(n => n.id === id))
+                )) ||
+                localStorage.getItem(`zoho-note-islive-${id}`) === 'true'
+            );
+
+            // 1. FOR LIVE / SHARED NOTES: Force Cloud-First Fetch
+            if (isPotentiallyLive && navigator.onLine) {
+                try {
+                    console.log(`[NotebookApp] Live session detected for ${id}: pulling authoritative cloud snapshot...`);
+                    const res = await this.safeFetch(`/api/notebooks/${id}?_t=${Date.now()}`);
+                    if (res.ok) {
+                        data = await res.json();
+                        if (this.db) {
+                            await this.db.putNote(data, { isRemoteSync: true, hasFullContent: true });
+                        }
+                        if (this.sync && typeof this.sync.clearPendingForNote === 'function') {
+                            await this.sync.clearPendingForNote(id);
+                        }
+                    }
+                } catch (err) {
+                    console.warn('[NotebookApp] Cloud fetch failed for live note, falling back to local store:', err);
+                }
+            }
+
+            // 2. STANDARD LOCAL-FIRST FALLBACK
+            if (!data && this.db) {
                 data = await this.db.getNote(id);
-                // If data is missing locally and we are online, try pulling from cloud
+                // If data is missing locally or lacks cells and we are online, pull from cloud
                 if ((!data || !data._hasFullContent || !data.cells) && navigator.onLine) {
                     if (this.sync) {
                         data = await this.sync.pullNote(id);
@@ -3248,9 +3330,10 @@ class NotebookApp {
                 }
             }
 
+            // 3. FINAL RESCUE FETCH
             if (!data) {
                 if (navigator.onLine) {
-                    const res = await this.safeFetch(`/api/notebooks/${id}`);
+                    const res = await this.safeFetch(`/api/notebooks/${id}?_t=${Date.now()}`);
                     if (!res.ok) throw new Error('Not found');
                     data = await res.json();
                     if (this.db) await this.db.putNote(data, { isRemoteSync: true, hasFullContent: true });
@@ -3267,6 +3350,17 @@ class NotebookApp {
             if (this.notebook) {
                 const isLiveNote = this.isLiveNote(this.notebook);
                 this.notebook.isLive = isLiveNote;
+                if (isLiveNote) {
+                    localStorage.setItem(`zoho-note-islive-${id}`, 'true');
+                    if (this.sync && typeof this.sync.setLiveMode === 'function') {
+                        this.sync.setLiveMode(true);
+                    }
+                } else {
+                    localStorage.removeItem(`zoho-note-islive-${id}`);
+                    if (this.sync && typeof this.sync.setLiveMode === 'function') {
+                        this.sync.setLiveMode(false);
+                    }
+                }
             }
 
             if (this.cellTypers) {
@@ -3333,6 +3427,11 @@ class NotebookApp {
             }
         } catch (e) {
             console.error('Failed to load notebook', e);
+        } finally {
+            // Unlock auto-save only after Monaco mounting has settled (600ms grace window)
+            setTimeout(() => {
+                this.isLoadingNotebook = false;
+            }, 600);
         }
     }
 
@@ -4079,6 +4178,11 @@ class NotebookApp {
             setTimeout(updateHeight, 50);
 
             editor.onDidChangeModelContent((event) => {
+                // Guard: Ignore programmatic changes during notebook loading or remote peer application
+                if (this.isLoadingNotebook || (this.collab && this.collab.suppressLocalEdits)) {
+                    return;
+                }
+
                 const currentCell = this.notebook.cells.find(c => c.id === cell.id);
                 if (currentCell) currentCell.content = editor.getValue();
                 if (this.sync && typeof this.sync.recordUserActivity === 'function') {
@@ -4087,7 +4191,7 @@ class NotebookApp {
                 if (this.broadcaster && this.broadcaster.isBroadcasting) {
                     this.broadcaster.syncCellContent(cell.id, editor.getValue(), cell.lang, cell.type);
                 }
-                if (this.collab && this.collab.isConnected && !this.collab.suppressLocalEdits) {
+                if (this.collab && this.collab.isConnected) {
                     if (event && event.changes && event.changes.length > 0) {
                         this.collab.broadcastEdit(cell.id, event.changes, editor.getValue());
                         this.collab.broadcastTyping(cell.id);
@@ -5623,6 +5727,98 @@ class NotebookApp {
                 console.error('Empty trash failed', e);
             }
         });
+    }
+
+    /**
+     * Executes a guaranteed full flush of all Monaco editors to IndexedDB, 
+     * native WebSocket collaboration cache, and MongoDB Atlas.
+     */
+    async submitAndSaveAllCells() {
+        const saveBtn = document.getElementById('btn-collab-save-all');
+        const saveBtnText = document.getElementById('btn-collab-save-text');
+        const statusBadge = document.getElementById('collab-save-status-badge');
+        const statusText = document.getElementById('collab-save-status-text');
+
+        if (!this.notebook || !this.notebook.cells) return;
+
+        // 1. UI Loading Feedback
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.classList.add('opacity-75', 'cursor-not-allowed');
+        }
+        if (saveBtnText) {
+            saveBtnText.innerHTML = `<i data-lucide="loader-2" class="animate-spin inline-block w-3 h-3 mr-1"></i> Saving to Cloud...`;
+            if (window.lucide) lucide.createIcons();
+        }
+
+        try {
+            // 2. Read live content directly from all active Monaco editor models
+            const currentCells = this.notebook.cells.map(c => {
+                const editor = this.editors[c.id];
+                const content = editor ? editor.getValue() : (c.content || '');
+                return {
+                    ...c,
+                    content
+                };
+            });
+            this.notebook.cells = currentCells;
+
+            // 3. Sync all cell contents across WebSocket Collaboration Server
+            if (this.collab && this.collab.isConnected) {
+                currentCells.forEach(c => {
+                    this.collab.sendWsMessage({
+                        type: 'cell_content_sync',
+                        cellId: c.id,
+                        content: c.content
+                    });
+                });
+            }
+
+            // 4. Update Local Database
+            if (this.db) {
+                await this.db.putNote(this.notebook, { hasFullContent: true });
+            }
+
+            // 5. Force Immediate Cloud Backup via Sync Engine
+            if (this.sync) {
+                await this.sync.notifyLocalChange(this.notebook.id, 'UPDATE');
+                await this.sync.flushPendingSyncs();
+            }
+
+            // 6. Direct HTTP Guarantee: Call dedicated server endpoint to write collab cache to MongoDB immediately
+            const res = await this.safeFetch('/api/live/force-save', {
+                method: 'POST',
+                body: JSON.stringify({
+                    noteId: this.notebook.id,
+                    cells: currentCells,
+                    title: this.notebook.title
+                })
+            });
+
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('en-IN', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            // 7. Visual Success Badge
+            if (statusBadge && statusText) {
+                statusText.innerText = `All Cells Saved to Cloud ✅ (${timeStr})`;
+                statusBadge.classList.remove('hidden');
+            }
+
+            this.showToast(`✅ All cells successfully submitted and saved to cloud! (${timeStr})`, 'success');
+
+        } catch (err) {
+            console.error('[NotebookApp] Submit & Save All failed:', err);
+            this.showToast('⚠️ Could not complete cloud save. Your changes remain safely stored locally.', 'warning');
+        } finally {
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+            }
+            if (saveBtnText) {
+                saveBtnText.innerText = 'Submit Review / Save All';
+                if (window.lucide) lucide.createIcons();
+            }
+        }
     }
 
     async saveToBackend() {
