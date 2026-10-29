@@ -57,3 +57,19 @@ implementation_plan*
 scratch/
 
 .data/
+
+# Student Assessment, Tech Support Reports & Scratch Data
+batch_411_*
+student_answers_dump.txt
+MONTHLY_TECH_SUPPORT_REPORT.md
+Tech_Support_Master_Updated.xlsx
+downloaded_sheet.xlsx
+*.xlsx
+scripts/*batch_411*
+scripts/build_tech_support_master.py
+scripts/grade_students_out_of_100.js
+scripts/append_30_questions_to_note.js
+
+# Local Learning & Project Planning Directories
+learn-service-worker/
+second project planning/
